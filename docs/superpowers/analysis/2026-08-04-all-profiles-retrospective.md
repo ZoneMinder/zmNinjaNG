@@ -1,8 +1,10 @@
 # All Profiles: a retrospective on the agent workflow
 
-Written 2026-08-04 by the orchestrating agent, at the maintainer's request, to
-answer one question honestly: did the agent framework this repository built
-actually help, or did it get in the way?
+Written 2026-08-04 by the orchestrating agent, at the maintainer's
+request. It evaluates the agent framework this repository uses, against a
+baseline of standard Claude Code (one agent, one session, no
+repository-specific rules), using the All Profiles feature as the test
+case.
 
 Context for readers outside this project. zmNinjaNg is a mobile and desktop
 client for [ZoneMinder](https://zoneminder.com/), an open-source video
@@ -11,6 +13,19 @@ surveillance system. Users configure one "profile" per ZoneMinder server
 recorded clip, and the Event Server (ES) is ZoneMinder's optional push
 notification daemon. Until this work, the app could talk to exactly one
 server at a time.
+
+The task was to make that single-server client work against any number of
+servers at once, everywhere: data, actions, streaming, notifications, and
+TLS trust. Why this is a meaningful stress test of a development process,
+in numbers: the change replaced the app's central API singleton (touched
+by nearly every data path), modified three native layers (TypeScript, iOS
+Swift, Android Java), and landed as 77 commits across 297 files
+(+22,025 / -3,555 lines) in about 32 hours from first code commit to last
+feature commit, executed by roughly forty agent contexts. The unit suite
+grew from ~3,273 to 3,614 tests. Much of the code is
+concurrency-sensitive (token refresh, websockets, staggered polling),
+which is where plausible-looking changes fail in ways tests miss; a
+process either catches those or it does not.
 
 The framework under evaluation is checked into this repository:
 [`AGENTS.md`](../../../AGENTS.md) (portable process and code rules with
@@ -28,9 +43,7 @@ A note on method. This report is compiled from two sources: the git history
 of the two feature branches, and the orchestrator's own session record of
 every dispatch, review, and fix round. Where I cite a commit, the link is
 real and checked. Where I make a judgment, I say it is a judgment. Where I
-have no evidence one way or the other, I say that too, because a fair
-report about whether a process works has to admit which parts of it were
-never really tested.
+have no evidence one way or the other, I say that.
 
 All commit links are to `github.com/ZoneMinder/zmNinjaNg`.
 
@@ -50,8 +63,8 @@ session would probably have missed, with incidents to show for it.
 | Ledger and committed phase plans | Progress state survives crashes and restarts | Helped; 3 environment failures recovered cheaply (3.6) |
 | Playbooks and domain knowledge | Per-domain facts agents read before working | Mixed; pre-existing playbooks helped, closeout additions unproven (3.8) |
 | Brief-driven dispatch | Orchestrator writes the task, implementer builds exactly that | Mixed; propagates orchestrator mistakes with full test coverage (4.1) |
-| Multi-agent messaging and lifecycle | Parallelism across ~40 agents | Cost; report delivery, idle noise, and shared-worktree races are framework problems, not rule problems (4.2) |
-| Live-server e2e testing | End-to-end checks against a real ZoneMinder | Cost; shared-server flakiness, independent of the framework (4.3) |
+| Multi-agent messaging and lifecycle | Parallelism across ~40 agents | Keep; the parallelism worked and the agent count matched the task size. The losses (report delivery, idle noise, shared-worktree races) are harness defects to fix, not a reason to use fewer agents (4.2) |
+| Live-server e2e testing | End-to-end checks against a real ZoneMinder | Keep; it verified the feature against a real server and caught bugs unit tests could not. The flakiness is shared-server infrastructure debt to fix, not a reason to drop e2e (4.3) |
 
 ---
 
@@ -116,10 +129,9 @@ The work shipped as two stacked PRs:
   plus about a dozen post-completion increments that came from the
   maintainer's live acceptance testing. 50 commits.
 
-Final numbers: 77 commits, 297 files changed, +22,025 / -3,555 lines. The
-unit suite grew from about 3,273 tests to 3,614. The lint ratchet baseline
-ended lower than it started (react-hooks/exhaustive-deps went from 38 at the
-branch point to 34 at close). First code commit
+Beyond the size figures in the introduction, the lint ratchet baseline
+ended lower than it started (react-hooks/exhaustive-deps went from 38 at
+the branch point to 34 at close). First code commit
 [`af8c8a2`](https://github.com/ZoneMinder/zmNinjaNg/commit/af8c8a20) landed
 2026-08-02 at 14:15; the last feature commit
 [`1c8fd61`](https://github.com/ZoneMinder/zmNinjaNg/commit/1c8fd614) landed
@@ -553,6 +565,14 @@ These cost real time and none of them are addressable by editing
 that does not make this distinction would attribute all of it to the
 process.
 
+To be precise about what is and is not being criticized here: the
+multi-agent approach itself is not. Running ~40 agents was the
+orchestrator's scaling choice for a four-phase feature with a review per
+task, the parallelism delivered the two-day timeline, and nothing below
+argues for fewer agents. The problems below are defects in the harness
+that any agent count would have hit; they made each agent interaction
+noisier than it should be.
+
 - **Subagent report delivery is unreliable.** Roughly a third of
   completions arrived as a bare idle notification with no report attached;
   each needed a "resend via SendMessage" nudge. Worse, agents' sends to
@@ -597,6 +617,16 @@ timing rewrites after their first live run
 [`84372f8`](https://github.com/ZoneMinder/zmNinjaNg/commit/84372f89)).
 Unit and component tests carried the real verification weight all
 weekend.
+
+None of that is an argument against live e2e. It was the only check that
+exercised the feature against a real ZoneMinder server, end to end: the
+twelve all-profiles scenarios (aggregate pages, deep routes, profile
+switching, the disabled-profile filter) all pass, and the timing rewrites
+my two scenarios needed were e2e doing its job, exposing real-server
+behavior no mock reproduces. The verdict is keep it and fix the
+infrastructure it runs on, which is what
+[#342](https://github.com/ZoneMinder/zmNinjaNg/issues/342) tracks; the
+failure would be letting the tolerated-failure list quietly grow instead.
 
 **The render-loop selector class recurred five times despite being
 caught every time.** The workflow detected each instance but did not
