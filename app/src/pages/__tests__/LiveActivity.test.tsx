@@ -7,6 +7,7 @@ import LiveActivity from '../LiveActivity';
 import { getMonitors, getAlarmStatus } from '../../api/monitors';
 import enTranslation from '../../locales/en/translation.json';
 import { ALL_PROFILES_ID } from '../../api/types';
+import { DEFAULT_SETTINGS } from '../../stores/settings';
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
@@ -779,7 +780,12 @@ describe('LiveActivity', () => {
   // keys by monitorCacheKey so two profiles sharing a raw monitor id never
   // collide.
   describe('All mode', () => {
+    // Spread over the real defaults: the All-mode watch cap and poll floor are
+    // ALL-bucket settings read off this object now (useLiveActivityAllMode),
+    // so a hand-listed subset would leave them undefined and quietly cap the
+    // watched set at nothing.
     const ALL_SETTINGS = {
+      ...DEFAULT_SETTINGS,
       liveActivityPollSeconds: 5,
       liveActivityDwellSeconds: 30,
       liveActivityMaxTiles: 12,
