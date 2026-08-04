@@ -569,9 +569,9 @@ Then('the montage edit-layout control should be available', async ({ page }) => 
 });
 
 // All Servers Streaming Mode (refs #337): the tri-state that decides whether
-// aggregated tiles follow each server or one imposed mode. "Per server" is the
-// absence of a stored value, so the round-trip through a reload is what proves
-// the ALL bucket holds what the row shows.
+// aggregated tiles follow each server or one imposed mode. All three states are
+// stored values, "Per server" included, so the round-trip through a reload is
+// what proves the ALL bucket holds what the row shows.
 When('I set the All Servers streaming mode to {string}', async ({ page }, label: string) => {
   await page.getByTestId('all-mode-streaming-select').click();
   const option = page.getByTestId(`all-mode-streaming-option-${label.toLowerCase().replace(/ /g, '-')}`);

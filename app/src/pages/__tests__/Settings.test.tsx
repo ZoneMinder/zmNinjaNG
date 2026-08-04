@@ -59,9 +59,6 @@ vi.mock('../../stores/settings', () => ({
   },
   HOVER_PREVIEW_PLAYBACK_RATES: [50, 100, 150, 200, 400],
   DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE: 200,
-  // Single mode never renders the All-Servers row, but Settings still reads
-  // the raw ALL-bucket value to decide that.
-  selectStoredSetting: () => () => undefined,
   useSettingsStore: (selector: (state: { getProfileSettings: () => unknown; updateProfileSettings: typeof updateProfileSettings }) => unknown) =>
     selector({
       getProfileSettings: () => ({
