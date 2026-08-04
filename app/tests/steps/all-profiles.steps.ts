@@ -1,6 +1,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect, type Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { MONTAGE_GRID } from '../../src/lib/zmninja-ng-constants';
 
 const { When, Then } = createBdd();
 
@@ -582,6 +583,73 @@ When('I set the All Servers streaming mode to {string}', async ({ page }, label:
 Then('the All Servers streaming mode should be {string}', async ({ page }, label: string) => {
   await expect(page.getByTestId('all-mode-streaming-select')).toContainText(label, {
     timeout: testConfig.timeouts.element,
+  });
+});
+
+// All Servers performance (refs #337). The knobs that used to be constants:
+// what proves one is wired is the aggregate surface changing, so this drives
+// the montage stream cap down to a single tile and back. The number field
+// commits on Enter (or blur), never per keystroke, so the step presses it.
+const MONTAGE_TILES =
+  '[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])';
+
+When(
+  'I set the All Servers maximum live streams to {string}',
+  async ({ page }, value: string) => {
+    const input = page.getByTestId('all-mode-max-streams-input');
+    await expect(input).toBeVisible({ timeout: testConfig.timeouts.element });
+    await input.fill(value);
+    await input.press('Enter');
+  }
+);
+
+Then(
+  'the All Servers maximum live streams should be {string}',
+  async ({ page }, value: string) => {
+    await expect(page.getByTestId('all-mode-max-streams-input')).toHaveValue(value, {
+      timeout: testConfig.timeouts.element,
+    });
+  }
+);
+
+When('I reset the All Servers maximum live streams', async ({ page }) => {
+  const reset = page.getByTestId('all-mode-max-streams-reset');
+  await expect(reset).toBeVisible({ timeout: testConfig.timeouts.element });
+  await reset.click();
+});
+
+Then(
+  'the All Servers maximum live streams should be back to the shipped default',
+  async ({ page }) => {
+    // The constant, not a number typed into the feature file: the row's
+    // default IS MONTAGE_GRID.allModeMaxStreams, so changing that constant
+    // must not quietly leave this scenario asserting a stale value.
+    await expect(page.getByTestId('all-mode-max-streams-input')).toHaveValue(
+      String(MONTAGE_GRID.allModeMaxStreams),
+      { timeout: testConfig.timeouts.element }
+    );
+    // The reset control goes away once the row matches its default.
+    await expect(page.getByTestId('all-mode-max-streams-reset')).toHaveCount(0, {
+      timeout: testConfig.timeouts.element,
+    });
+  }
+);
+
+Then('the montage grid should show exactly {int} tile', async ({ page }, count: number) => {
+  await expect.poll(async () => page.locator(MONTAGE_TILES).count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBe(count);
+});
+
+Then('the montage stream cap overflow notice should be visible', async ({ page }) => {
+  await expect(page.getByTestId('montage-stream-cap-overflow')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the montage stream cap overflow notice should be gone', async ({ page }) => {
+  await expect(page.getByTestId('montage-stream-cap-overflow')).toHaveCount(0, {
+    timeout: testConfig.timeouts.pageLoad,
   });
 });
 

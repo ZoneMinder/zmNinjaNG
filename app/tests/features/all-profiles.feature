@@ -123,6 +123,23 @@ Feature: All Servers mode
     Then the All Servers streaming mode should be "Per server"
 
   @web
+  Scenario: the All Servers stream cap is editable and the montage obeys it
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Settings" page
+    And I set the All Servers maximum live streams to "1"
+    Then the All Servers maximum live streams should be "1"
+    When I navigate to the "Montage" page
+    Then the montage grid should show exactly 1 tile
+    And the montage stream cap overflow notice should be visible
+    When I navigate to the "Settings" page
+    And I reset the All Servers maximum live streams
+    Then the All Servers maximum live streams should be back to the shipped default
+    When I navigate to the "Montage" page
+    Then I should see at least 2 monitor in montage grid
+    And the montage stream cap overflow notice should be gone
+
+  @web
   Scenario: analysis frames toggle is usable from All Servers mode
     When I navigate to the "Profiles" page
     And I click the All Servers profile card
