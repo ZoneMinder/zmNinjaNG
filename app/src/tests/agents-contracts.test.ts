@@ -316,7 +316,9 @@ describe('Localization contract', () => {
 
   it('every locale interpolates the same values as en, key for key', () => {
     const en = load('en');
-    expect(en.size).toBeGreaterThan(500);
+    // 1380 today. A floor with real slack in it would let a partial parse
+    // through and report parity over a handful of keys.
+    expect(en.size).toBeGreaterThan(1000);
 
     const others = fs
       .readdirSync(localesDir, { withFileTypes: true })

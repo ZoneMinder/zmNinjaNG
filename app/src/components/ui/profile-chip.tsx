@@ -9,6 +9,10 @@
  * controls reads as two different things.
  *
  * Each caller keeps its own `testId`, since the e2e suites assert per surface.
+ *
+ * NotificationHistoryItem's own profile chip is deliberately NOT one of these:
+ * it is an outline `Badge` sized for a wider row (`max-w-[8rem]`), not a fifth
+ * copy of the span below, so leave it where it is.
  */
 
 import { cn } from '../../lib/utils';

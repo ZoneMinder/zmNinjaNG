@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import Events from '../Events';
@@ -421,6 +421,34 @@ describe('Events Page', () => {
       expect.anything(),
       expect.objectContaining({ eventsViewMode: expect.anything() })
     );
+  });
+
+  // viewMode is derived from the ?view param and the persisted preference, so
+  // switching back to list is entirely the two writes below: nothing else
+  // clears the param, and leaving it set would pin the page in montage while
+  // the toggle claims to have switched.
+  it('switching back to list both persists list and clears the ?view param', () => {
+    settingsOverrides = { eventsViewMode: 'montage' };
+    mockSearchParams = new URLSearchParams('view=montage&monitorId=4');
+    scopedEvents({
+      events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
+    });
+
+    render(<Events />);
+    // Precondition: the page really is in montage, so the click below means
+    // "switch to list" rather than "switch to montage".
+    expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('events-view-toggle'));
+
+    expect(updateProfileSettingsMock).toHaveBeenCalledWith(
+      'profile-1',
+      expect.objectContaining({ eventsViewMode: 'list' })
+    );
+    const nextParams = setSearchParamsMock.mock.calls.at(-1)?.[0] as URLSearchParams;
+    expect(nextParams.get('view')).toBeNull();
+    // The other filters ride along in the same object and must survive.
+    expect(nextParams.get('monitorId')).toBe('4');
   });
 
   it('settings-sync still applies the persisted view when no ?view param is present (refs #337 round 2)', () => {

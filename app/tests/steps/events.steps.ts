@@ -194,6 +194,29 @@ Then('I should see the events montage grid', async ({ page }) => {
   await expect(page.getByTestId('events-montage-grid')).toBeVisible();
 });
 
+When('I switch events view to list', async ({ page }) => {
+  // Deliberately not short-circuiting the way the montage direction does: one
+  // button carries both directions, so a click that landed while the page was
+  // already in list would switch INTO montage. Asserting the grid is on screen
+  // first means this step cannot quietly do nothing.
+  await expect(page.getByTestId('events-montage-grid')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+  await page.getByTestId('events-view-toggle').click();
+});
+
+Then('I should see the events list', async ({ page }) => {
+  // Both halves. The montage grid going away is what proves ?view=montage was
+  // cleared; the list rendering is what proves the page landed somewhere real
+  // rather than on an empty state.
+  await expect(page.getByTestId('events-montage-grid')).toHaveCount(0, {
+    timeout: testConfig.timeouts.transition,
+  });
+  await expect(page.getByTestId('event-list')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
 When('I click into the first event if events exist', async ({ page }) => {
   if (await serverHasEvents()) {
     const firstEvent = page.getByTestId('event-card').first();
