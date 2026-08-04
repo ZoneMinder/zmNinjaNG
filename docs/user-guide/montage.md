@@ -18,6 +18,12 @@ In All Servers mode each entry in **Show monitors** names the server it comes
 from, since two servers can have cameras with the same name. Hiding one
 server's camera leaves the other server's camera of that name on screen.
 
+Every toolbar control works the same way in All Servers mode, including edit
+mode, column presets and saved layouts. The arrangement is kept separately
+from each profile's own, so rearranging the combined grid leaves each
+server's single-profile layout alone. Tiles are tracked per server, so two
+servers with a camera on the same ID keep separate cells.
+
 ## Edit Mode
 
 Tap **Edit Layout** to rearrange the grid:

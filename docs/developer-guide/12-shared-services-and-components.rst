@@ -1209,6 +1209,38 @@ not do this either, having no record of which server each stream used.
 **Used by:** ``hooks/useMonitorStream.ts``,
 ``components/monitors/MonitorHoverPreview.tsx``.
 
+useViewPrefs (``hooks/useViewPrefs.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Answers which settings bucket a rendered stream should obey. Preferences are
+two-tier: All Servers mode keeps its own bucket, stored under the
+``ALL_PROFILES_ID`` sentinel, separate from every individual profile's.
+
+Page-level controls get that for free, because ``useCurrentProfile`` already
+keys off ``currentProfileId`` and so resolves to the ALL bucket in All mode.
+The stream path does not. A montage tile owned by profile B passes
+``profileId: B`` down the URL chain (``useServerUrls``, ``useFreshAccessToken``,
+``useProfileById``) so its stream resolves against B's server, and reading its
+view preferences from the same place would leave the All Servers toolbar's
+Streaming Mode and analysis-frames toggles governing nothing.
+
+.. code:: typescript
+
+   import { useViewPrefs } from '../hooks/useViewPrefs';
+
+   // Owning profile in single mode; the ALL bucket while aggregating.
+   const { viewMode, showAnalysisFrames } = useViewPrefs(profileId);
+
+The split is by what a setting describes. ``viewMode`` and
+``showAnalysisFrames`` describe the view, so the bucket the user is looking at
+owns them. Timeouts, multi-port and bandwidth describe the server, so they
+stay with the owning profile - ``useMonitorStream`` reads both, from
+``useProfileById`` and from here. Resolution keys off the app's mode, not the
+route, so the ``/all/monitors/:profileId/:id`` deep route follows the ALL
+bucket like every other All-mode surface.
+
+**Used by:** ``hooks/useMonitorStream.ts``.
+
 useEventFilters (``hooks/useEventFilters.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -543,3 +543,27 @@ Then('the montage grid should show no tiles', async ({ page }) => {
     timeout: testConfig.timeouts.element,
   });
 });
+
+// All-mode montage view controls (refs #337). These write the ALL settings
+// bucket rather than a single profile's, which is only observable through the
+// control's own state surviving a reload while aggregating.
+When('I set the montage fit to {string}', async ({ page }, label: string) => {
+  await page.getByTestId('montage-fit-select').click();
+  const option = label === 'Fit'
+    ? page.getByTestId('montage-fit-contain')
+    : page.getByTestId('montage-fit-cover');
+  await expect(option).toBeVisible({ timeout: testConfig.timeouts.element });
+  await option.click();
+});
+
+Then('the montage fit should be {string}', async ({ page }, label: string) => {
+  await expect(page.getByTestId('montage-fit-select')).toHaveText(label, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('the montage edit-layout control should be available', async ({ page }) => {
+  await expect(page.getByTestId('montage-edit-toggle')).toBeEnabled({
+    timeout: testConfig.timeouts.element,
+  });
+});

@@ -96,6 +96,32 @@ Feature: All Servers mode
     Then I should see at least 1 monitor in montage grid
 
   @web
+  Scenario: All Servers montage view controls persist across a reload
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Montage" page
+    Then I should see at least 1 monitor in montage grid
+    And the montage edit-layout control should be available
+    When I set the montage fit to "Fit"
+    Then the montage fit should be "Fit"
+    When I reload the current page
+    Then I should see at least 1 monitor in montage grid
+    And the montage fit should be "Fit"
+
+  @web
+  Scenario: analysis frames toggle is usable from All Servers mode
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    Then I should be on the monitors page
+    When I click a monitor card
+    Then the URL should match the all-mode monitor detail route
+    And the analysis frames toggle should be inactive
+    When I turn analysis frames on
+    Then the analysis frames toggle should be active
+    When I reload the current page
+    Then the analysis frames toggle should be active
+
+  @web
   Scenario: Events montage view renders in All mode with no gate notice
     When I navigate to the "Profiles" page
     And I click the All Servers profile card
