@@ -73,6 +73,16 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Compact/density-mode CSS overrides scope to the compact-mode container,
   never bare element or utility selectors; global overrides bled into
   unrelated views three times (86e7c984, 7e69c0d7, 17613d3e).
+- `react-grid-layout` clones every child with `ref: this.elementRef`, which
+  REPLACES a ref put on that element. Anything needing a tile's DOM node
+  (IntersectionObserver, measurement) puts its ref one level in, and any
+  test mock of the grid clones with a ref too, or it calls refs the real
+  grid swallows (c8d0d833).
+- A ref-callback cache keyed by id must outlive a detach. Deleting the
+  entry when React calls the ref with null hands the next render a
+  different callback, which React treats as a new ref: detach, delete,
+  re-attach, forever. StrictMode's own attach/detach/attach on mount
+  starts it (c8d0d833).
 
 ## Auth and tokens
 

@@ -484,10 +484,21 @@ Electron a fully visible window on a second display fires it.
 **Viewport gating.** ``settings.allModeViewportGating`` turns on
 ``useViewportGating`` (``src/hooks/useViewportGating.ts``), one
 IntersectionObserver for the whole grid rather than one per tile. Tiles hand
-their wrapper element to ``registerTile``, whose ref callback is memoized per
-tile id: a fresh identity each render would make React detach and re-observe
-every tile on every grid re-render. That map is also how an entry finds the
+an element to ``registerTile``, whose ref callback is memoized per tile id and
+kept for the life of the page. That map is also how an entry finds the
 composite tile id it belongs to, since raw monitor ids collide across servers.
+
+Both halves of that sentence are load-bearing, and each cost a round. The
+observed element is INSIDE the grid item rather than being the item itself,
+because ``react-grid-layout`` clones every child with ``ref:
+this.elementRef``, which replaces any ref on that element: a ref on the tile
+root is never called. And the callback cache must survive a detach. Dropping
+the entry when React calls the ref with ``null`` hands the next render a
+different callback for the same tile, React sees a new ref and detaches
+again, and the tile is observed, dropped and re-observed on every render;
+React's own StrictMode attach/detach/attach on mount is enough to start it.
+Either bug leaves every tile gated with nothing streaming, and the unit suite
+passed through both, because a mocked grid calls refs a real one ignores.
 
 The observer is rooted on the montage's scroll container, not the viewport.
 ``rootMargin`` only expands the root, while an intermediate scroller clips
