@@ -28,9 +28,11 @@ import { useSettingsStore } from '../stores/settings';
 import { useDashboardStore } from '../stores/dashboard';
 import { log, LogLevel } from '../lib/logger';
 import {
+  pruneAllBucketMonitorIds,
   pruneProfileSettingsMonitorIds,
   pruneWidgetMonitorIds,
 } from '../lib/monitor/prune-deleted-monitors';
+import { ALL_PROFILES_ID } from '../api/types';
 
 export function useReconcileDeletedMonitors(): void {
   const { currentProfile } = useCurrentProfile();
@@ -61,6 +63,23 @@ export function useReconcileDeletedMonitors(): void {
       settingsState.updateProfileSettings(profileId, patch);
       log.monitor('Dropped deleted monitors from profile settings', LogLevel.INFO, {
         keys: Object.keys(patch),
+      });
+    }
+
+    // The All Servers bucket stores composite profileId:monitorId tile ids, so
+    // this profile's deleted monitors linger there under a key the loop above
+    // never looks at. Only ids prefixed with THIS profile are judged: the
+    // fetch above is one server's monitor list, and every other server's ids
+    // are unknowable from it (refs #337).
+    const allPatch = pruneAllBucketMonitorIds(
+      settingsState.getProfileSettings(ALL_PROFILES_ID),
+      profileId,
+      known
+    );
+    if (allPatch) {
+      settingsState.updateProfileSettings(ALL_PROFILES_ID, allPatch);
+      log.monitor('Dropped deleted monitors from the All Servers montage bucket', LogLevel.INFO, {
+        profileId,
       });
     }
 
