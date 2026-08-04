@@ -450,7 +450,98 @@ describe('Notification Store', () => {
         // aggregate is intentional, exactly as under All Servers. Reading the
         // group id as a real profile tears the socket down the moment the
         // handshake completes, and the member's notifications never arrive.
-        useProfileStore.setState({ currentProfileId: mintVirtualProfileId() });
+        const groupId = mintVirtualProfileId();
+        useProfileStore.setState({
+          virtualProfiles: [
+            { id: groupId, name: 'Upstairs', memberProfileIds: [asProfileId(profileA)] },
+          ],
+          currentProfileId: groupId,
+        });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('disconnects a NON-member whose connect was in flight when a virtual profile became current (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // The group EXCLUDES profileA, so nothing in the new scope owns this
+        // connection: the switch-teardown effect already ran and found it not
+        // yet connected. Exempting every aggregate id unconditionally would
+        // leave it streaming events for the rest of the session with no
+        // connector behind it.
+        const groupId = mintVirtualProfileId();
+        useProfileStore.setState({
+          virtualProfiles: [
+            { id: groupId, name: 'Downstairs', memberProfileIds: [asProfileId(profileB)] },
+          ],
+          currentProfileId: groupId,
+        });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('disconnects an in-flight connection when the group it belonged to is gone (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // A virtual id with no group behind it (deleted in another tab, or
+        // hand-edited storage) has no members, so it owns nothing.
+        useProfileStore.setState({ virtualProfiles: [], currentProfileId: mintVirtualProfileId() });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('keeps every profile\'s in-flight connection under All Servers, which spans them all (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileB) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
 
         resolveConnect();
         await connectPromise;

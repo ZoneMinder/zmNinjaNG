@@ -25,7 +25,7 @@ import { getSession } from '../services/sessions';
 import { useProfileStore } from './profile';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
-import { asProfileId, isAggregateProfileId } from '../api/types';
+import { asProfileId, ALL_PROFILES_ID, isVirtualProfileId } from '../api/types';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
@@ -106,6 +106,19 @@ interface NotificationState {
  *  for All-mode fan-out. */
 function _isProfileActive(state: Pick<NotificationState, 'currentProfileId' | 'connections'>, profileId: string): boolean {
   return state.currentProfileId === profileId || state.connections[profileId] === 'connected';
+}
+
+/** Whether the app's current scope still owns `profileId`'s connection: it IS
+ *  that profile, it is All Servers (which spans every enabled profile), or it
+ *  is a virtual profile listing it as a member. Anything else means no
+ *  connector is left behind the socket. Refs #337. */
+function _aggregateOwnsConnection(appCurrentProfileId: string, profileId: string): boolean {
+  if (appCurrentProfileId === profileId || appCurrentProfileId === ALL_PROFILES_ID) return true;
+  if (!isVirtualProfileId(appCurrentProfileId)) return false;
+  const group = (useProfileStore.getState().virtualProfiles ?? []).find(
+    (v) => v.id === appCurrentProfileId
+  );
+  return !!group?.memberProfileIds.includes(asProfileId(profileId));
 }
 
 /**
@@ -297,18 +310,22 @@ export const useNotificationStore = create<NotificationState>()(
 
           const appCurrentProfileId = useProfileStore.getState().currentProfileId;
 
-          // Single mode, but the user switched to a DIFFERENT real profile
-          // while this connect() was in flight: the switch-teardown effect
-          // already ran and found this profile not yet connected (it wasn't
-          // - the handshake was still in progress), so nothing will ever
-          // disconnect it. Do it here instead of leaking a fully connected,
-          // anchor-less websocket (refs #337 round 2 minor #2). Excluded:
-          // any aggregate id (All Servers or a virtual profile, where this
-          // profile's connection is intentional and simply isn't "the"
-          // current profile by design) and null (no app-level current profile
-          // at all yet - not "the user switched away", so nothing to tear
-          // down).
-          if (appCurrentProfileId && appCurrentProfileId !== profileId && !isAggregateProfileId(appCurrentProfileId)) {
+          // The user switched away while this connect() was in flight: the
+          // switch-teardown effect already ran and found this profile not yet
+          // connected (it wasn't - the handshake was still in progress), so
+          // nothing will ever disconnect it. Do it here instead of leaking a
+          // fully connected, anchor-less websocket (refs #337 round 2 minor
+          // #2).
+          //
+          // The question is whether anything in the NEW scope still owns this
+          // connection. A real profile owns only its own. All Servers spans
+          // every enabled profile, so it owns them all. A virtual profile
+          // owns exactly its members - for a non-member (or a group id with
+          // no group behind it) nothing owns the socket, and exempting every
+          // aggregate id unconditionally would leave it streaming events for
+          // the rest of the session. null is not a switch-away at all (no
+          // app-level current profile yet), so there is nothing to tear down.
+          if (appCurrentProfileId && !_aggregateOwnsConnection(appCurrentProfileId, profileId)) {
             log.notifications('Profile switched away while connecting - disconnecting the now-ownerless socket', LogLevel.INFO, {
               profileId,
               appCurrentProfileId,
