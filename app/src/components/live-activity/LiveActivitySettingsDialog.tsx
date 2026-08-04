@@ -155,17 +155,29 @@ export function LiveActivitySettingsDialog({
   );
   const settings = useMemo(() => mergeProfileSettings(rawSettings), [rawSettings]);
 
-  // The ignore-list bucket: the picked profile in All mode, `profileId`
-  // itself in single mode (scopeProfiles is undefined there, so this always
-  // resolves to `profileId` - the exact single-mode target from before All
-  // mode existed). Initializer only: the picker below is the one place this
-  // ever changes after mount.
+  // The user's last explicit pick from the ProfilePicker. NOT the ignore-list
+  // bucket by itself - this dialog is page-mounted and Radix only toggles it
+  // open/closed, so it never unmounts and this state is never reset. Without
+  // the derivation below, any in-app profile switch while it had been opened
+  // before (single mode included: switching to a different single profile,
+  // not just an All-mode re-pick) would leave the ignore list reading and
+  // writing this stale value forever after.
   const [pickedProfileId, setPickedProfileId] = useState<ProfileId>(
     () => scopeProfiles?.[0]?.profile.id ?? profileId
   );
 
+  // The actual ignore-list bucket, re-derived every render: `pickedProfileId`
+  // only wins while it is still a live member of `scopeProfiles`. The moment
+  // it isn't - scopeProfiles is undefined (single mode, where this always
+  // tracks the live `profileId` prop instead) or the previously-picked
+  // profile dropped out of scope - it falls back to the current first scope
+  // profile, or `profileId` in single mode.
+  const ignoreTarget: ProfileId = scopeProfiles?.some((sp) => sp.profile.id === pickedProfileId)
+    ? pickedProfileId
+    : scopeProfiles?.[0]?.profile.id ?? profileId;
+
   const pickedRawSettings = useSettingsStore(
-    useShallow((state) => state.profileSettings?.[pickedProfileId])
+    useShallow((state) => state.profileSettings?.[ignoreTarget])
   );
   const pickedSettings = useMemo(() => mergeProfileSettings(pickedRawSettings), [pickedRawSettings]);
 
@@ -175,7 +187,7 @@ export function LiveActivitySettingsDialog({
   );
 
   const ignoreListMonitors = scopeProfiles
-    ? scopeProfiles.find((sp) => sp.profile.id === pickedProfileId)?.monitors ?? []
+    ? scopeProfiles.find((sp) => sp.profile.id === ignoreTarget)?.monitors ?? []
     : monitors;
 
   const pollField = useClampedNumberField(
@@ -209,7 +221,7 @@ export function LiveActivitySettingsDialog({
       : current.includes(monitorId)
         ? current
         : [...current, monitorId];
-    useSettingsStore.getState().updateProfileSettings(pickedProfileId, { liveActivityIgnoredMonitorIds: next });
+    useSettingsStore.getState().updateProfileSettings(ignoreTarget, { liveActivityIgnoredMonitorIds: next });
   };
 
   return (
@@ -308,7 +320,7 @@ export function LiveActivitySettingsDialog({
               {scopeProfiles && scopeProfiles.length > 0 && (
                 <ProfilePicker
                   profiles={scopeProfiles.map((sp) => sp.profile)}
-                  value={pickedProfileId}
+                  value={ignoreTarget}
                   onChange={setPickedProfileId}
                   className="w-40 h-8"
                 />

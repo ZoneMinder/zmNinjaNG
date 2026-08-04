@@ -83,29 +83,26 @@ export function useLiveActivityAllMode(
     [scope?.profiles]
   );
 
-  const monitorsById = useMemo(() => {
-    const map = new Map<string, LiveActivityMonitorEntry>();
-    if (!isAllMode) return map;
+  // Both maps are one pass over the same scopedMonitors list - monitorsById
+  // for the composite-keyed tile lookup, monitorsByProfile for the settings
+  // dialog's per-picked-profile ignore list (full, uncapped, pre-ignore-
+  // filter monitor lists).
+  const { monitorsById, monitorsByProfile } = useMemo(() => {
+    const byId = new Map<string, LiveActivityMonitorEntry>();
+    const byProfile = new Map<ProfileId, MonitorData[]>();
+    if (!isAllMode) return { monitorsById: byId, monitorsByProfile: byProfile };
     for (const { profileId, profileName, item } of scopedMonitors) {
-      map.set(monitorCacheKey(profileId, item.Monitor.Id), {
+      byId.set(monitorCacheKey(profileId, item.Monitor.Id), {
         Monitor: item.Monitor,
         Monitor_Status: item.Monitor_Status,
         profileId,
         profileChip: profileName,
       });
-    }
-    return map;
-  }, [isAllMode, scopedMonitors]);
-
-  const monitorsByProfile = useMemo(() => {
-    const map = new Map<ProfileId, MonitorData[]>();
-    if (!isAllMode) return map;
-    for (const { profileId, item } of scopedMonitors) {
-      const list = map.get(profileId) ?? [];
+      const list = byProfile.get(profileId) ?? [];
       list.push(item);
-      map.set(profileId, list);
+      byProfile.set(profileId, list);
     }
-    return map;
+    return { monitorsById: byId, monitorsByProfile: byProfile };
   }, [isAllMode, scopedMonitors]);
 
   // Raw record select (not a per-profile selector): every profile's OWN

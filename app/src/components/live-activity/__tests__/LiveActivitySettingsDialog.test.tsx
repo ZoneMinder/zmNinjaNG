@@ -7,6 +7,7 @@ import { useSettingsStore } from '../../../stores/settings';
 import { ALL_PROFILES_ID, asProfileId } from '../../../api/types';
 
 const P1 = asProfileId('p1');
+const P2 = asProfileId('p2');
 const ALL_ID = ALL_PROFILES_ID;
 
 // Radix's Select relies on portals/pointer APIs jsdom doesn't fully support
@@ -116,6 +117,43 @@ describe('LiveActivitySettingsDialog', () => {
 
     fireEvent.click(screen.getByTestId('live-activity-ignore-4'));
 
+    expect(
+      useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
+    ).toEqual([]);
+  });
+
+  // Regression: this dialog is page-mounted and Radix only toggles it
+  // open/closed, so it never unmounts - `pickedProfileId` used to be a
+  // mount-time snapshot with nothing to invalidate it. Any in-app profile
+  // switch while the dialog had been opened before (including single mode
+  // -> a different single profile, not just an All-mode re-pick) left the
+  // ignore list reading and WRITING the stale profile's bucket forever
+  // after. No existing test rerenders with a changed profileId, which is
+  // why this slipped through.
+  it("follows a live profileId change across a rerender, not a stale mount-time snapshot", () => {
+    const { rerender } = render(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId={P1}
+        monitors={MONITORS as never}
+      />
+    );
+
+    rerender(
+      <LiveActivitySettingsDialog
+        open
+        onOpenChange={() => {}}
+        profileId={P2}
+        monitors={MONITORS as never}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('live-activity-ignore-4'));
+
+    expect(
+      useSettingsStore.getState().getProfileSettings('p2').liveActivityIgnoredMonitorIds
+    ).toEqual(['4']);
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
     ).toEqual([]);

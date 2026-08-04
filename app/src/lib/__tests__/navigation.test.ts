@@ -12,9 +12,12 @@ describe('resolveLastRouteSaveTarget', () => {
   // All mode: currentProfile is null (useCurrentProfile resolves it to null
   // for the ALL_PROFILES_ID sentinel), so the old `currentProfile?.id` guard
   // silently dropped every route while aggregating - no page was ever
-  // remembered. This is the fix: the ALL bucket, not currentProfileId
-  // (which useProfileStore never reports for the app-level "current
-  // profile" concept the same way in All mode - see AppLayout.tsx).
+  // remembered. This is the fix: the ALL bucket. `currentProfileId` here is
+  // the fourth argument's SINGLE-mode value only (AppLayout.tsx passes
+  // `currentProfile?.id`, undefined in All mode) - the sentinel itself comes
+  // from the `isAllMode` flag, not from a store read. Contrast
+  // LiveActivity.tsx/Montage.tsx, which DO read useProfileStore's raw
+  // currentProfileId directly and get ALL_PROFILES_ID back from it.
   it('saves to the ALL bucket in All mode, never the single-mode profile id', () => {
     expect(resolveLastRouteSaveTarget('/live-activity', false, true, undefined)).toBe(ALL_PROFILES_ID);
   });
