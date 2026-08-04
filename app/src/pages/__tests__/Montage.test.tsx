@@ -790,6 +790,108 @@ describe('Montage Page', () => {
     );
   });
 
+  it('splits the stream budget across servers instead of letting the first one eat it', () => {
+    // A global first-N slice let profile-1's ten monitors consume the whole
+    // budget, so profile-2 rendered nothing at all - the aggregate view showed
+    // one server. Four slots over two servers is two each (refs #337).
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }], {
+      allModeMaxStreams: 4,
+    });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-1',
+          profileName: 'Home',
+          item: monitor(`h${i}`, `Home ${i}`),
+        })),
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-2',
+          profileName: 'Office',
+          item: monitor(`o${i}`, `Office ${i}`),
+        })),
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { container } = render(<Montage />);
+
+    const tiles = [...container.querySelectorAll('[data-testid^="montage-monitor-"]')].map(
+      (tile) => tile.getAttribute('data-testid')
+    );
+    expect(tiles).toEqual([
+      'montage-monitor-profile-1:h0',
+      'montage-monitor-profile-1:h1',
+      'montage-monitor-profile-2:o0',
+      'montage-monitor-profile-2:o1',
+    ]);
+    expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(
+      'montage.stream_cap_overflow-16'
+    );
+  });
+
+  it('hands the odd slot to the first server when the budget does not divide evenly', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }], {
+      allModeMaxStreams: 5,
+    });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-1',
+          profileName: 'Home',
+          item: monitor(`h${i}`, `Home ${i}`),
+        })),
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-2',
+          profileName: 'Office',
+          item: monitor(`o${i}`, `Office ${i}`),
+        })),
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { container } = render(<Montage />);
+
+    const tiles = [...container.querySelectorAll('[data-testid^="montage-monitor-"]')].map(
+      (tile) => tile.getAttribute('data-testid')
+    );
+    expect(tiles).toEqual([
+      'montage-monitor-profile-1:h0',
+      'montage-monitor-profile-1:h1',
+      'montage-monitor-profile-1:h2',
+      'montage-monitor-profile-2:o0',
+      'montage-monitor-profile-2:o1',
+    ]);
+  });
+
+  it('caps a single server in profile order, exactly as it did before', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }], { allModeMaxStreams: 3 });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: Array.from({ length: 10 }, (_, i) => ({
+        profileId: 'profile-1',
+        profileName: 'Home',
+        item: monitor(`h${i}`, `Home ${i}`),
+      })),
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { container } = render(<Montage />);
+
+    const tiles = [...container.querySelectorAll('[data-testid^="montage-monitor-"]')].map(
+      (tile) => tile.getAttribute('data-testid')
+    );
+    expect(tiles).toEqual([
+      'montage-monitor-profile-1:h0',
+      'montage-monitor-profile-1:h1',
+      'montage-monitor-profile-1:h2',
+    ]);
+  });
+
   it('single mode never caps tiles, even past the All-mode limit', () => {
     singleProfile();
     useScopedMonitorsMock.mockReturnValue({

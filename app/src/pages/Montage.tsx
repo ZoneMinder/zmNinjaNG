@@ -25,6 +25,7 @@ import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { EmptyState } from '../components/ui/empty-state';
 import { filterMonitorsByGroup } from '../lib/monitor/filters';
+import { allocateStreamBudget } from '../lib/monitor/stream-budget';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
@@ -184,20 +185,29 @@ export default function Montage() {
   // Stream cap (refs #337, Phase 4 Task 1): All mode only - single mode stays
   // unlimited (byte-identical). Without it, N profiles each contributing every
   // enabled monitor could open dozens of simultaneous streams across
-  // independent servers at once. useScopedMonitors already orders entries
-  // profile-then-server, so the first N is deterministic.
+  // independent servers at once.
   //
   // The limit comes from the ALL bucket (Settings > All Servers performance),
   // which `settings` already is while aggregating; it is only read inside the
   // isAllMode branch, so a single profile's own copy of the key never applies
   // to anything. mergeProfileSettings has already clamped it.
+  //
+  // allocateStreamBudget shares those slots across the servers in scope
+  // instead of handing the first N to whichever server sorts first; the total
+  // is the same, so the overflow count still describes the dropped tiles.
   const maxStreams = settings.allModeMaxStreams;
   const overflowCount = isAllMode && visibleMonitors.length > maxStreams
     ? visibleMonitors.length - maxStreams
     : 0;
-  const cappedMonitors = overflowCount > 0
-    ? visibleMonitors.slice(0, maxStreams)
-    : visibleMonitors;
+  // Memoized so the query-input memos below keep their identity across a
+  // render that changed nothing about which tiles are on screen.
+  const cappedMonitors = useMemo(
+    () =>
+      overflowCount > 0
+        ? allocateStreamBudget(visibleMonitors, maxStreams, (m) => m.profileId ?? '')
+        : visibleMonitors,
+    [overflowCount, visibleMonitors, maxStreams]
+  );
 
   // useMonitorNewEvents stays current-profile-scoped for single mode; All mode
   // fans the equivalent query out per owning profile (Monitors.tsx precedent).
