@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { useNotificationAllModeToasts } from '../useNotificationAllModeToasts';
 import { useNotificationStore } from '../../stores/notifications';
 import { asProfileId } from '../../api/types';
+import { DEFAULT_SETTINGS } from '../../stores/settings';
 import type { ZMAlarmEvent } from '../../types/notifications';
 
 vi.mock('sonner', () => ({
@@ -39,13 +40,21 @@ type ScopeLike = {
   mode: 'all' | 'single';
   profile: null;
   profiles: { id: string; name: string }[];
-  settings: { allModeNotifications: 'live' | 'muted' | 'off' };
+  settings: { allModeNotifications: 'live' | 'muted' | 'off'; allModeBurstSeconds: number };
 } | null;
 
 const mockScope = vi.fn<() => ScopeLike>(() => null);
 vi.mock('../useProfileScope', () => ({
   useProfileScope: () => mockScope(),
 }));
+
+/** The ALL bucket as this hook reads it. The burst window is a user setting
+ *  now, so every scope mock has to carry one; the default matches what
+ *  DEFAULT_SETTINGS ships. */
+const scopeSettings = (
+  allModeNotifications: 'live' | 'muted' | 'off',
+  allModeBurstSeconds = DEFAULT_SETTINGS.allModeBurstSeconds
+) => ({ allModeNotifications, allModeBurstSeconds });
 
 const PROFILE_A = asProfileId('profile-a');
 const PROFILE_B = asProfileId('profile-b');
@@ -90,7 +99,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'single',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     renderIt();
@@ -108,7 +117,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -130,7 +139,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -152,7 +161,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
@@ -178,7 +187,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: false });
@@ -205,7 +214,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
     useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true, playSound: true });
@@ -226,7 +235,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeNotifications: 'muted' },
+      settings: scopeSettings('muted'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true, playSound: true });
     renderIt();
@@ -250,7 +259,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     // Disabled overall, even though showToasts itself is on.
@@ -276,7 +285,7 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
       mode: 'all',
       profile: null,
       profiles: [{ id: PROFILE_A, name: 'Home' }],
-      settings: { allModeNotifications: 'live' },
+      settings: scopeSettings('live'),
     });
     useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
     // Simulate a stale/persisted event already present before the hook ever
@@ -293,5 +302,35 @@ describe('useNotificationAllModeToasts (refs #337)', () => {
     });
     await flushBurst();
     expect(toast).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces for the burst window the ALL bucket sets, not the shipped default', async () => {
+    // One second instead of the shipped three: the summary toast has to land
+    // when the user's window closes, not when the old constant said.
+    mockScope.mockReturnValue({
+      mode: 'all',
+      profile: null,
+      profiles: [{ id: PROFILE_A, name: 'Home' }, { id: PROFILE_B, name: 'Work' }],
+      settings: scopeSettings('live', 1),
+    });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_A, { enabled: true, showToasts: true });
+    useNotificationStore.getState().updateProfileSettings(PROFILE_B, { enabled: true, showToasts: true });
+    renderIt();
+
+    act(() => {
+      useNotificationStore.getState().addEvent(PROFILE_A, makeEvent());
+      useNotificationStore.getState().addEvent(PROFILE_B, makeEvent());
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(999);
+    });
+    expect(toast).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(toast).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(toast).mock.calls[0][0]).toContain('notifications.all_mode_burst_summary');
   });
 });

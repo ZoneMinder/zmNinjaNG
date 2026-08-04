@@ -18,11 +18,10 @@ import { useShallow } from 'zustand/react/shallow';
 import { useProfileScope } from './useProfileScope';
 import { useScopedMonitors } from './useScopedMonitors';
 import { useScopedAlarmStates, type ScopedAlarmRef } from './useAlarmStates';
-import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
+import { useSettingsStore, mergeProfileSettings, DEFAULT_SETTINGS } from '../stores/settings';
 import { monitorCacheKey } from '../stores/monitors';
 import { useNotificationStore } from '../stores/notifications';
 import { capWatchedRoundRobin, type ActiveMonitorEntry } from '../lib/monitor/live-activity';
-import { LIVE_ACTIVITY } from '../lib/zmninja-ng-constants';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
 import type { Monitor, MonitorData, MonitorStatus, Profile, ProfileId } from '../api/types';
 import type { ProfileError } from '../api/scoped-types';
@@ -82,6 +81,13 @@ export function useLiveActivityAllMode(
     () => new Map((scope?.profiles ?? []).map((p) => [p.id, p])),
     [scope?.profiles]
   );
+
+  // Both guardrails below are user settings living in the ALL bucket, which is
+  // exactly what `scope.settings` resolves to while aggregating (Settings >
+  // All Servers performance). The fallback only covers "no scope at all",
+  // where nothing fans out anyway and the numbers are unused; it exists so the
+  // arithmetic stays defined rather than to describe a real configuration.
+  const allModeSettings = scope?.settings ?? DEFAULT_SETTINGS;
 
   // Both maps are one pass over the same scopedMonitors list - monitorsById
   // for the composite-keyed tile lookup, monitorsByProfile for the settings
@@ -143,18 +149,21 @@ export function useLiveActivityAllMode(
   const activeKeys = useMemo(() => new Set(active.map((entry) => entry.monitorId)), [active]);
   const { watched: watchedPairs, overflowCount: watchOverflowCount } = useMemo(
     () =>
-      capWatchedRoundRobin(watchedGroups, LIVE_ACTIVITY.allModeMaxWatched, {
+      capWatchedRoundRobin(watchedGroups, allModeSettings.allModeMaxWatched, {
         keyOf: (pair) => monitorCacheKey(pair.profileId, pair.monitorId),
         keys: activeKeys,
       }),
-    [watchedGroups, activeKeys]
+    [watchedGroups, activeKeys, allModeSettings.allModeMaxWatched]
   );
 
   // GUARDRAIL: poll floor. Live hints (below) carry the fast path when a
   // profile's connection is Live; polling only confirms, so All mode does
   // not need single mode's tighter floor while fanning its poll out across
   // every scope profile at once.
-  const allModePollIntervalMs = Math.max(configuredPollIntervalMs, LIVE_ACTIVITY.allModePollFloorSeconds * 1000);
+  const allModePollIntervalMs = Math.max(
+    configuredPollIntervalMs,
+    allModeSettings.allModePollFloorSeconds * 1000
+  );
 
   const { states, isLoading: isAlarmsLoading, error: alarmError } = useScopedAlarmStates(watchedPairs, {
     enabled: isAllMode,

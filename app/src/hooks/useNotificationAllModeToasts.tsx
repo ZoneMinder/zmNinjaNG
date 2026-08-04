@@ -6,11 +6,12 @@
  * "current" profile (there isn't one while aggregating: useCurrentProfile
  * resolves to null for the ALL_PROFILES_ID sentinel).
  *
- * Events arriving within NOTIFICATIONS_SERVICE.allModeBurstWindowMs of each
- * other collapse into one summary toast instead of one per event, so
- * aggregating several busy servers doesn't flood the screen. A single event
- * in the window still shows the normal per-event toast. At most one
- * notification sound plays per window.
+ * Events arriving within the burst window of each other (allModeBurstSeconds
+ * in the ALL settings bucket, Settings > All Servers performance) collapse
+ * into one summary toast instead of one per event, so aggregating several
+ * busy servers doesn't flood the screen. A single event in the window still
+ * shows the normal per-event toast. At most one notification sound plays per
+ * window.
  *
  * The all-mode notifications setting (settings store, ALL_PROFILES_ID bucket)
  * 'muted' value suppresses toasts and sound entirely; badge counts and
@@ -30,7 +31,6 @@ import { useNotificationStore, type NotificationEvent } from '../stores/notifica
 import { useProfileScope } from './useProfileScope';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { playNotificationSound } from '../lib/event/notification-sound';
-import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 
 interface BurstEntry {
@@ -166,7 +166,9 @@ export function useNotificationAllModeToasts(): void {
 
     burstRef.current.push(...newlyArrived);
     if (!timerRef.current) {
-      timerRef.current = setTimeout(flushBurst, NOTIFICATIONS_SERVICE.allModeBurstWindowMs);
+      // Seconds in the ALL bucket, milliseconds here: the settings row asks
+      // for a unit a person thinks in, setTimeout wants the other one.
+      timerRef.current = setTimeout(flushBurst, scope.settings.allModeBurstSeconds * 1000);
     }
   }, [profileEvents, scope, getProfileSettings, flushBurst]);
 

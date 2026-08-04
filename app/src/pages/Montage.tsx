@@ -5,7 +5,6 @@
  * Supports drag-and-drop layout, resizing, and fullscreen mode.
  */
 
-import { MONTAGE_GRID } from '../lib/zmninja-ng-constants';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { useScopedMonitors } from '../hooks/useScopedMonitors';
@@ -187,11 +186,17 @@ export default function Montage() {
   // enabled monitor could open dozens of simultaneous streams across
   // independent servers at once. useScopedMonitors already orders entries
   // profile-then-server, so the first N is deterministic.
-  const overflowCount = isAllMode && visibleMonitors.length > MONTAGE_GRID.allModeMaxStreams
-    ? visibleMonitors.length - MONTAGE_GRID.allModeMaxStreams
+  //
+  // The limit comes from the ALL bucket (Settings > All Servers performance),
+  // which `settings` already is while aggregating; it is only read inside the
+  // isAllMode branch, so a single profile's own copy of the key never applies
+  // to anything. mergeProfileSettings has already clamped it.
+  const maxStreams = settings.allModeMaxStreams;
+  const overflowCount = isAllMode && visibleMonitors.length > maxStreams
+    ? visibleMonitors.length - maxStreams
     : 0;
   const cappedMonitors = overflowCount > 0
-    ? visibleMonitors.slice(0, MONTAGE_GRID.allModeMaxStreams)
+    ? visibleMonitors.slice(0, maxStreams)
     : visibleMonitors;
 
   // useMonitorNewEvents stays current-profile-scoped for single mode; All mode

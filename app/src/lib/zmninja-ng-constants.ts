@@ -227,7 +227,8 @@ export const NOTIFICATIONS_SERVICE = {
 
   // All mode only: events arriving within this window of each other collapse
   // into one summary toast instead of one toast per event, so aggregating
-  // several busy servers doesn't flood the screen (refs #337).
+  // several busy servers doesn't flood the screen (refs #337). The DEFAULT for
+  // the editable `allModeBurstSeconds` setting, which is what the hook reads.
   allModeBurstWindowMs: 3000,
 } as const;
 
@@ -1008,7 +1009,8 @@ export const MONTAGE_GRID = {
   // unlimited) - this only guards the aggregate view, where N profiles each
   // contributing every enabled monitor could otherwise open dozens of
   // simultaneous MJPEG/WebRTC connections across independent servers at
-  // once (refs #337, Phase 4 Task 1).
+  // once (refs #337, Phase 4 Task 1). The DEFAULT for the editable
+  // `allModeMaxStreams` setting, which is what the page reads.
   allModeMaxStreams: 16,
 } as const;
 
@@ -1237,7 +1239,9 @@ export const LIVE_ACTIVITY = {
   // combined, applied round-robin so one busy server cannot crowd out the
   // rest (see capWatchedRoundRobin, lib/monitor/live-activity.ts). The alarm
   // endpoint is per-monitor, so this bounds query fan-out the same way
-  // MONTAGE_GRID.allModeMaxStreams bounds stream fan-out.
+  // MONTAGE_GRID.allModeMaxStreams bounds stream fan-out. Both of the two
+  // values below are DEFAULTS for the editable settings of the same name,
+  // which is what useLiveActivityAllMode reads.
   allModeMaxWatched: 24,
   // Floor under the configured alarm poll interval. Live hints
   // (applyLiveAlarmHints) carry the fast path when a profile's connection is

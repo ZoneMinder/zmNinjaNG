@@ -11,6 +11,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
+import { MONTAGE_GRID } from '../../lib/zmninja-ng-constants';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
@@ -220,6 +221,7 @@ vi.mock('react-router-dom', () => ({
 
 const SETTINGS = {
   insomnia: false,
+  allModeMaxStreams: MONTAGE_GRID.allModeMaxStreams as number,
   montageShowToolbar: true,
   montageFeedFit: 'cover' as const,
   montageIsFullscreen: false,
@@ -237,11 +239,14 @@ function singleProfile() {
   useProfileScopeMock.mockReturnValue({ profiles: [{ id: 'profile-1', name: 'Home' }] });
 }
 
-function allMode(profiles: Array<{ id: string; name: string }>) {
+function allMode(
+  profiles: Array<{ id: string; name: string }>,
+  settingsOverrides: Partial<typeof SETTINGS> = {}
+) {
   currentProfileId = ALL_PROFILES_ID;
   useCurrentProfileMock.mockReturnValue({
     currentProfile: null,
-    settings: SETTINGS,
+    settings: { ...SETTINGS, ...settingsOverrides },
     isAllMode: true,
   });
   useProfileScopeMock.mockReturnValue({ profiles });
@@ -742,6 +747,39 @@ describe('Montage Page', () => {
     expect(tiles.length).toBe(16);
     expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(
       'montage.stream_cap_overflow-4'
+    );
+  });
+
+  it('caps at the stream limit the ALL bucket sets, not the shipped default', () => {
+    // The cap is a user setting now: a montage told to show 2 shows 2 and
+    // reports the other 18 as overflow, whatever the shipped default says.
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }], {
+      allModeMaxStreams: 2,
+    });
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-1',
+          profileName: 'Home',
+          item: monitor(`h${i}`, `Home ${i}`),
+        })),
+        ...Array.from({ length: 10 }, (_, i) => ({
+          profileId: 'profile-2',
+          profileName: 'Office',
+          item: monitor(`o${i}`, `Office ${i}`),
+        })),
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { container } = render(<Montage />);
+
+    const tiles = container.querySelectorAll('[data-testid^="montage-monitor-"]');
+    expect(tiles.length).toBe(2);
+    expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(
+      'montage.stream_cap_overflow-18'
     );
   });
 
