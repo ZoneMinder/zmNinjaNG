@@ -1,7 +1,35 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { createContext, useContext } from 'react';
+import type { ReactNode } from 'react';
 import { LiveActivitySettingsDialog } from '../LiveActivitySettingsDialog';
 import { useSettingsStore } from '../../../stores/settings';
+import { ALL_PROFILES_ID, asProfileId } from '../../../api/types';
+
+const P1 = asProfileId('p1');
+const ALL_ID = ALL_PROFILES_ID;
+
+// Radix's Select relies on portals/pointer APIs jsdom doesn't fully support
+// (same mock as components/__tests__/profile-picker.test.tsx).
+const SelectContext = createContext<{ onValueChange?: (value: string) => void }>({});
+vi.mock('../../ui/select', () => ({
+  Select: ({ children, onValueChange }: { children: ReactNode; onValueChange?: (value: string) => void }) => (
+    <SelectContext.Provider value={{ onValueChange }}>{children}</SelectContext.Provider>
+  ),
+  SelectTrigger: ({ children, ...props }: { children: ReactNode }) => (
+    <button type="button" {...props}>{children}</button>
+  ),
+  SelectValue: ({ placeholder }: { placeholder: string }) => <span>{placeholder}</span>,
+  SelectContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SelectItem: ({ children, value, ...props }: { children: ReactNode; value: string }) => {
+    const ctx = useContext(SelectContext);
+    return (
+      <button type="button" {...props} onClick={() => ctx.onValueChange?.(value)}>
+        {children}
+      </button>
+    );
+  },
+}));
 
 const MONITORS = [
   { Monitor: { Id: '3', Name: 'Front Door', Function: 'Modect' } },
@@ -24,7 +52,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -43,7 +71,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -63,7 +91,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS_WITH_CONTINUOUS as never}
       />
     );
@@ -81,7 +109,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -98,7 +126,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -120,7 +148,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -140,7 +168,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -166,7 +194,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -190,7 +218,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -210,7 +238,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -230,7 +258,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -264,7 +292,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -293,7 +321,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -323,7 +351,7 @@ describe('LiveActivitySettingsDialog', () => {
       <LiveActivitySettingsDialog
         open
         onOpenChange={() => {}}
-        profileId="p1"
+        profileId={P1}
         monitors={MONITORS as never}
       />
     );
@@ -357,5 +385,115 @@ describe('LiveActivitySettingsDialog', () => {
     expect(
       useSettingsStore.getState().getProfileSettings('p1').liveActivityPollSeconds
     ).toBe(33);
+  });
+
+  // All mode: `profileId` is the ALL bucket (view-level poll/dwell/tiles);
+  // the ignore list is a per-server data preference, so it edits whichever
+  // profile is picked via the shared ProfilePicker, never the ALL bucket
+  // (refs #337, two-tier rule in AGENTS.project.md's Aggregation contract).
+  describe('All mode (scopeProfiles provided)', () => {
+    const SCOPE_PROFILES = [
+      {
+        profile: { id: 'p1', name: 'One' } as never,
+        monitors: [{ Monitor: { Id: '3', Name: 'p1-cam3', Function: 'Modect' } }] as never,
+      },
+      {
+        profile: { id: 'p2', name: 'Two' } as never,
+        monitors: [{ Monitor: { Id: '3', Name: 'p2-cam3', Function: 'Modect' } }] as never,
+      },
+    ];
+
+    it('shows the first scope profile\'s monitors by default, not the single-mode monitors prop', () => {
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId={ALL_ID}
+          monitors={MONITORS as never}
+          scopeProfiles={SCOPE_PROFILES}
+        />
+      );
+
+      expect(screen.getByText('p1-cam3')).toBeInTheDocument();
+      expect(screen.queryByText('Front Door')).not.toBeInTheDocument();
+    });
+
+    it("writes an ignore toggle to the PICKED profile's own bucket, never the ALL bucket", () => {
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId={ALL_ID}
+          monitors={MONITORS as never}
+          scopeProfiles={SCOPE_PROFILES}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('live-activity-ignore-3'));
+
+      expect(
+        useSettingsStore.getState().getProfileSettings('p1').liveActivityIgnoredMonitorIds
+      ).toEqual(['3']);
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_ID).liveActivityIgnoredMonitorIds
+      ).toEqual([]);
+    });
+
+    it('switches the shown monitors and ignore state when a different profile is picked', () => {
+      useSettingsStore.getState().updateProfileSettings('p2', {
+        liveActivityIgnoredMonitorIds: ['3'],
+      });
+
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId={ALL_ID}
+          monitors={MONITORS as never}
+          scopeProfiles={SCOPE_PROFILES}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('page-profile-picker-option-p2'));
+
+      expect(screen.getByText('p2-cam3')).toBeInTheDocument();
+      expect(screen.getByTestId('live-activity-ignore-3')).toHaveAttribute('data-state', 'unchecked');
+    });
+
+    it('still writes poll/dwell/tiles to the ALL bucket (profileId), not the picked profile', () => {
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId={ALL_ID}
+          monitors={MONITORS as never}
+          scopeProfiles={SCOPE_PROFILES}
+        />
+      );
+
+      const input = screen.getByTestId('live-activity-dwell-input');
+      fireEvent.change(input, { target: { value: '60' } });
+      fireEvent.blur(input);
+
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_ID).liveActivityDwellSeconds
+      ).toBe(60);
+      expect(
+        useSettingsStore.getState().getProfileSettings('p1').liveActivityDwellSeconds
+      ).toBe(30); // default, untouched
+    });
+
+    it('hides the profile picker in single mode (no scopeProfiles)', () => {
+      render(
+        <LiveActivitySettingsDialog
+          open
+          onOpenChange={() => {}}
+          profileId={P1}
+          monitors={MONITORS as never}
+        />
+      );
+
+      expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
+    });
   });
 });

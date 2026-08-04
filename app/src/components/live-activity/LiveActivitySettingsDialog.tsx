@@ -6,6 +6,16 @@
  * stays visible everywhere else. That is separate from the profile-wide
  * monitor exclusion (Settings > hidden monitors), which hides a monitor
  * everywhere.
+ *
+ * Two-tier in All mode (refs #337, AGENTS.project.md's Aggregation
+ * contract): poll/dwell/tiles are view-level preferences and live in the
+ * shared ALL bucket (`profileId` below - the real profile id in single
+ * mode, ALL_PROFILES_ID in All mode). The ignore list is a per-server DATA
+ * preference and has no meaning in the ALL bucket, so it edits whichever
+ * profile is picked via the shared ProfilePicker (`scopeProfiles`), never
+ * `profileId` itself. Single mode passes no `scopeProfiles`, so the picker
+ * never renders and the ignore list falls back to editing `profileId`
+ * directly - byte-identical to before All mode existed.
  */
 
 import { useMemo, useState, type KeyboardEvent } from 'react';
@@ -16,15 +26,26 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
+import { ProfilePicker } from '../profile-picker';
 import { useSettingsStore, mergeProfileSettings } from '../../stores/settings';
 import { LIVE_ACTIVITY } from '../../lib/zmninja-ng-constants';
-import type { MonitorData } from '../../api/types';
+import type { MonitorData, Profile, ProfileId } from '../../api/types';
 
 export interface LiveActivitySettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  profileId: string;
+  /** View-level bucket for poll/dwell/tiles: the real profile id in single
+   *  mode, ALL_PROFILES_ID in All mode. */
+  profileId: ProfileId;
+  /** Single mode: this profile's monitors, and what the ignore list reads/
+   *  writes `profileId` against directly. Ignored when `scopeProfiles` is
+   *  given. */
   monitors: MonitorData[];
+  /** All mode only: every scope profile plus its own full monitor list.
+   *  When present, the ignore-list section shows a ProfilePicker and reads/
+   *  writes the PICKED profile's own bucket instead of `profileId` and
+   *  `monitors`. */
+  scopeProfiles?: { profile: Profile; monitors: MonitorData[] }[];
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -125,6 +146,7 @@ export function LiveActivitySettingsDialog({
   onOpenChange,
   profileId,
   monitors,
+  scopeProfiles,
 }: LiveActivitySettingsDialogProps) {
   const { t } = useTranslation();
 
@@ -133,10 +155,28 @@ export function LiveActivitySettingsDialog({
   );
   const settings = useMemo(() => mergeProfileSettings(rawSettings), [rawSettings]);
 
-  const ignoredSet = useMemo(
-    () => new Set(settings.liveActivityIgnoredMonitorIds),
-    [settings.liveActivityIgnoredMonitorIds]
+  // The ignore-list bucket: the picked profile in All mode, `profileId`
+  // itself in single mode (scopeProfiles is undefined there, so this always
+  // resolves to `profileId` - the exact single-mode target from before All
+  // mode existed). Initializer only: the picker below is the one place this
+  // ever changes after mount.
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId>(
+    () => scopeProfiles?.[0]?.profile.id ?? profileId
   );
+
+  const pickedRawSettings = useSettingsStore(
+    useShallow((state) => state.profileSettings?.[pickedProfileId])
+  );
+  const pickedSettings = useMemo(() => mergeProfileSettings(pickedRawSettings), [pickedRawSettings]);
+
+  const ignoredSet = useMemo(
+    () => new Set(pickedSettings.liveActivityIgnoredMonitorIds),
+    [pickedSettings.liveActivityIgnoredMonitorIds]
+  );
+
+  const ignoreListMonitors = scopeProfiles
+    ? scopeProfiles.find((sp) => sp.profile.id === pickedProfileId)?.monitors ?? []
+    : monitors;
 
   const pollField = useClampedNumberField(
     settings.liveActivityPollSeconds,
@@ -163,13 +203,13 @@ export function LiveActivitySettingsDialog({
   );
 
   const handleIgnoreToggle = (monitorId: string, watched: boolean) => {
-    const current = settings.liveActivityIgnoredMonitorIds;
+    const current = pickedSettings.liveActivityIgnoredMonitorIds;
     const next = watched
       ? current.filter((id) => id !== monitorId)
       : current.includes(monitorId)
         ? current
         : [...current, monitorId];
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityIgnoredMonitorIds: next });
+    useSettingsStore.getState().updateProfileSettings(pickedProfileId, { liveActivityIgnoredMonitorIds: next });
   };
 
   return (
@@ -263,13 +303,23 @@ export function LiveActivitySettingsDialog({
           <Separator />
 
           <div className="space-y-2">
-            <Label>{t('live_activity.ignore_list_label')}</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label>{t('live_activity.ignore_list_label')}</Label>
+              {scopeProfiles && scopeProfiles.length > 0 && (
+                <ProfilePicker
+                  profiles={scopeProfiles.map((sp) => sp.profile)}
+                  value={pickedProfileId}
+                  onChange={setPickedProfileId}
+                  className="w-40 h-8"
+                />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.ignore_list_desc')}</p>
-            {monitors.length === 0 ? (
+            {ignoreListMonitors.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('live_activity.ignore_list_empty')}</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {monitors.map(({ Monitor }) => (
+                {ignoreListMonitors.map(({ Monitor }) => (
                   <div key={Monitor.Id} className="flex items-center justify-between gap-2">
                     <Label
                       htmlFor={`live-activity-ignore-${Monitor.Id}`}

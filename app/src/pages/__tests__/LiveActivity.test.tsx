@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import LiveActivity from '../LiveActivity';
 import { getMonitors, getAlarmStatus } from '../../api/monitors';
 import enTranslation from '../../locales/en/translation.json';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
@@ -42,6 +43,10 @@ const env = vi.hoisted(() => ({
     monitorGridCols: 2,
   },
   zmVersion: '1.36.33' as string | null,
+  // The raw store value LiveActivity.tsx now reads directly (currentProfileId)
+  // for view-level writes that must still work in All mode: 'p1' by default,
+  // set to the ALL_PROFILES_ID sentinel by All-mode tests before rendering.
+  currentProfileId: 'p1' as string | null,
 }));
 
 vi.mock('../../hooks/useCurrentProfile', () => ({
@@ -49,6 +54,16 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
     currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
     settings: env.settings,
   }),
+}));
+
+// LiveActivity.tsx reads currentProfileId via useProfileStore directly (not
+// through useCurrentProfile, which resolves to null in All mode) - same
+// rabbit hole as useProfileScope/useScopedMonitors above: the real
+// stores/profile.ts pulls in registerSessionsGate against the bare
+// services/sessions mock.
+vi.mock('../../stores/profile', () => ({
+  useProfileStore: (selector: (s: { currentProfileId: string | null }) => unknown) =>
+    selector({ currentProfileId: env.currentProfileId }),
 }));
 
 vi.mock('../../stores/auth', () => ({
@@ -160,6 +175,7 @@ describe('LiveActivity', () => {
     env.settings.liveActivityIgnoredMonitorIds = [];
     env.settings.liveActivityIsFullscreen = false;
     env.zmVersion = '1.36.33';
+    env.currentProfileId = 'p1';
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
 
@@ -767,6 +783,7 @@ describe('LiveActivity', () => {
     };
 
     function mockAllMode() {
+      env.currentProfileId = ALL_PROFILES_ID;
       vi.doMock('../../hooks/useCurrentProfile', () => ({
         useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
       }));
@@ -825,6 +842,7 @@ describe('LiveActivity', () => {
 
     it("respects each profile's own ignore list independently", async () => {
       vi.resetModules();
+      env.currentProfileId = ALL_PROFILES_ID;
       vi.doMock('../../hooks/useCurrentProfile', () => ({
         useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
       }));
@@ -980,6 +998,7 @@ describe('LiveActivity', () => {
 
     it("promotes only the owning profile's tile on a live hint, not another profile's same-id monitor", async () => {
       vi.resetModules();
+      env.currentProfileId = ALL_PROFILES_ID;
       vi.doMock('../../hooks/useCurrentProfile', () => ({
         useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
       }));
@@ -1031,6 +1050,122 @@ describe('LiveActivity', () => {
         expect(screen.getByText('p1-cam3')).toBeInTheDocument();
       });
       expect(screen.queryByText('p2-cam3')).not.toBeInTheDocument();
+    });
+
+    // Menu buttons in All mode (refs #337 round 2): the settings dialog used
+    // to render only `{currentProfile && (...)}`, and useFullscreenMode wrote
+    // through `currentProfile.id` - both silently no-op in All mode
+    // (currentProfile is null there). currentProfileId (the raw store value,
+    // the ALL_PROFILES_ID sentinel here) is what unlocks them.
+    it('opens the settings dialog in All mode, with the ignore-list profile picker', async () => {
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({
+          monitors: [scopedMonitor('p1', 'One', '3', 'p1-cam3')],
+          errors: [],
+          isLoading: false,
+          refetchProfile: vi.fn(),
+        }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      const settingsButton = await screen.findByTestId('live-activity-settings-btn');
+      fireEvent.click(settingsButton);
+
+      expect(screen.getByTestId('live-activity-settings-dialog')).toBeInTheDocument();
+      // The ignore-list section's ProfilePicker only ever appears when
+      // scopeProfiles was actually threaded through - a gate regression
+      // would render the dialog with no way to pick a profile at all.
+      expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
+    });
+
+    it('toggles fullscreen in All mode and persists it to the ALL bucket', async () => {
+      // useCurrentProfile's `settings` is a static mock snapshot in this test
+      // file (see ALL_SETTINGS/env above), so the click's effect on-screen
+      // isn't observable here the way a real store-connected read would be -
+      // single mode's own fullscreen tests follow the same pattern (pre-set
+      // the mocked setting rather than round-tripping through a click). What
+      // this proves is the fix itself: before it, handleToggleFullscreen's
+      // `if (!currentProfile) return` made this click a complete no-op, so
+      // the real store below would never have been written at all.
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const { useSettingsStore } = await import('../../stores/settings');
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      const fullscreenButton = await screen.findByTestId('live-activity-fullscreen-btn');
+      fireEvent.click(fullscreenButton);
+
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).liveActivityIsFullscreen
+      ).toBe(true);
+
+      act(() => {
+        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+          liveActivityIsFullscreen: false,
+        });
+      });
+    });
+
+    it('changes the grid column count in All mode, persisting to the ALL bucket', async () => {
+      // Isolates handleGridChange from the real dropdown UI (GridColumnsMenu
+      // is a Radix DropdownMenu - the same jsdom portal friction Select has):
+      // captures the onGridChange callback useEventMontageGrid was given and
+      // calls it directly, exactly as a real column click would.
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+      const captured: { onGridChange?: (cols: number) => void } = {};
+      vi.doMock('../../hooks/useEventMontageGrid', () => ({
+        useEventMontageGrid: (opts: { onGridChange?: (cols: number) => void }) => {
+          captured.onGridChange = opts.onGridChange;
+          return {
+            gridCols: 2,
+            isCustomGridDialogOpen: false,
+            setIsCustomGridDialogOpen: vi.fn(),
+            customCols: '2',
+            setCustomCols: vi.fn(),
+            handleApplyGridLayout: vi.fn(),
+            handleCustomGridSubmit: vi.fn(),
+          };
+        },
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const { useSettingsStore } = await import('../../stores/settings');
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => expect(captured.onGridChange).toBeDefined());
+      act(() => {
+        captured.onGridChange!(4);
+      });
+
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).monitorGridCols
+      ).toBe(4);
+
+      act(() => {
+        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { monitorGridCols: 2 });
+      });
     });
   });
 });

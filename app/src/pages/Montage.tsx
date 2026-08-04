@@ -221,10 +221,12 @@ export default function Montage() {
   // Toolbar visibility (controlled from app header eye button)
   const showToolbar = settings.montageShowToolbar;
 
-  // Fullscreen mode
+  // Fullscreen mode. currentProfileId (not currentProfile.id): the real
+  // profile id in single mode, ALL_PROFILES_ID in All mode, where
+  // currentProfile itself is null (refs #337).
   const { isFullscreen, handleToggleFullscreen } =
     useFullscreenMode({
-      currentProfile,
+      profileId: currentProfileId,
       settings,
       settingKey: 'montageIsFullscreen',
     });

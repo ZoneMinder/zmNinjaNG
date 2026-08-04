@@ -24,7 +24,7 @@ import { useNotificationStore } from '../stores/notifications';
 import { capWatchedRoundRobin, type ActiveMonitorEntry } from '../lib/monitor/live-activity';
 import { LIVE_ACTIVITY } from '../lib/zmninja-ng-constants';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
-import type { Monitor, MonitorStatus, Profile, ProfileId } from '../api/types';
+import type { Monitor, MonitorData, MonitorStatus, Profile, ProfileId } from '../api/types';
 import type { ProfileError } from '../api/scoped-types';
 
 /** One tile's render data, shared with LiveActivity.tsx's single-mode map so
@@ -40,6 +40,11 @@ export interface LiveActivityMonitorEntry {
 interface UseLiveActivityAllModeReturn {
   /** Keyed by monitorCacheKey(profileId, monitorId). Empty in single mode. */
   monitorsById: Map<string, LiveActivityMonitorEntry>;
+  /** Every scope profile's FULL monitor list (pre-ignore-filter, pre-cap):
+   *  the settings dialog's ignore-list section needs to offer every monitor
+   *  a picked profile has, not just the ones currently watched. Empty in
+   *  single mode. */
+  monitorsByProfile: Map<ProfileId, MonitorData[]>;
   profilesById: Map<ProfileId, Profile>;
   profileErrors: ProfileError[];
   isMonitorsLoading: boolean;
@@ -88,6 +93,17 @@ export function useLiveActivityAllMode(
         profileId,
         profileChip: profileName,
       });
+    }
+    return map;
+  }, [isAllMode, scopedMonitors]);
+
+  const monitorsByProfile = useMemo(() => {
+    const map = new Map<ProfileId, MonitorData[]>();
+    if (!isAllMode) return map;
+    for (const { profileId, item } of scopedMonitors) {
+      const list = map.get(profileId) ?? [];
+      list.push(item);
+      map.set(profileId, list);
     }
     return map;
   }, [isAllMode, scopedMonitors]);
@@ -181,6 +197,7 @@ export function useLiveActivityAllMode(
 
   return {
     monitorsById,
+    monitorsByProfile,
     profilesById,
     profileErrors,
     isMonitorsLoading,

@@ -25,6 +25,7 @@ import { getMonitors } from '../api/monitors';
 import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileStore } from '../stores/profile';
 import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
@@ -56,6 +57,12 @@ import { PageContainer } from '../components/common/PageContainer';
 export default function LiveActivity() {
   const navigate = useNavigate();
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
+  // The raw store value: the real profile id in single mode, ALL_PROFILES_ID
+  // in All mode (where currentProfile above is null). View-level writes that
+  // must still work in All mode - the grid column count, fullscreen, the
+  // settings dialog's own bucket - target this id rather than
+  // currentProfile?.id, same pattern Montage.tsx uses (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const authSlice = useAuthSlice(currentProfile?.id ?? null);
   const isAuthenticated = authSlice.isAuthenticated;
   const accessToken = authSlice.accessToken;
@@ -280,9 +287,9 @@ export default function LiveActivity() {
   // simpler than two, and there is nothing page-specific about column count
   // the way there is for poll/dwell/tiles/ignore list.
   const handleGridChange = useCallback((cols: number) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { monitorGridCols: cols });
-  }, [currentProfile, updateSettings]);
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, { monitorGridCols: cols });
+  }, [currentProfileId, updateSettings]);
 
   const {
     gridCols,
@@ -308,10 +315,23 @@ export default function LiveActivity() {
   // Its own settings key, not montageIsFullscreen: a shared flag would make
   // going fullscreen here put the Montage page in fullscreen too.
   const { isFullscreen, handleToggleFullscreen } = useFullscreenMode({
-    currentProfile,
+    profileId: currentProfileId,
     settings,
     settingKey: 'liveActivityIsFullscreen',
   });
+
+  // All mode only: every scope profile plus its own full monitor list, for
+  // the settings dialog's ignore-list section (which edits a PICKED
+  // profile's own bucket via ProfilePicker, never the ALL bucket - refs
+  // #337). Undefined in single mode, where the dialog keeps reading/writing
+  // `monitors`/`profileId` directly as it always has.
+  const scopeProfiles = useMemo(() => {
+    if (!isAllMode) return undefined;
+    return Array.from(allMode.profilesById.values()).map((profile) => ({
+      profile,
+      monitors: allMode.monitorsByProfile.get(profile.id) ?? [],
+    }));
+  }, [isAllMode, allMode.profilesById, allMode.monitorsByProfile]);
 
   const watchedCount = isAllMode ? allMode.watchedCount : watchedIds.length;
   const error = isAllMode
@@ -386,12 +406,13 @@ export default function LiveActivity() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {currentProfile && (
+      {currentProfileId && (
         <LiveActivitySettingsDialog
           open={isSettingsOpen}
           onOpenChange={setIsSettingsOpen}
-          profileId={currentProfile.id}
+          profileId={currentProfileId}
           monitors={data?.monitors ?? []}
+          scopeProfiles={scopeProfiles}
         />
       )}
 

@@ -77,6 +77,27 @@ Feature: All Servers mode
     And the Live Activity watched count should be double the recorded single-profile count
 
   @web
+  Scenario: All mode remembers the last page visited across a reload
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Live Activity" page
+    And I refresh the page
+    Then I should be on the "Live Activity" page
+
+  @web
+  Scenario: Live Activity settings and fullscreen work in All mode
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Live Activity" page
+    And I open the Live Activity settings
+    Then I should see the page profile picker
+    When I close the Live Activity settings
+    And I enter Live Activity fullscreen
+    Then the Live Activity page chrome should be hidden
+    When I exit Live Activity fullscreen
+    Then the Live Activity page chrome should be visible
+
+  @web
   Scenario: Logs page picker switches the per-profile log source
     When I navigate to the "Profiles" page
     And I click the All Servers profile card
