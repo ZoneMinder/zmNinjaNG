@@ -277,6 +277,8 @@ export const useProfileStore = create<ProfileState>()(
             await ProfileService.deletePassword(profile.id);
             useMonitorSeenStore.getState().clearProfile(profile.id);
           }
+          // No profile left to own a queued delete (see deleteProfile).
+          useDeleteSelectionStore.getState().clear();
 
           // Clear all profiles and reset state
           set({ profiles: [], currentProfileId: null });

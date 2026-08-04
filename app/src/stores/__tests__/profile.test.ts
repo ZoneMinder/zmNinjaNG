@@ -595,6 +595,12 @@ describe('Profile Store', () => {
       expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
     });
 
+    it('deleting every profile drops the queue', async () => {
+      twoProfiles();
+      await useProfileStore.getState().deleteAllProfiles();
+      expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
+    });
+
     it('disabling a profile drops the queue', () => {
       twoProfiles();
       useProfileStore.getState().setProfileDisabled('p2', true);

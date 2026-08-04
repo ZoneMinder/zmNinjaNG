@@ -811,8 +811,10 @@ purpose: opening an event from the queued list does not clear the selection. It
 clears on Cancel, or drops the events a delete actually removed.
 
 Surviving *navigation* is the point; surviving a profile change is not.
-``switchProfile``, ``deleteProfile`` and ``setProfileDisabled``
-(``stores/profile.ts``) all clear the selection, because ``DeleteBatchBar``
+``switchProfile``, ``deleteProfile`` and ``deleteAllProfiles``
+(``stores/profile.ts``) clear the selection, as does ``setProfileDisabled``
+when it disables a profile (re-enabling one leaves the queue alone, since
+nothing goes out of view). ``DeleteBatchBar``
 lives in ``AppLayout`` and never unmounts. Without that, ticking an event on
 one server and then switching servers left the bar showing its count with
 nothing marked under it, and confirming would have deleted events on a server
