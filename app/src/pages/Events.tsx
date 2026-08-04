@@ -5,7 +5,7 @@
  * Uses virtualization for performance with large lists.
  */
 
-import { useMemo, useRef, useState, useEffect } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -118,13 +118,18 @@ export default function Events() {
     resolveOwnTagIds,
   } = useScopedTags();
 
-  const [viewMode, setViewMode] = useState<'list' | 'montage'>(() => {
-    const paramView = searchParams.get('view');
-    if (paramView === 'montage') {
-      return 'montage';
-    }
-    return settings.eventsViewMode;
-  });
+  // Derived, not state. The `?view=montage` deep link and the persisted
+  // preference between them always decide the view, and the only writer
+  // (handleViewModeChange) updates both - so a copy in state could only ever
+  // restate what these two already say. It used to be state kept in sync by
+  // two effects that raced each other on mount, which is what broke the deep
+  // link in the first place (refs #337 round 2).
+  //
+  // currentProfileId is never null here: AppLayout redirects to profile setup
+  // when the scope does not resolve, so handleViewModeChange's persist always
+  // runs and this expression always agrees with what the user just picked.
+  const viewMode: 'list' | 'montage' =
+    searchParams.get('view') === 'montage' ? 'montage' : settings.eventsViewMode;
   // Fetch monitors for display in filter UI (single mode; unchanged query).
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
@@ -447,30 +452,18 @@ export default function Events() {
     },
   });
 
-  // Transient, same as the profileId deep link above: a `?view=montage` tap
-  // switches THIS view only, never the persisted preference (refs #337 I9).
-  useEffect(() => {
-    const paramView = searchParams.get('view');
-    if (paramView !== 'montage') return;
-    setViewMode('montage');
-  }, [searchParams]);
-
+  // Grid columns are gridControls' own state, so they still need syncing from
+  // the settings the active profile and group resolve to. The `?view=montage`
+  // skip stays: a deep link renders montage without adopting the stored
+  // column count, which is what it did before viewMode became derived.
   useEffect(() => {
     if (!currentProfileId) return;
-    // Skip while a `?view=montage` deep link is active (refs #337 round 2):
-    // this effect and the deep-link effect above both fire on the same
-    // mount, and without this guard this one's setViewMode(settings.
-    // eventsViewMode) runs after the deep link's and wins, silently
-    // reverting a single-mode montage deep link back to the persisted
-    // (usually 'list') preference.
     if (searchParams.get('view') === 'montage') return;
-    setViewMode(settings.eventsViewMode);
     gridControls.setGridCols(eventCols);
     gridControls.setCustomCols(eventCols.toString());
-  }, [currentProfileId, settings.eventsViewMode, groupKey, eventCols, searchParams]);
+  }, [currentProfileId, groupKey, eventCols, searchParams]);
 
   const handleViewModeChange = (mode: 'list' | 'montage') => {
-    setViewMode(mode);
     if (currentProfileId) {
       updateSettings(currentProfileId, { eventsViewMode: mode });
     }
