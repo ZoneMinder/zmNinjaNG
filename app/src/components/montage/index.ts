@@ -8,6 +8,7 @@ export { GridLayoutControls } from './GridLayoutControls';
 export { FullscreenControls } from './FullscreenControls';
 export { useMontageGrid, useContainerResize } from './hooks';
 export { MontageKebabMenu } from './MontageKebabMenu';
+export type { MontageVisibilityItem } from './MontageKebabMenu';
 export { MontageScrollPad } from './MontageScrollPad';
 export { MontageTileErrorBoundary } from './MontageTileErrorBoundary';
 export { MontageErrorStrips, MontageGridSections } from './MontageGridSections';

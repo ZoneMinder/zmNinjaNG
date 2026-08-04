@@ -8,8 +8,9 @@
  * strips. Single-mode assertions guard the byte-identical requirement.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import Montage from '../Montage';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
@@ -33,6 +34,10 @@ vi.mock('../../hooks/useGroupFilter', () => ({
   useGroupFilter: () => useGroupFilterMock(),
 }));
 
+// Mutable so a test can seed a stored hidden list and assert what the page
+// then renders; reset in beforeEach.
+let hiddenMonitorIds: string[] = [];
+
 vi.mock('../../hooks/useMontageGroupState', () => ({
   useMontageGroupState: () => ({
     groupKey: 'ALL',
@@ -41,7 +46,7 @@ vi.mock('../../hooks/useMontageGroupState', () => ({
       savedLayouts: [],
       activeLayoutName: null,
       gridCols: 2,
-      hiddenMonitorIds: [],
+      hiddenMonitorIds,
     },
     update: vi.fn(),
   }),
@@ -71,8 +76,27 @@ vi.mock('../../components/montage', async (importOriginal) => {
     ...actual,
     GridLayoutControls: () => <div data-testid="grid-layout-controls-stub" />,
     FullscreenControls: () => <div data-testid="fullscreen-controls-stub" />,
-    MontageKebabMenu: ({ monitors }: { monitors: Array<{ Id: string; Name: string }> }) => (
-      <div data-testid="montage-kebab-stub">{monitors.map((m) => m.Name).join(',')}</div>
+    // Rendered as buttons so a test can toggle an entry and assert what the
+    // page does with the id it hands back; the real list rendering (chips,
+    // checked state) is covered by MontageKebabMenu's own tests.
+    MontageKebabMenu: ({
+      items,
+      onToggleVisibility,
+    }: {
+      items: Array<{ id: string; name: string; profileChip?: string }>;
+      onToggleVisibility: (id: string) => void;
+    }) => (
+      <div data-testid="montage-kebab-stub">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            data-testid={`montage-kebab-item-${item.id}`}
+            onClick={() => onToggleVisibility(item.id)}
+          >
+            {item.profileChip ? `${item.name} (${item.profileChip})` : item.name}
+          </button>
+        ))}
+      </div>
     ),
     MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     MontageScrollPad: () => null,
@@ -100,10 +124,17 @@ vi.mock('../../components/filters/GroupFilterSelect', () => ({
   GroupFilterSelect: () => <div data-testid="group-filter-select-stub" />,
 }));
 
+// The page's settings-write target: the real profile id in single mode, the
+// ALL sentinel in All mode (where currentProfile is null). Set by
+// singleProfile()/allMode() below.
+let currentProfileId = 'profile-1';
+
 vi.mock('../../stores/profile', () => ({
   useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
-    selector({ currentProfileId: 'profile-1' }),
+    selector({ currentProfileId }),
 }));
+
+const updateMontageGroupLayoutMock = vi.fn();
 
 vi.mock('../../stores/settings', () => ({
   useSettingsStore: (
@@ -111,7 +142,11 @@ vi.mock('../../stores/settings', () => ({
       updateProfileSettings: (...args: unknown[]) => void;
       updateMontageGroupLayout: (...args: unknown[]) => void;
     }) => unknown
-  ) => selector({ updateProfileSettings: vi.fn(), updateMontageGroupLayout: vi.fn() }),
+  ) =>
+    selector({
+      updateProfileSettings: vi.fn(),
+      updateMontageGroupLayout: updateMontageGroupLayoutMock,
+    }),
 }));
 
 vi.mock('../../stores/auth', () => ({
@@ -141,6 +176,7 @@ const SETTINGS = {
 };
 
 function singleProfile() {
+  currentProfileId = 'profile-1';
   useCurrentProfileMock.mockReturnValue({
     currentProfile: { id: 'profile-1', name: 'Home' },
     settings: SETTINGS,
@@ -150,6 +186,7 @@ function singleProfile() {
 }
 
 function allMode(profiles: Array<{ id: string; name: string }>) {
+  currentProfileId = ALL_PROFILES_ID;
   useCurrentProfileMock.mockReturnValue({
     currentProfile: null,
     settings: SETTINGS,
@@ -158,13 +195,15 @@ function allMode(profiles: Array<{ id: string; name: string }>) {
   useProfileScopeMock.mockReturnValue({ profiles });
 }
 
-const monitor = (id: string, name: string) => ({
-  Monitor: { Id: id, Name: name, Deleted: false },
+const monitor = (id: string, name: string, sequence?: string) => ({
+  Monitor: { Id: id, Name: name, Deleted: false, Sequence: sequence },
   Monitor_Status: { Status: 'Connected' },
 });
 
 describe('Montage Page', () => {
   beforeEach(() => {
+    hiddenMonitorIds = [];
+    updateMontageGroupLayoutMock.mockClear();
     useScopedMonitorsMock.mockReset();
     useCurrentProfileMock.mockReset();
     useProfileScopeMock.mockReset();
@@ -215,9 +254,8 @@ describe('Montage Page', () => {
 
     render(<Montage />);
 
-    expect(screen.getByTestId('montage-monitor-1')).toBeInTheDocument();
-    expect(screen.getByTestId('montage-monitor-2')).toBeInTheDocument();
-    expect(screen.getByText('Front Door')).toBeInTheDocument();
+    expect(screen.getByTestId('montage-monitor-1')).toHaveTextContent('Front Door');
+    expect(screen.getByTestId('montage-monitor-2')).toHaveTextContent('Back Door');
     expect(screen.queryByTestId('montage-profile-chip')).not.toBeInTheDocument();
     expect(screen.getByTestId('montage-edit-toggle')).not.toBeDisabled();
   });
@@ -297,8 +335,128 @@ describe('Montage Page', () => {
     // Grid: narrowed to the active group (monitor 2 excluded).
     expect(screen.getByTestId('montage-monitor-1')).toBeInTheDocument();
     expect(screen.queryByTestId('montage-monitor-2')).not.toBeInTheDocument();
-    // Kebab: still lists both, so the excluded one stays toggleable.
-    expect(screen.getByTestId('montage-kebab-stub')).toHaveTextContent('Front Door,Back Door');
+    // Kebab: still lists both, so the excluded one stays toggleable. Neither
+    // monitor has a Sequence, so the list falls back to sorting by name.
+    const entries = within(screen.getByTestId('montage-kebab-stub')).getAllByRole('button');
+    expect(entries.map((el) => el.textContent)).toEqual(['Back Door', 'Front Door']);
+  });
+
+  // The list has to say which server each entry belongs to: in All mode two
+  // servers can expose the same monitor name, and entries cluster by server
+  // in the same order the grid sections use (refs #337).
+  it('All mode labels every kebab entry with its owning server, clustered by server', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door', '2') },
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('2', 'Back Door', '1') },
+        { profileId: 'profile-2', profileName: 'Office', item: monitor('1', 'Lobby Cam', '1') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    const entries = within(screen.getByTestId('montage-kebab-stub')).getAllByRole('button');
+    expect(entries.map((el) => el.textContent)).toEqual([
+      'Back Door (Home)',
+      'Front Door (Home)',
+      'Lobby Cam (Office)',
+    ]);
+  });
+
+  // The whole point of the composite id: hiding one server's monitor 1 must
+  // not touch the other server's monitor 1 (refs #337).
+  it('All mode hides only the composite-keyed tile, leaving the other server\'s same-id monitor visible', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    hiddenMonitorIds = ['profile-1:1'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-2', profileName: 'Office', item: monitor('1', 'Lobby Cam') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    expect(screen.queryByTestId('montage-monitor-profile-1:1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('montage-monitor-profile-2:1')).toHaveTextContent('Lobby Cam');
+  });
+
+  // All mode has no real profile to persist against, so the hidden list lives
+  // in the ALL bucket keyed by the sentinel - the same ALL-bucket write the
+  // group-by-server toggle uses. Before this, the toggle silently no-oped.
+  it('All mode writes the composite id into the ALL bucket when an entry is toggled off', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-2', profileName: 'Office', item: monitor('1', 'Lobby Cam') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+    fireEvent.click(screen.getByTestId('montage-kebab-item-profile-1:1'));
+
+    expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+      hiddenMonitorIds: ['profile-1:1'],
+    });
+  });
+
+  it('All mode removes the composite id again when a hidden entry is toggled back on', () => {
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    hiddenMonitorIds = ['profile-1:1'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-2', profileName: 'Office', item: monitor('1', 'Lobby Cam') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+    fireEvent.click(screen.getByTestId('montage-kebab-item-profile-1:1'));
+
+    expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith(ALL_PROFILES_ID, 'ALL', {
+      hiddenMonitorIds: [],
+    });
+  });
+
+  // Single mode keeps bare ids so hidden lists stored before this change keep
+  // working - no migration of stored data.
+  it('single mode keeps bare monitor ids, for the stored list and for new writes', () => {
+    singleProfile();
+    hiddenMonitorIds = ['2'];
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') },
+        { profileId: 'profile-1', profileName: 'Home', item: monitor('2', 'Back Door') },
+      ],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    render(<Montage />);
+
+    // The stored bare id still hides its tile.
+    expect(screen.getByTestId('montage-monitor-1')).toHaveTextContent('Front Door');
+    expect(screen.queryByTestId('montage-monitor-2')).not.toBeInTheDocument();
+    // And a new toggle stores a bare id against the real profile.
+    fireEvent.click(screen.getByTestId('montage-kebab-item-1'));
+    expect(updateMontageGroupLayoutMock).toHaveBeenCalledWith('profile-1', 'ALL', {
+      hiddenMonitorIds: ['2', '1'],
+    });
   });
 
   it('All mode renders both profiles\' tiles with a profile chip each, composite-keyed', () => {

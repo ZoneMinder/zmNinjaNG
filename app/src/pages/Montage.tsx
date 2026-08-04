@@ -49,6 +49,7 @@ import {
   useContainerResize,
   type MontageTileItem,
   type MontageGroupedSections,
+  type MontageVisibilityItem,
 } from '../components/montage';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
@@ -100,14 +101,11 @@ export default function Montage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // TODO(#337): hiddenMonitorIds is keyed by bare Monitor.Id, not a composite
-  // profileId:monitorId tile id. In practice this stays harmless today - the
-  // toggle that writes it (handleToggleMonitorVisibility below) already
-  // no-ops in All mode (currentProfile is null there) - but if that guard
-  // ever moves to a real ALL-bucket setting, two servers sharing a raw
-  // monitor id would hide/show each other's tile together. Fix by keying
-  // hiddenMonitorIds with monitorCacheKey(profileId, monitorId) if that
-  // guard is lifted.
+  // Hidden tiles, keyed exactly like the tiles themselves (tileIdFor): bare
+  // monitor ids in single mode - so lists stored before All mode existed keep
+  // working - and composite profileId:monitorId ids in the ALL bucket, where
+  // two servers sharing a raw monitor id would otherwise hide each other's
+  // tile (refs #337).
   const hiddenSet = useMemo(
     () => new Set(bucket.hiddenMonitorIds),
     [bucket.hiddenMonitorIds]
@@ -124,15 +122,34 @@ export default function Montage() {
     return counts;
   }, [scopedMonitors]);
 
-  // The full monitor list, NEVER group-filtered: the kebab menu's hidden-
-  // monitors list must be able to un-hide any monitor regardless of which
+  // The kebab's show-monitors list, built from the full monitor list and NEVER
+  // group-filtered: it must be able to un-hide any monitor regardless of which
   // group filter is currently active, or a monitor hidden while outside the
   // active group becomes permanently un-hideable (refs #337 single-mode
-  // regression - `monitors` below is group-filtered).
-  const enabledMonitors = useMemo(
-    (): MonitorData[] => scopedMonitors.map((s) => ({ Monitor: s.item.Monitor, Monitor_Status: s.item.Monitor_Status })),
-    [scopedMonitors]
-  );
+  // regression - `monitors` below is group-filtered). Entries carry their
+  // owning server's name in All mode, where two servers can show the same
+  // monitor name, and cluster by server in the order useScopedMonitors
+  // returns them - the same order the grid's per-server sections use.
+  const visibilityItems = useMemo((): MontageVisibilityItem[] => {
+    const profileRank = new Map<ProfileId, number>();
+    for (const s of scopedMonitors) {
+      if (!profileRank.has(s.profileId)) profileRank.set(s.profileId, profileRank.size);
+    }
+    const rank = (s: (typeof scopedMonitors)[number]) => profileRank.get(s.profileId) ?? 0;
+    const sequence = (s: (typeof scopedMonitors)[number]) => Number(s.item.Monitor.Sequence ?? 0);
+    return [...scopedMonitors]
+      .sort(
+        (a, b) =>
+          rank(a) - rank(b) ||
+          sequence(a) - sequence(b) ||
+          (a.item.Monitor.Name ?? '').localeCompare(b.item.Monitor.Name ?? '')
+      )
+      .map((s) => ({
+        id: isAllMode ? tileIdFor({ ...s.item, profileId: s.profileId }) : s.item.Monitor.Id,
+        name: s.item.Monitor.Name ?? '',
+        profileChip: isAllMode ? s.profileName : undefined,
+      }));
+  }, [scopedMonitors, isAllMode]);
 
   const monitors = useMemo((): MontageTileItem[] => {
     if (isAllMode) {
@@ -157,8 +174,10 @@ export default function Montage() {
     return list;
   }, [isAllMode, scopedMonitors, isFilterActive, filteredMonitorIds]);
 
+  // tileIdFor degrades to the bare monitor id when the tile has no profileId,
+  // which is every tile in single mode - so one expression covers both modes.
   const visibleMonitors = useMemo(
-    () => (hiddenSet.size > 0 ? monitors.filter((m) => !hiddenSet.has(m.Monitor.Id)) : monitors),
+    () => (hiddenSet.size > 0 ? monitors.filter((m) => !hiddenSet.has(tileIdFor(m))) : monitors),
     [monitors, hiddenSet]
   );
 
@@ -404,16 +423,22 @@ export default function Montage() {
     updateMontageGroupLayout(currentProfile.id, groupKey, { savedLayouts: saved });
   };
 
+  // Unlike layout editing, hiding a tile needs no per-server persistence: the
+  // ids are composite in All mode, so the whole list lives in the ALL bucket
+  // under currentProfileId (the sentinel), the same ALL-bucket write the
+  // group-by-server toggle above does. Single mode keeps writing bare ids
+  // against the real profile (refs #337).
   const handleToggleMonitorVisibility = useCallback(
     (id: string) => {
-      if (!currentProfile) return;
+      const targetProfileId = isAllMode ? currentProfileId : currentProfile?.id;
+      if (!targetProfileId) return;
       const current = bucket.hiddenMonitorIds;
       const next = current.includes(id)
         ? current.filter((x) => x !== id)
         : [...current, id];
-      updateMontageGroupLayout(currentProfile.id, groupKey, { hiddenMonitorIds: next });
+      updateMontageGroupLayout(targetProfileId, groupKey, { hiddenMonitorIds: next });
     },
-    [currentProfile, bucket.hiddenMonitorIds, groupKey, updateMontageGroupLayout]
+    [isAllMode, currentProfileId, currentProfile, bucket.hiddenMonitorIds, groupKey, updateMontageGroupLayout]
   );
 
   const handleEditModeToggle = () => {
@@ -610,7 +635,7 @@ export default function Montage() {
               </Button>
               <RefreshButton size="sm" className="h-8 sm:h-9" data-testid="montage-refresh-button" />
               <MontageKebabMenu
-                monitors={enabledMonitors.map((m) => m.Monitor)}
+                items={visibilityItems}
                 hiddenMonitorIds={bucket.hiddenMonitorIds}
                 onToggleVisibility={handleToggleMonitorVisibility}
               />

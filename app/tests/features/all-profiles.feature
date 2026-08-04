@@ -58,6 +58,27 @@ Feature: All Servers mode
     And the montage tile count should be double the recorded single-profile count
 
   @web
+  Scenario: All Servers montage hides one server's monitor without touching the other's
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Montage" page
+    Then I should see a monitor profile chip on every montage tile
+    When I open the montage kebab menu
+    And I open the montage show-monitors submenu
+    Then every montage show-monitors entry should name its owning server
+    When I hide the first montage show-monitors entry
+    Then that entry's tile should be gone from the montage grid
+    And the other server's tile for the same monitor should still be there
+    When I reload the current page
+    Then I should see at least 1 monitor in montage grid
+    And that entry's tile should be gone from the montage grid
+    And the other server's tile for the same monitor should still be there
+    When I open the montage kebab menu
+    And I open the montage show-monitors submenu
+    And I show the hidden montage show-monitors entry again
+    Then that entry's tile should be back in the montage grid
+
+  @web
   Scenario: Events montage view renders in All mode with no gate notice
     When I navigate to the "Profiles" page
     And I click the All Servers profile card

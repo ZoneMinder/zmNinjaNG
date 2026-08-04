@@ -427,3 +427,81 @@ Then('that row should be marked as the active profile', async ({ page }) => {
     timeout: testConfig.timeouts.element,
   });
 });
+
+// All-mode montage visibility (refs #337). Both Background profiles point at
+// the same server, so every raw monitor id exists twice - the exact collision
+// the composite profileId:monitorId tile id exists to keep apart. Hiding one
+// server's entry must leave the other server's copy of the same monitor on
+// screen.
+const VISIBILITY_ENTRY =
+  '[data-testid^="montage-visibility-"]:not([data-testid^="montage-visibility-chip-"])';
+
+let hiddenEntryTileId = '';
+let siblingTileTestId = '';
+
+Then('every montage show-monitors entry should name its owning server', async ({ page }) => {
+  const entries = page.locator(VISIBILITY_ENTRY);
+  await expect.poll(async () => entries.count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBeGreaterThan(0);
+  const chips = page.locator('[data-testid^="montage-visibility-chip-"]');
+  expect(await chips.count()).toBe(await entries.count());
+  // A chip that renders empty would still count above, so read one.
+  await expect(chips.first()).not.toBeEmpty();
+});
+
+When('I hide the first montage show-monitors entry', async ({ page }) => {
+  const entry = page.locator(VISIBILITY_ENTRY).first();
+  await expect(entry).toHaveAttribute('data-state', 'checked', {
+    timeout: testConfig.timeouts.element,
+  });
+  const testId = await entry.getAttribute('data-testid');
+  if (!testId) throw new Error('First show-monitors entry has no data-testid');
+  hiddenEntryTileId = testId.replace('montage-visibility-', '');
+
+  // The other server's tile for the same raw monitor id: same ":<monitorId>"
+  // suffix, different profile prefix.
+  const rawMonitorId = hiddenEntryTileId.split(':').pop();
+  const sibling = page
+    .locator(
+      `[data-testid^="montage-monitor-"][data-testid$=":${rawMonitorId}"]` +
+        `:not([data-testid="montage-monitor-${hiddenEntryTileId}"])`
+    )
+    .first();
+  await expect(sibling).toBeVisible({ timeout: testConfig.timeouts.element });
+  siblingTileTestId = (await sibling.getAttribute('data-testid')) as string;
+  expect(siblingTileTestId).not.toBe(`montage-monitor-${hiddenEntryTileId}`);
+
+  await entry.click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+});
+
+When('I show the hidden montage show-monitors entry again', async ({ page }) => {
+  const entry = page.getByTestId(`montage-visibility-${hiddenEntryTileId}`);
+  await expect(entry).toHaveAttribute('data-state', 'unchecked', {
+    timeout: testConfig.timeouts.element,
+  });
+  await entry.click();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+});
+
+Then("that entry's tile should be gone from the montage grid", async ({ page }) => {
+  await expect(page.getByTestId(`montage-monitor-${hiddenEntryTileId}`)).toHaveCount(0, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then("the other server's tile for the same monitor should still be there", async ({ page }) => {
+  expect(siblingTileTestId).toBeTruthy();
+  await expect(page.getByTestId(siblingTileTestId)).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then("that entry's tile should be back in the montage grid", async ({ page }) => {
+  await expect(page.getByTestId(`montage-monitor-${hiddenEntryTileId}`)).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
