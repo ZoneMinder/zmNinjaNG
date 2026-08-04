@@ -153,6 +153,14 @@ export interface LiveMonitorPlayerProps {
    * which those parameters do not reach - see stream-tuning.ts.
    */
   reduceStream?: boolean;
+  /**
+   * Stop streaming entirely: no MJPEG connection, no go2rtc connection
+   * (All-mode pause-while-hidden, refs #337). Both stream hooks tear their
+   * connections down on the way into this state - MJPEG through the connkey's
+   * CMD_QUIT, go2rtc through its own stop() - and rebuild them when it lifts,
+   * so a paused tile leaves nothing running on the server. Off by default.
+   */
+  paused?: boolean;
 }
 
 export function LiveMonitorPlayer({
@@ -169,6 +177,7 @@ export function LiveMonitorPlayer({
   forceViewMode,
   bypassGo2rtcFailureCache = false,
   reduceStream = false,
+  paused = false,
 }: LiveMonitorPlayerProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -209,6 +218,12 @@ export function LiveMonitorPlayer({
     bypassGo2rtcFailureCache ? false : isGo2rtcCachedFailure(profile?.id, monitor.Id)
   );
   const [hasVideoFrames, setHasVideoFrames] = useState(false);
+
+  // A paused tile holds no connection, so it has no frames whatever the last
+  // ones were. Derived rather than stored: the freeze watchdog must not keep
+  // running (and eventually "recover" a stream nobody asked for) against a
+  // connection the pause already closed.
+  const hasLiveVideoFrames = hasVideoFrames && !paused;
 
   // Record a Go2RTC failure in the shared cache, unless this player opts out.
   // The local go2rtcFailed state still flips so this instance falls back to
@@ -252,7 +267,7 @@ export function LiveMonitorPlayer({
     containerRef,
     protocols: rawSettings?.webrtcProtocols,
     expectedHost: portalHost,
-    enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed,
+    enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed && !paused,
     muted,
     controls: showControls,
     useStun: rawSettings?.webrtcUseStun ?? false,
@@ -361,7 +376,7 @@ export function LiveMonitorPlayer({
   go2rtcStreamRef.current = go2rtcStream;
 
   useEffect(() => {
-    if (effectiveStreamingMethod !== 'webrtc' || !hasVideoFrames || go2rtcFailed) {
+    if (effectiveStreamingMethod !== 'webrtc' || !hasLiveVideoFrames || go2rtcFailed) {
       return;
     }
 
@@ -440,7 +455,7 @@ export function LiveMonitorPlayer({
     }, GO2RTC_LIVENESS_CHECK_MS);
 
     return () => clearInterval(interval);
-  }, [effectiveStreamingMethod, hasVideoFrames, go2rtcFailed, monitorId, recordGo2rtcFailure]);
+  }, [effectiveStreamingMethod, hasLiveVideoFrames, go2rtcFailed, monitorId, recordGo2rtcFailure]);
 
   // Reset failure state when monitor (or its owning profile) changes (check
   // cache for the new monitor/profile pair)
@@ -484,7 +499,7 @@ export function LiveMonitorPlayer({
       { maxfps: rawSettings?.streamMaxFps, scale: rawSettings?.streamScale },
       reduceStream,
     ),
-    enabled: effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder,
+    enabled: (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) && !paused,
     viewModeOverride: forceViewMode,
     profileId,
   });
@@ -624,7 +639,11 @@ export function LiveMonitorPlayer({
   // PlayerViewState doc comment for the state machine and what drives each
   // transition. showMjpegPlaceholder (used above by the stream hooks/effects)
   // is retained as an input; the error overlay stays a direct status check.
-  const viewState = derivePlayerViewState({ isWebRTC, hasVideoFrames, hasMjpegFrame });
+  const viewState = derivePlayerViewState({
+    isWebRTC,
+    hasVideoFrames: hasLiveVideoFrames,
+    hasMjpegFrame,
+  });
 
   return (
     <div className="relative w-full h-full" data-testid="video-player">

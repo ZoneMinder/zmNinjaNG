@@ -1022,6 +1022,13 @@ export const MONTAGE_GRID = {
   // where the saving on a wall of cameras actually comes from.
   reducedMaxFps: 5,
   reducedScale: 25,
+
+  // How long All Servers mode must be out of sight before montage tiles stop
+  // streaming (`allModePauseHidden`). Long enough that switching tabs to check
+  // something and coming back leaves the streams alone: a teardown and
+  // reconnect of every tile across every server costs more than the half
+  // minute of streaming it saves (ms).
+  pauseHiddenGraceMs: 30_000,
 } as const;
 
 /**

@@ -73,8 +73,12 @@ vi.mock('../../../lib/monitor/monitor-rotation', () => ({
 vi.mock('../LiveMonitorPlayer', () => ({
   // The reduce flag is reflected back so a test can assert the tile forwards
   // what the page decided about stream tuning.
-  LiveMonitorPlayer: ({ reduceStream }: { reduceStream?: boolean }) => (
-    <div data-testid="video-player" data-reduce-stream={String(reduceStream ?? false)}>
+  LiveMonitorPlayer: ({ reduceStream, paused }: { reduceStream?: boolean; paused?: boolean }) => (
+    <div
+      data-testid="video-player"
+      data-reduce-stream={String(reduceStream ?? false)}
+      data-paused={String(paused ?? false)}
+    >
       Mock LiveMonitorPlayer
     </div>
   ),
@@ -208,6 +212,21 @@ describe('MontageMonitor', () => {
     );
 
     expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'true');
+  });
+
+  it('stops the player when the page pauses its tiles', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        paused
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-paused', 'true');
   });
 
   it('sizes the video area from the ratio it is given, header on top', () => {

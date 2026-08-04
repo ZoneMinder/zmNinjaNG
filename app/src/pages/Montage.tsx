@@ -26,6 +26,8 @@ import { resolveQueryError } from '../lib/query/query-error';
 import { EmptyState } from '../components/ui/empty-state';
 import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { allocateStreamBudget } from '../lib/monitor/stream-budget';
+import { useHiddenPause } from '../hooks/useHiddenPause';
+import { MONTAGE_GRID } from '../lib/zmninja-ng-constants';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useMontageGroupState } from '../hooks/useMontageGroupState';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
@@ -213,6 +215,14 @@ export default function Montage() {
   // inside the isAllMode branch for the same reason the cap is - a single
   // profile carries the same key and must never be throttled by it.
   const reduceStream = isAllMode && settings.allModeStreamTuning === 'reduced';
+
+  // Pause while hidden (refs #337): one page-level visibility watch, not one
+  // per tile. Leaving All mode or turning the knob off resumes, so tiles
+  // cannot be stranded paused.
+  const paused = useHiddenPause(
+    isAllMode && settings.allModePauseHidden,
+    MONTAGE_GRID.pauseHiddenGraceMs
+  );
 
   // useMonitorNewEvents stays current-profile-scoped for single mode; All mode
   // fans the equivalent query out per owning profile (Monitors.tsx precedent).
@@ -698,6 +708,7 @@ export default function Montage() {
             resolveNewEventCount={resolveNewEventCount}
             resolveNewestEventAt={resolveNewestEventAt}
             reduceStream={reduceStream}
+            paused={paused}
           />
         </div>
       </div>

@@ -108,6 +108,9 @@ interface MontageGridSectionsProps {
   /** All-mode "reduced" stream tuning: every tile asks its server for a
    *  cheaper stream (refs #337). Always false in single mode. */
   reduceStream: boolean;
+  /** All-mode pause-while-hidden: every tile stops streaming (refs #337).
+   *  Always false in single mode. */
+  paused: boolean;
 }
 
 /** Grouped-by-server sections when the toggle is on (All mode only), or one
@@ -135,6 +138,7 @@ export function MontageGridSections({
   resolveNewEventCount,
   resolveNewestEventAt,
   reduceStream,
+  paused,
 }: MontageGridSectionsProps) {
   const { t } = useTranslation();
 
@@ -203,6 +207,7 @@ export function MontageGridSections({
             newEventCount={resolveNewEventCount(item)}
             newestEventAt={resolveNewestEventAt(item)}
             reduceStream={reduceStream}
+            paused={paused}
           />
         </MontageTileErrorBoundary>
       </div>

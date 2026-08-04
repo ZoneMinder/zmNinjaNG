@@ -24,9 +24,9 @@ let mockMjpegReturn: {
   reportStreamLoad: () => void;
 };
 
-// Every set of stream options the player has asked for, so a test can assert
-// what this tile requests from ZM.
-const streamOptionsLog: Array<{ maxfps?: number; scale?: number }> = [];
+// Every request the player has made of the MJPEG hook, so a test can assert
+// what this tile asks ZM for and whether it is streaming at all.
+const streamCalls: Array<{ streamOptions?: { maxfps?: number; scale?: number }; enabled?: boolean }> = [];
 
 // A fresh object per call, the way the real hook does it: useMonitorStream
 // returns a bare object literal, so its result is a new reference on every
@@ -34,8 +34,11 @@ const streamOptionsLog: Array<{ maxfps?: number; scale?: number }> = [];
 // that result re-ran an effect every render. imgRef is deliberately shared
 // across the copies, because the real hook's useRef object is stable.
 vi.mock('../../../hooks/useMonitorStream', () => ({
-  useMonitorStream: (opts: { streamOptions?: { maxfps?: number; scale?: number } }) => {
-    streamOptionsLog.push(opts.streamOptions ?? {});
+  useMonitorStream: (opts: {
+    streamOptions?: { maxfps?: number; scale?: number };
+    enabled?: boolean;
+  }) => {
+    streamCalls.push(opts);
     return { ...mockMjpegReturn };
   },
 }));
@@ -290,10 +293,10 @@ describe('LiveMonitorPlayer reduced stream tuning', () => {
       reportStreamLoad: vi.fn(),
     };
     mockSettings = { streamMaxFps: 10, streamScale: 50 };
-    streamOptionsLog.length = 0;
+    streamCalls.length = 0;
   });
 
-  const latestOptions = () => streamOptionsLog[streamOptionsLog.length - 1];
+  const latestOptions = () => streamCalls[streamCalls.length - 1]?.streamOptions;
 
   it('asks for the owning profile\'s own frame rate and scale by default', () => {
     render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
@@ -316,5 +319,62 @@ describe('LiveMonitorPlayer reduced stream tuning', () => {
     render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
 
     expect(latestOptions()).toEqual({ maxfps: 2, scale: 10 });
+  });
+});
+
+// refs #337: All Servers mode can stop streaming while the page is out of
+// sight (Settings > All Servers performance). Disabling the stream hooks is
+// what makes that a real stop: useStreamLifecycle CMD_QUITs the connkey on
+// the way down, so no nph-zms process is left running on the server.
+describe('LiveMonitorPlayer paused tiles', () => {
+  const go2rtcProfile = { ...profile, go2rtcUrl: 'https://t/go2rtc' } as Profile;
+  const rtcMonitor = { Id: 'paused-rtc', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+
+  beforeEach(() => {
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+    mockSettings = undefined;
+    streamCalls.length = 0;
+    go2rtc.state = 'connecting';
+    go2rtc.optionsLog = [];
+  });
+
+  const latestStreamEnabled = () => streamCalls[streamCalls.length - 1]?.enabled;
+  const latestGo2rtcEnabled = (monitorId: string) =>
+    [...go2rtc.optionsLog].reverse().find((o) => o.monitorId === monitorId)?.enabled;
+
+  it('streams while not paused', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(latestStreamEnabled()).toBe(true);
+  });
+
+  it('drops the MJPEG connection while paused', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} paused />);
+
+    expect(latestStreamEnabled()).toBe(false);
+  });
+
+  it('drops the go2rtc connection while paused', () => {
+    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+
+    expect(latestGo2rtcEnabled('paused-rtc')).toBe(false);
+  });
+
+  it('reconnects when the pause lifts', () => {
+    const { rerender } = render(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />,
+    );
+
+    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+
+    expect(latestGo2rtcEnabled('paused-rtc')).toBe(true);
+    expect(latestStreamEnabled()).toBe(true);
   });
 });

@@ -109,6 +109,11 @@ interface MontageMonitorProps {
    * player, which is where it turns into stream parameters.
    */
   reduceStream?: boolean;
+  /**
+   * Stop this tile's stream (All-mode pause-while-hidden, refs #337). Decided
+   * by the page and forwarded to the player, which drops the connection.
+   */
+  paused?: boolean;
 }
 
 function MontageMonitorComponent({
@@ -132,6 +137,7 @@ function MontageMonitorComponent({
   mediaAspectRatio,
   fromRoute = '/montage',
   reduceStream = false,
+  paused = false,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
@@ -381,6 +387,7 @@ function MontageMonitorComponent({
           className="w-full h-full"
           onProtocolChange={setProtocol}
           reduceStream={reduceStream}
+          paused={paused}
         />
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">

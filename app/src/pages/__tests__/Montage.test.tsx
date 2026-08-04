@@ -7,11 +7,12 @@
  * scoped tiles, profile chips, the global stream cap, and per-profile error
  * strips. Single-mode assertions guard the byte-identical requirement.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
 import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { MONTAGE_GRID } from '../../lib/zmninja-ng-constants';
 
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
@@ -138,17 +139,23 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
     monitor,
     profileChip,
     reduceStream,
+    paused,
   }: {
     monitor: { Id: string; Name: string };
     profileChip?: string;
     reduceStream?: boolean;
+    paused?: boolean;
   }) => (
     <div>
       {monitor.Name}
       {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
       {/* Attribute rather than text: every tile renders this and the text
           would land in the name assertions above. */}
-      <span data-testid="montage-tile-tuning" data-reduce-stream={String(reduceStream ?? false)} />
+      <span
+        data-testid="montage-tile-tuning"
+        data-reduce-stream={String(reduceStream ?? false)}
+        data-paused={String(paused ?? false)}
+      />
     </div>
   ),
 }));
@@ -793,6 +800,78 @@ describe('Montage Page', () => {
     expect(screen.getByTestId('montage-stream-cap-overflow')).toHaveTextContent(
       'montage.stream_cap_overflow-18'
     );
+  });
+
+  describe('pause while hidden', () => {
+    const oneMonitor = () => {
+      useScopedMonitorsMock.mockReturnValue({
+        monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+        errors: [],
+        isLoading: false,
+        refetchProfile: vi.fn(),
+      });
+    };
+
+    const setVisibility = (state: 'visible' | 'hidden') => {
+      Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      setVisibility('visible');
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      setVisibility('visible');
+    });
+
+    it('stops its tiles once All mode has been hidden past the grace period', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModePauseHidden: true });
+      oneMonitor();
+
+      render(<Montage />);
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'false');
+
+      act(() => { setVisibility('hidden'); });
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.pauseHiddenGraceMs); });
+
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'true');
+
+      act(() => { setVisibility('visible'); });
+
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'false');
+    });
+
+    it('keeps streaming while hidden when the setting is off', () => {
+      allMode([{ id: 'profile-1', name: 'Home' }], { allModePauseHidden: false });
+      oneMonitor();
+
+      render(<Montage />);
+
+      act(() => { setVisibility('hidden'); });
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.pauseHiddenGraceMs * 2); });
+
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'false');
+    });
+
+    it('never pauses in single mode, whatever the ALL bucket says', () => {
+      singleProfile();
+      useCurrentProfileMock.mockReturnValue({
+        currentProfile: { id: 'profile-1', name: 'Home' },
+        settings: { ...SETTINGS, allModePauseHidden: true },
+        isAllMode: false,
+      });
+      oneMonitor();
+
+      render(<Montage />);
+
+      act(() => { setVisibility('hidden'); });
+      act(() => { vi.advanceTimersByTime(MONTAGE_GRID.pauseHiddenGraceMs * 2); });
+
+      expect(screen.getByTestId('montage-tile-tuning')).toHaveAttribute('data-paused', 'false');
+    });
   });
 
   it('tells its tiles to reduce when All mode asks for reduced stream tuning', () => {
