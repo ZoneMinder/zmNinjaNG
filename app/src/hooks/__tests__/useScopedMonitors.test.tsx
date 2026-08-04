@@ -270,6 +270,22 @@ describe('useScopedMonitors', () => {
     expect(queries[1].refetchInterval).toBeLessThanOrEqual(20000 * 1.5);
   });
 
+  it('poll:false leaves every profile query without an interval, so an app-wide consumer adds no polling', async () => {
+    mockScope([profileA, profileB]);
+    vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
+
+    renderHook(() => useScopedMonitors({ poll: false }), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(vi.mocked(useQueries).mock.calls.length).toBeGreaterThan(0));
+    const { queries } = vi.mocked(useQueries).mock.calls[0][0] as { queries: Array<{ refetchInterval?: number }> };
+    expect(queries).toHaveLength(2);
+    // The palette and the keyboard shortcuts mount for the whole session and
+    // only need a lookup table; an interval here would poll every profile's
+    // monitor list on every page (refs #337).
+    expect(queries[0].refetchInterval).toBeUndefined();
+    expect(queries[1].refetchInterval).toBeUndefined();
+  });
+
   it('refetchProfile still triggers a real network refetch under combine', async () => {
     mockScope([profileA], 'single');
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });

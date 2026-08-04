@@ -28,6 +28,16 @@ import type { MonitorData, ProfileId } from '../api/types';
 export interface UseScopedMonitorsOptions {
   /** Whether the queries are enabled (default: true) */
   enabled?: boolean;
+  /**
+   * Poll the monitor list on the bandwidth interval (default true). Consumers
+   * that stay mounted for the whole session and only need a name/id lookup
+   * table (the command palette, the keyboard shortcuts) pass false: they share
+   * this query key with the Monitors page, and React Query polls a shared
+   * query on the shortest interval any observer asks for, so leaving them on
+   * the default turned a page-scoped refresh into an app-wide one, multiplied
+   * by the number of profiles in scope (refs #337).
+   */
+  poll?: boolean;
 }
 
 export interface UseScopedMonitorsReturn {
@@ -75,7 +85,9 @@ export function useScopedMonitors(options?: UseScopedMonitorsOptions): UseScoped
       enabled: options?.enabled ?? true,
       // Desynchronizes the N profiles' refetch bursts (W8) - see
       // stagger-interval.ts for the exact semantics.
-      refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.monitorStatusInterval),
+      refetchInterval: (options?.poll ?? true)
+        ? staggeredRefetchInterval(i, profiles.length, bandwidth.monitorStatusInterval)
+        : undefined,
     })),
     combine: (results) => {
       const monitors: Scoped<MonitorData>[] = [];

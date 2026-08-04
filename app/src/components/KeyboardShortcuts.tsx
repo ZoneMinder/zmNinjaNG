@@ -11,19 +11,20 @@
  * (`useAssistantPanelStore.open()`) when the on-device assistant is enabled
  * (`settings.assistantEnabled`), otherwise it falls back to the help overlay
  * below.
+ *
+ * Everything here works the same in All mode: the shortcuts are plain
+ * navigation, and the numeric jump fans out over the whole profile scope,
+ * landing on the owning profile's `/all/monitors/:profileId/:id` route (refs
+ * #337).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { getMonitors } from '../api/monitors';
-import { getCurrentSession } from '../services/sessions';
-import { queryKeys } from '../lib/query/query-keys';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { useScopedMonitors } from '../hooks/useScopedMonitors';
 import { Platform } from '../lib/platform';
-import { useAuthSlice } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
 import { useTvMode } from '../hooks/useTvMode';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
@@ -37,6 +38,7 @@ import {
 } from '../lib/keyboard-shortcuts';
 import { useCommandPaletteStore } from '../stores/commandPalette';
 import { useAssistantPanelStore } from '../stores/assistantPanel';
+import type { ProfileId } from '../api/types';
 import {
   Dialog,
   DialogContent,
@@ -49,8 +51,14 @@ export function KeyboardShortcuts() {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+  // Scope, not the current profile: every shortcut here is profile-independent
+  // navigation, so they must stay live while the ALL sentinel is selected -
+  // gating on `currentProfile` (null in All mode) killed all of them (refs
+  // #337, audit C10). Null scope still means "no profile at all", where there
+  // is nothing to navigate to.
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
+  const assistantEnabled = scope?.settings.assistantEnabled ?? false;
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
 
@@ -62,21 +70,27 @@ export function KeyboardShortcuts() {
   const bufferRef = useRef('');
   const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: monitorsData } = useQuery({
-    queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
-    enabled: !!currentProfile && isAuthenticated,
-  });
+  // Jump targets across the whole scope, in the same profile-then-server order
+  // the Monitors page lists (useScopedMonitors), so a typed number resolves to
+  // the monitor a user sees first (refs #337, audit C11).
+  const { monitors: scopedMonitors } = useScopedMonitors({ poll: false });
 
-  // Available monitors minus hidden ones. A typed number is matched against the
-  // actual ZoneMinder monitor ID (not the list position), so it stays stable as
-  // monitors are added or removed (refs #200). Group filtering is intentionally
-  // ignored so a number maps to the same monitor regardless of the active group.
+  // Available monitors minus each owning profile's hidden ones. A typed number
+  // is matched against the actual ZoneMinder monitor ID (not the list
+  // position), so it stays stable as monitors are added or removed (refs
+  // #200). Group filtering is intentionally ignored so a number maps to the
+  // same monitor regardless of the active group.
   const monitors = useMemo(() => {
-    const all = monitorsData?.monitors || [];
-    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
-    return excluded.size ? all.filter((m) => !excluded.has(m.Monitor.Id)) : all;
-  }, [monitorsData, currentProfile]);
+    const excludedByProfile = new Map<ProfileId, Set<string>>();
+    return scopedMonitors.filter((m) => {
+      let excluded = excludedByProfile.get(m.profileId);
+      if (!excluded) {
+        excluded = getExcludedMonitorIdSet(m.profileId);
+        excludedByProfile.set(m.profileId, excluded);
+      }
+      return !excluded.has(m.item.Monitor.Id);
+    });
+  }, [scopedMonitors]);
 
   const clearBuffer = useCallback(() => {
     bufferRef.current = '';
@@ -91,13 +105,19 @@ export function KeyboardShortcuts() {
     const value = bufferRef.current;
     clearBuffer();
     if (!value) return;
-    const monitorId = monitorIdFromBuffer(value, monitors.map((m) => m.Monitor.Id));
+    const monitorId = monitorIdFromBuffer(value, monitors.map((m) => m.item.Monitor.Id));
     if (monitorId === null) {
       toast.error(t('shortcuts.no_such_monitor', { n: value }));
       return;
     }
-    navigate(`/monitors/${monitorId}`, { state: { from: location.pathname } });
-  }, [monitors, navigate, location.pathname, clearBuffer, t]);
+    // Two servers routinely share a monitor id, so the bare `/monitors/:id`
+    // route is ambiguous in All mode (and lands with a null session there).
+    // The first match in scope order owns the number - same monitor the
+    // Monitors page shows first for it (refs #337).
+    const owner = monitors.find((m) => m.item.Monitor.Id === monitorId);
+    const path = isAllMode && owner ? `/all/monitors/${owner.profileId}/${monitorId}` : `/monitors/${monitorId}`;
+    navigate(path, { state: { from: location.pathname } });
+  }, [monitors, isAllMode, navigate, location.pathname, clearBuffer, t]);
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -106,7 +126,7 @@ export function KeyboardShortcuts() {
       // TV mode hands the keys to the d-pad handler and WebView spatial nav, but
       // only on an actual TV. On desktop (browser, Electron, keyboard tablet) TV
       // mode is cosmetic, so the shortcuts stay live (refs #241).
-      if (!currentProfile || isLocked || (isTvMode && Platform.isTVDevice)) return;
+      if (!scope || isLocked || (isTvMode && Platform.isTVDevice)) return;
       if (isTypingTarget(e.target)) return;
 
       // Numeric monitor jump: buffer digits, commit on Enter or after a pause.
@@ -134,7 +154,7 @@ export function KeyboardShortcuts() {
 
       if (e.key === '?') {
         e.preventDefault();
-        if (settings.assistantEnabled) openAssistant();
+        if (assistantEnabled) openAssistant();
         else setHelpOpen((open) => !open);
         return;
       }
@@ -166,7 +186,7 @@ export function KeyboardShortcuts() {
         navigate(route);
       }
     },
-    [currentProfile, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette, settings.assistantEnabled, openAssistant]
+    [scope, isLocked, isTvMode, helpOpen, navigate, commitBuffer, clearBuffer, openPalette, assistantEnabled, openAssistant]
   );
 
   useEffect(() => {
