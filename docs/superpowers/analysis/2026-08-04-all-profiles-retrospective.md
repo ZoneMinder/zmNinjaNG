@@ -1,42 +1,118 @@
 # All Profiles: a retrospective on the agent workflow
 
 Written 2026-08-04 by the orchestrating agent, at the maintainer's request, to
-answer one question honestly: did the agent workflow this repository built
-(AGENTS.md rules, AGENTS.project.md contracts, the playbooks, and the
-subagent-driven review process) actually help, or did it get in the way?
+answer one question honestly: did the agent framework this repository built
+actually help, or did it get in the way?
 
-A note on method before anything else. This report is compiled from two
-sources: the git history of the two feature branches, and the orchestrator's
-own session record of every dispatch, review, and fix round. Where I cite a
-commit, the link is real and checked. Where I make a judgment, I say it is a
-judgment. Where I have no evidence one way or the other, I say that too,
-because a fair report about whether a process works has to admit which parts
-of it were never really tested.
+Context for readers outside this project. zmNinjaNg is a mobile and desktop
+client for [ZoneMinder](https://zoneminder.com/), an open-source video
+surveillance system. Users configure one "profile" per ZoneMinder server
+(URL, credentials, TLS settings); a "monitor" is a camera, an "event" is a
+recorded clip, and the Event Server (ES) is ZoneMinder's optional push
+notification daemon. Until this work, the app could talk to exactly one
+server at a time.
+
+The framework under evaluation is checked into this repository:
+[`AGENTS.md`](../../../AGENTS.md) (portable process and code rules with
+stable IDs such as P2 or C7), [`AGENTS.project.md`](../../../AGENTS.project.md)
+(architecture contracts with named enforcement gates), the playbooks under
+[`agents/`](../../../agents/) (per-domain working notes agents must read
+before touching an area), and a subagent process: an orchestrating agent
+writes per-task briefs, separate implementer agents build them test-first,
+separate reviewer agents check each diff, and mechanical test gates block
+commits that break declared invariants. The comparison baseline throughout
+this report is standard Claude Code: one agent in one session, no
+repository-specific rules, self-review only.
+
+A note on method. This report is compiled from two sources: the git history
+of the two feature branches, and the orchestrator's own session record of
+every dispatch, review, and fix round. Where I cite a commit, the link is
+real and checked. Where I make a judgment, I say it is a judgment. Where I
+have no evidence one way or the other, I say that too, because a fair
+report about whether a process works has to admit which parts of it were
+never really tested.
 
 All commit links are to `github.com/ZoneMinder/zmNinjaNg`.
 
+## Verdict by pillar
+
+Details and evidence follow in sections 3 and 4; this table is the summary.
+"Helped" means it produced outcomes a standard single-agent Claude Code
+session would probably have missed, with incidents to show for it.
+
+| Pillar | What it adds over standard Claude | Verdict |
+|---|---|---|
+| Independent review loop (separate reviewer per task, re-review per fix round) | A second context re-derives correctness instead of the author grading their own work | Helped; largest single effect: 10 user-visible defects caught before merge (3.1) |
+| Mechanical gates (contract tests, lint ratchet, instruction word budget) | Invariants enforced by failing tests, not by memory or goodwill | Helped; blocked real drift 4+ times, including against the orchestrator (3.2, 3.7) |
+| Architecture contracts in AGENTS.project.md | Written invariants quoted in every brief and review | Helped; mostly by prevention, visible as absence of whole defect classes (3.3) |
+| Test-first with proven-red regression tests (P2) | A fix's test must be shown failing on pre-fix code | Helped where verifiable; caught 2 tests that could not fail (3.4) |
+| Raw-output rule (P6) | Verification reads raw command output, never summaries | Helped; decisive twice (3.5) |
+| Ledger and committed phase plans | Progress state survives crashes and restarts | Helped; 3 environment failures recovered cheaply (3.6) |
+| Playbooks and domain knowledge | Per-domain facts agents read before working | Mixed; pre-existing playbooks helped, closeout additions unproven (3.8) |
+| Brief-driven dispatch | Orchestrator writes the task, implementer builds exactly that | Mixed; propagates orchestrator mistakes with full test coverage (4.1) |
+| Multi-agent messaging and lifecycle | Parallelism across ~40 agents | Cost; report delivery, idle noise, and shared-worktree races are framework problems, not rule problems (4.2) |
+| Live-server e2e testing | End-to-end checks against a real ZoneMinder | Cost; shared-server flakiness, independent of the framework (4.3) |
+
 ---
 
-## 1. What was built
+## 1. What was built and why it matters technically
 
-The All Profiles feature: a virtual "All Servers" profile that shows every
-configured ZoneMinder server together in one UI. Monitors, Events, Timeline,
-Montage, Dashboard, Live Activity, and notifications all aggregate. Actions
-route automatically to the server that owns the monitor or event. Two deep
-refactors had to land first, because the app was built around exactly one
-server at a time:
+The All Profiles feature adds a virtual "All Servers" profile that shows
+every configured ZoneMinder server together in one UI. Every major surface
+aggregates: the camera list (Monitors), recorded clips (Events), the
+Timeline, the multi-camera grid (Montage), the Dashboard, the live alarm
+board (Live Activity), and push notifications. Any action, such as playing
+a clip or arming a camera, routes automatically to the server that owns it.
+The spec behind all of it is
+[the all-profiles design](../specs/2026-08-02-all-profiles-design.md).
 
-- The global API-client singleton became a per-profile session layer
-  (one client, auth-token slice, and timezone per profile).
+The feature sounds additive; technically it was a rework of the app's
+central assumption. The codebase was built around exactly one active
+server: one global API client, one access token, one server timezone, one
+trusted TLS certificate, one notification socket. Two refactors had to
+land before any UI:
+
+- The global API-client singleton was deleted and replaced by a session
+  registry: one `ServerSession` (client, auth-token slice, timezone) per
+  profile, created lazily and cached. The auth store went from one token
+  set to per-profile slices with per-profile single-flight refresh, so two
+  servers refreshing tokens concurrently cannot interleave.
 - Native TLS trust went from one stored certificate fingerprint to a
-  host-keyed fingerprint map, so several self-signed servers can be trusted
-  at once (iOS, Android, and the web layer all changed).
+  host-keyed fingerprint map in all three native layers (iOS Swift,
+  Android Java, and the web/Electron layer), so several self-signed
+  servers can be trusted at once.
+
+The consequences that outlast the feature:
+
+- **Single-server mode is no longer a separate code path.** A single
+  profile is now the one-element case of the same aggregation code
+  (`useProfileScope` returns a one-profile array in single mode). There is
+  no "all mode" fork to keep in sync with the normal path.
+- **Identity is now composite.** ZoneMinder ids (monitor 5, event 1234)
+  collide across servers, so every aggregate data structure keys on
+  profile-plus-id composites. Six defects during the project came from
+  forgetting this; the helper and contract that resulted are now the
+  standard for any future multi-server surface.
+- **Partial failure is a first-class state.** One unreachable server
+  degrades to an inline error strip while the other servers' data still
+  renders, on every aggregated page, instead of one failure blanking the
+  app.
+- **Notifications are per-connection, not global.** Each enabled profile
+  holds its own ES socket or polling fallback, with events attributed to
+  their profile at the socket boundary, plus burst coalescing so five
+  servers alarming at once produce one grouped notification.
+- **Load scales deliberately.** Polling across N servers is staggered
+  rather than synchronized, Live Activity caps concurrent streams with
+  round-robin rotation, and the resource-heavy mode is opt-in with a
+  warning on the profile card.
 
 The work shipped as two stacked PRs:
 
-- **#338** (`feat/all-profiles-sessions`): TLS multi-fingerprint plus the
+- [**#338**](https://github.com/ZoneMinder/zmNinjaNg/pull/338)
+  (`feat/all-profiles-sessions`): TLS multi-fingerprint plus the
   session-layer migration. 27 commits.
-- **#339** (`feat/all-profiles-ui`): the visible feature, phases 2 through 4,
+- [**#339**](https://github.com/ZoneMinder/zmNinjaNg/pull/339)
+  (`feat/all-profiles-ui`): the visible feature, phases 2 through 4,
   plus about a dozen post-completion increments that came from the
   maintainer's live acceptance testing. 50 commits.
 
@@ -69,10 +145,11 @@ reboot, a network outage, and a move to a different LAN.
 
 The design phase used the brainstorming skill interactively: about ten
 clarifying decisions (scope, UX model, preference handling, write behavior,
-architecture approach), each answered by the maintainer, then a spec
-committed before any code. The maintainer explicitly chose a big-bang
-migration of the API layer over an incremental facade, and that decision is
-recorded in the spec as final.
+architecture approach), each answered by the maintainer, then
+[a spec](../specs/2026-08-02-all-profiles-design.md) committed before any
+code. The maintainer explicitly chose a big-bang migration of the API
+layer over an incremental facade, and that decision is recorded in the
+spec as final.
 
 Each phase then followed the same loop:
 
@@ -127,7 +204,8 @@ The list, in order:
    fixed in [`94bc5a8`](https://github.com/ZoneMinder/zmNinjaNg/commit/94bc5a8b)
    along with four other findings from the same review (orphaned tokens
    from unsaved profiles, tokens surviving profile deletion, a single-flight
-   race on failed refresh, and a sentinel id being used as a scratch bucket).
+   race on failed refresh, and a reserved marker id being used as a
+   scratch bucket).
 3. **Cross-profile host/token bleed** (phase 2 whole-branch review). The
    server map for multi-server ZoneMinder installs was a single global,
    populated by whichever profile bootstrapped last, so profile B's access
@@ -145,7 +223,8 @@ The list, in order:
    the real enablement path.
 5. **Blank live player on the deep route** (phase 3 whole-branch review,
    Critical). `/all/monitors/:profileId/:monitorId` was the headline
-   destination of the phase, and its MJPEG player rendered blank because
+   destination of the phase, and its live video (MJPEG stream) player
+   rendered blank because
    one `profileId` prop was missing. The e2e test asserted only the URL,
    so it passed. One line, fixed in
    [`d0422f8`](https://github.com/ZoneMinder/zmNinjaNg/commit/d0422f86).
@@ -158,8 +237,8 @@ The list, in order:
    [`2de8a7d`](https://github.com/ZoneMinder/zmNinjaNg/commit/2de8a7d1).
 7. **A render loop that crashed the notification history page** the moment
    one notification existed, in both modes (post-completion, Critical).
-   The selector built new objects on every call, which zustand's shallow
-   comparison can never stabilize. The page's own test could not fail on
+   The selector built new objects on every call, which the shallow
+   comparison in zustand (the app's state library) can never stabilize. The page's own test could not fail on
    this because it mocked the store as a plain function, skipping
    `useSyncExternalStore` entirely. The reviewer reproduced the crash
    against the real store; fixed in
@@ -178,7 +257,8 @@ The list, in order:
    re-review. Each fix was tested and green, and each was wrong; without
    per-round re-reviews all three defects would have shipped.
 9. **The Live Activity watch-cap evicting an on-screen alarming tile**
-   with no dwell window (the tile-churn class issue #313 exists to
+   with no dwell window (the tile-churn class issue
+   [#313](https://github.com/ZoneMinder/zmNinjaNg/issues/313) exists to
    prevent, reachable through a new code path). Found by a task-level
    review; fixed with a resident-exemption in
    [`c468a66`](https://github.com/ZoneMinder/zmNinjaNg/commit/c468a66b).
@@ -241,7 +321,7 @@ effect across 22,000 added lines: the debt number fell. My judgment is
 that without the rule it would have grown, because both blocked increments
 came with plausible-sounding justifications.
 
-### 3.3 The architecture contracts in AGENTS.project.md
+### 3.3 The architecture contracts in [AGENTS.project.md](../../../AGENTS.project.md)
 
 The contracts were quoted in every task brief, and the pattern of failures
 shows they worked mostly by *prevention*, which is hard to prove but shows
@@ -263,7 +343,8 @@ Three contracts had specific, checkable effects:
 - **Sessions.** Written mid-project (phase 1,
   [`93bb7de`](https://github.com/ZoneMinder/zmNinjaNg/commit/93bb7deb))
   with real grep-gates: ApiClient construction confined to four sanctioned
-  files, the deleted singleton stays deleted, the sentinel ids live only
+  files, the deleted singleton stays deleted, the reserved marker ids
+  (such as the All-Servers id) live only
   beside their brand. Those gates then ran green through 50 more commits
   and caught one real drift attempt: an implementer's test files used raw
   `'__all_profiles__'` string literals, and the gate blocked the commit
@@ -352,23 +433,25 @@ the person adding rules, not just implementers.
 This splits into two parts. The playbooks that existed *before* this work
 helped in narrow, checkable ways:
 
-- `agents/project/testing.md` is why the e2e strategy was realistic from
+- [`agents/project/testing.md`](../../../agents/project/testing.md) is why the e2e strategy was realistic from
   the start: it documents that automated e2e is Chromium-only against one
   real server, which shaped the "two profiles on the same server plus one
   unreachable profile" test design instead of an unworkable mock-server
   plan.
-- `agents/project/documentation.md` produced measurably consistent docs:
+- [`agents/project/documentation.md`](../../../agents/project/documentation.md) produced measurably consistent docs:
   reviewers verified call-flow structure (step counts, symbol citations,
   no line numbers) against the playbook's own rules, and the doc gates
   (heading voice, citation format, no em-dashes) failed builds when
   violated rather than relying on taste.
-- `agents/project/native.md` mostly pointed to the Native contract, which
-  carried the TLS TOFU invariant that drove the phase 0 review finding.
+- [`agents/project/native.md`](../../../agents/project/native.md) mostly pointed to the Native contract, which
+  carried the TLS trust-on-first-use invariant that drove the phase 0
+  review finding.
 
 The domain facts *added during* this work (the alarm endpoint being
 single-monitor only, cross-server id collisions, ES payload profile
 fields, the i18next `{{count}}` reservation, the live-server e2e
-degradation pattern) were written into `agents/project/domain-context.md`
+degradation pattern) were written into
+[`agents/project/domain-context.md`](../../../agents/project/domain-context.md)
 at closeout. They did not help this project, because they were learned
 here; they can only help future work. I want to be clear about that
 distinction: writing them down is following rule M5, but I have no
@@ -466,7 +549,7 @@ defect in any written rule, but no written rule prevented it either.
 ### 4.2 Failures of the framework (not the rules)
 
 These cost real time and none of them are addressable by editing
-AGENTS.md. I list them separately because a reading of the session log
+[AGENTS.md](../../../AGENTS.md). I list them separately because a reading of the session log
 that does not make this distinction would attribute all of it to the
 process.
 
@@ -506,7 +589,7 @@ pre-existing by checking out the pre-branch baseline and running the same
 scenarios there; that check took most of an afternoon and prevented us
 from "fixing" tests our code never broke. The remaining facts are less
 comfortable: the five failures now stand as a documented tolerated set
-(issue #342), the
+([#342](https://github.com/ZoneMinder/zmNinjaNg/issues/342)), the
 most concurrent code in the project (websockets, alarm polling) is
 covered by unit tests only, and two of my own new scenarios needed
 timing rewrites after their first live run
@@ -531,7 +614,8 @@ instance is untested.
   consistently, but I cannot distinguish a genuinely test-driven task from
   a well-reported one from where I sit.
 - Whether the issue-linkage rule (P1) prevented anything. Every commit
-  references #337 and the PR trail is clean, which has archival value, but
+  references [#337](https://github.com/ZoneMinder/zmNinjaNg/issues/337)
+  and the PR trail is clean, which has archival value, but
   I saw no incident where the linkage itself caught or prevented a
   mistake. When the maintainer said to stop filing new issues mid-flow,
   folding increments into the umbrella issue worked fine.
@@ -583,10 +667,14 @@ the benefit with less process.
 2. The render-loop selector rule and real-store test requirement are now
    in the Stores contract and testing playbook; their effectiveness is
    unproven until the next feature.
-3. e2e infrastructure (issue #342): shared-server flakiness needs a real
+3. e2e infrastructure
+   ([#342](https://github.com/ZoneMinder/zmNinjaNg/issues/342)):
+   shared-server flakiness needs a real
    answer (worker cap, dedicated server, or mocks) with an expiry, so the
    tolerated-failure list does not become permanent.
-4. Live Activity aggregation closed the #341 gap during this run; nothing
+4. Live Activity aggregation closed the
+   [#341](https://github.com/ZoneMinder/zmNinjaNg/issues/341) gap during
+   this run; nothing
    from the original spec remains undelivered.
 5. Framework issues worth reporting upstream rather than working around:
    report delivery reliability, stale idle pings from stopped agents, and
