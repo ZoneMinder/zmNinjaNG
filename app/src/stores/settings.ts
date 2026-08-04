@@ -21,6 +21,9 @@ export type StreamingMethod = 'auto' | 'mjpeg';
 export type WebRTCProtocol = 'webrtc' | 'mse' | 'hls';
 /** All mode only: whether every scope profile's live connection is on. */
 export type AllModeNotifications = 'live' | 'muted' | 'off';
+/** All mode's Streaming Mode: one of the two real modes imposed on every
+ *  server, or 'per-server' to leave each server's own choice alone. */
+export type AllModeViewMode = ViewMode | 'per-server';
 export const ALL_MODE_NOTIFICATIONS_VALUES: readonly AllModeNotifications[] = ['live', 'muted', 'off'] as const;
 // Declared by the modules that consume them, so those modules do not import
 // this store (refs #281). Re-exported for the existing callers.
@@ -137,6 +140,17 @@ export interface ProfileSettings {
    *  every All-mode connection so nothing live runs. Stored under the ALL
    *  settings bucket (refs #337). */
   allModeNotifications: AllModeNotifications;
+  /** All mode only: which Streaming Mode aggregated tiles follow.
+   *  'per-server' (the default) leaves every tile on its OWNING profile's
+   *  viewMode, so switching into All mode never changes how anything streams;
+   *  'streaming'/'snapshot' impose one mode on every tile from every server.
+   *
+   *  A key of its own rather than reusing `viewMode` in the ALL bucket: that
+   *  would need "unset" to mean per-server, and the first write of ANY key to
+   *  a bucket materializes the whole DEFAULT_SETTINGS shape, so unset is not a
+   *  state the ALL bucket can stay in. Stored under the ALL settings bucket
+   *  (refs #337). */
+  allModeViewMode: AllModeViewMode;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -334,6 +348,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorsGroupByServer: false,
   eventsServerFilter: null,
   allModeNotifications: 'live',
+  allModeViewMode: 'per-server',
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',

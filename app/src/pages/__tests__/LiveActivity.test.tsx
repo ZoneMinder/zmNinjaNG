@@ -49,6 +49,13 @@ const env = vi.hoisted(() => ({
   currentProfileId: 'p1' as string | null,
 }));
 
+// Its own tests cover the toggle (including how it resolves the page's
+// Streaming Mode in All mode); stubbing keeps that resolution's hooks out of
+// this file's mock surface, which several tests rebuild with doMock.
+vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
+  AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
+}));
+
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => ({
     currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },

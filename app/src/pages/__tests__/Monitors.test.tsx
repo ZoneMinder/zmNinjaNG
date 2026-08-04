@@ -87,6 +87,13 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 
+// Its own tests cover the toggle (including how it resolves the page's
+// Streaming Mode in All mode); stubbing keeps that resolution's stores out of
+// this file's mock surface.
+vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
+  AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
+}));
+
 const SETTINGS = {
   monitorsViewMode: 'list' as const,
   monitorsFeedFit: 'contain' as const,

@@ -109,6 +109,20 @@ Feature: All Servers mode
     And the montage fit should be "Fit"
 
   @web
+  Scenario: All Servers Streaming Mode is settable and survives a reload
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Settings" page
+    Then the All Servers streaming mode should be "Per server"
+    When I set the All Servers streaming mode to "Streaming"
+    Then the All Servers streaming mode should be "Streaming"
+    When I reload the current page
+    Then the All Servers streaming mode should be "Streaming"
+    When I set the All Servers streaming mode to "Per server"
+    And I reload the current page
+    Then the All Servers streaming mode should be "Per server"
+
+  @web
   Scenario: analysis frames toggle is usable from All Servers mode
     When I navigate to the "Profiles" page
     And I click the All Servers profile card

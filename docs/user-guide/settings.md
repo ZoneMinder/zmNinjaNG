@@ -116,6 +116,10 @@ A new profile picks a default based on the platform:
 
 Changing the Streaming Mode toggle overrides the default for that profile.
 
+#### In All Servers mode
+
+While aggregating, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate **All Servers Streaming Mode** row appears at the top of the page. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile from every server for as long as you are aggregating; neither touches any profile's own setting.
+
 (connection-limits-by-platform)=
 
 #### Connection limits by platform

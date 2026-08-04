@@ -648,7 +648,7 @@ describe('useMonitorStream: view preferences resolve two-tier', () => {
     });
 
     // The owning server sits on streaming with analysis off; the ALL bucket
-    // is the opposite on both counts.
+    // imposes snapshot and turns analysis on.
     useSettingsStore.setState({
       profileSettings: {
         'profile-b': {
@@ -658,7 +658,7 @@ describe('useMonitorStream: view preferences resolve two-tier', () => {
         },
         [ALL_PROFILES_ID]: {
           ...DEFAULT_SETTINGS,
-          viewMode: 'snapshot',
+          allModeViewMode: 'snapshot',
           showAnalysisFrames: true,
         },
       },
@@ -694,6 +694,20 @@ describe('useMonitorStream: view preferences resolve two-tier', () => {
     );
   });
 
+  it('keeps streaming under the owning profile in All mode while the mode is per-server', async () => {
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-b': { ...DEFAULT_SETTINGS, viewMode: 'streaming', showAnalysisFrames: false },
+      },
+    });
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=jpeg');
+  });
+
   it("uses the ALL bucket's snapshot viewMode in All mode", async () => {
     useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
 
@@ -708,7 +722,7 @@ describe('useMonitorStream: view preferences resolve two-tier', () => {
     // Analysis commands only reach a live streaming process, so keep the ALL
     // bucket on streaming for this one.
     useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
-      viewMode: 'streaming',
+      allModeViewMode: 'streaming',
     });
 
     const { result } = renderTile();

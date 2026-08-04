@@ -1221,8 +1221,8 @@ keys off ``currentProfileId`` and so resolves to the ALL bucket in All mode.
 The stream path does not. A montage tile owned by profile B passes
 ``profileId: B`` down the URL chain (``useServerUrls``, ``useFreshAccessToken``,
 ``useProfileById``) so its stream resolves against B's server, and reading its
-view preferences from the same place would leave the All Servers toolbar's
-Streaming Mode and analysis-frames toggles governing nothing.
+view preferences from the same place would leave the All Servers analysis-frames
+toggle and the Settings page's All Servers Streaming Mode row governing nothing.
 
 .. code:: typescript
 
@@ -1239,7 +1239,33 @@ stay with the owning profile - ``useMonitorStream`` reads both, from
 route, so the ``/all/monitors/:profileId/:id`` deep route follows the ALL
 bucket like every other All-mode surface.
 
-**Used by:** ``hooks/useMonitorStream.ts``.
+Streaming Mode is a tri-state while aggregating, and it gets its own ALL-bucket
+setting, ``allModeViewMode`` (``'per-server' | 'streaming' | 'snapshot'``),
+rather than reusing ``viewMode``. Its default, ``'per-server'``, sends each tile
+back to its owning profile, so entering All mode never changes how anything
+streams until the user asks. ``AllServersStreamingSection`` on the Settings page
+is what writes it.
+
+The obvious alternative - read the ALL bucket's own ``viewMode`` and treat
+"never written" as per-server - does not work, and the reason is worth
+remembering: ``updateProfileSettings`` seeds a fresh bucket with the whole
+``DEFAULT_SETTINGS`` shape, so the first write of ANY key (in All mode,
+``lastRoute`` on the very first navigation) materializes ``viewMode:
+'snapshot'`` alongside it. Absence is not a state a bucket stays in, and an
+e2e run caught exactly that: a montage that had merely been navigated to
+already read as Snapshot. An explicit value also keeps every default inside
+``mergeProfileSettings``, where the Settings contract wants it.
+
+Analysis frames stay two-state: off is a coherent default, so nothing needs
+distinguishing from absence.
+
+``usePageViewMode`` answers the same question for a page-level control, which
+has no owning monitor to ask. Under "Per server" the answer differs per tile,
+so it reports streaming when ANY in-scope server streams - the analysis-frames
+toolbar button would otherwise disable itself over a grid of live tiles.
+
+**Used by:** ``hooks/useMonitorStream.ts``,
+``components/monitors/AnalysisFramesToggle.tsx`` (``usePageViewMode``).
 
 useEventFilters (``hooks/useEventFilters.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

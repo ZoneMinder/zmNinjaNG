@@ -567,3 +567,20 @@ Then('the montage edit-layout control should be available', async ({ page }) => 
     timeout: testConfig.timeouts.element,
   });
 });
+
+// All Servers Streaming Mode (refs #337): the tri-state that decides whether
+// aggregated tiles follow each server or one imposed mode. "Per server" is the
+// absence of a stored value, so the round-trip through a reload is what proves
+// the ALL bucket holds what the row shows.
+When('I set the All Servers streaming mode to {string}', async ({ page }, label: string) => {
+  await page.getByTestId('all-mode-streaming-select').click();
+  const option = page.getByTestId(`all-mode-streaming-option-${label.toLowerCase().replace(/ /g, '-')}`);
+  await expect(option).toBeVisible({ timeout: testConfig.timeouts.element });
+  await option.click();
+});
+
+Then('the All Servers streaming mode should be {string}', async ({ page }, label: string) => {
+  await expect(page.getByTestId('all-mode-streaming-select')).toContainText(label, {
+    timeout: testConfig.timeouts.element,
+  });
+});

@@ -51,7 +51,7 @@ describe('AnalysisFramesToggle', () => {
   it('is enabled in All mode and writes to the ALL bucket', () => {
     useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
     useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
-      viewMode: 'streaming',
+      allModeViewMode: 'streaming',
     });
 
     render(<AnalysisFramesToggle />);
@@ -67,8 +67,39 @@ describe('AnalysisFramesToggle', () => {
   it('stays disabled while the governing bucket is on snapshot', () => {
     useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
     useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
-      viewMode: 'snapshot',
+      allModeViewMode: 'snapshot',
     });
+
+    render(<AnalysisFramesToggle />);
+
+    expect(screen.getByTestId('analysis-frames-toggle')).toBeDisabled();
+  });
+
+  // Per-server mode: with no All-Servers mode imposed, tiles follow
+  // their own server, so the toolbar control is live as long as some server
+  // streams - it must not read an unwritten ALL bucket as snapshot.
+  it('is enabled in All mode when a server streams under per-server', () => {
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-1': { ...DEFAULT_SETTINGS, viewMode: 'snapshot' },
+        'profile-2': { ...DEFAULT_SETTINGS, viewMode: 'streaming' },
+      },
+    });
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+    render(<AnalysisFramesToggle />);
+
+    expect(screen.getByTestId('analysis-frames-toggle')).not.toBeDisabled();
+  });
+
+  it('is disabled in All mode when every server is on snapshot', () => {
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-1': { ...DEFAULT_SETTINGS, viewMode: 'snapshot' },
+        'profile-2': { ...DEFAULT_SETTINGS, viewMode: 'snapshot' },
+      },
+    });
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
 
     render(<AnalysisFramesToggle />);
 

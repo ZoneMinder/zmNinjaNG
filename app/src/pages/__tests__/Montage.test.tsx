@@ -127,7 +127,7 @@ vi.mock('../../components/montage', async (importOriginal) => {
     ),
     MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     MontageScrollPad: () => null,
-    useMontageGrid: () => useMontageGridMock(),
+    useMontageGrid: (options: unknown) => useMontageGridMock(options),
     useContainerResize: () => ({ containerRef: vi.fn() }),
   };
 });
@@ -145,6 +145,13 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
       {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
     </div>
   ),
+}));
+
+// Its own tests cover the toggle (including how it resolves the page's
+// Streaming Mode in All mode); stubbing keeps that resolution's stores out of
+// this file's mock surface.
+vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
+  AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
 }));
 
 vi.mock('../../components/filters/GroupFilterSelect', () => ({
@@ -284,6 +291,38 @@ describe('Montage Page', () => {
     render(<Montage />);
 
     expect(screen.getByText('montage.no_monitors')).toBeInTheDocument();
+  });
+
+  // The page's own wiring, not the hook's: useMontageGrid persists every
+  // layout write against the id it is handed, so handing it currentProfile
+  // (null in All mode) instead of currentProfileId silently disables editing
+  // there again (refs #337).
+  it('hands useMontageGrid the ALL sentinel in All mode and the real id in single mode', () => {
+    singleProfile();
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+
+    const { rerender } = render(<Montage />);
+    expect(useMontageGridMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ profileId: 'profile-1' })
+    );
+
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
+    useScopedMonitorsMock.mockReturnValue({
+      monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
+      errors: [],
+      isLoading: false,
+      refetchProfile: vi.fn(),
+    });
+    rerender(<Montage />);
+
+    expect(useMontageGridMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ profileId: ALL_PROFILES_ID })
+    );
   });
 
   it('single mode renders tiles with no profile chip', () => {

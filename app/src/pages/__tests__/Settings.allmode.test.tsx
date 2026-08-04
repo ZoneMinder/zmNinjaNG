@@ -16,12 +16,16 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
 vi.mock('../../hooks/useProfileScope', () => ({
   useProfileScope: vi.fn(),
 }));
+// What the ALL bucket holds for the All Servers Streaming Mode. 'per-server'
+// is its default: each server keeps its own Streaming Mode.
+let allModeViewMode = 'per-server';
 vi.mock('../../stores/settings', () => ({
   DEFAULT_SETTINGS: { viewMode: 'snapshot', tvMode: false },
   HOVER_PREVIEW_PLAYBACK_RATES: [50, 100, 150, 200, 400],
   DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE: 200,
-  useSettingsStore: (selector: (state: { updateProfileSettings: typeof updateProfileSettings }) => unknown) =>
-    selector({ updateProfileSettings }),
+  useSettingsStore: (
+    selector: (state: { updateProfileSettings: typeof updateProfileSettings }) => unknown
+  ) => selector({ updateProfileSettings }),
 }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key, i18n: { language: 'en', changeLanguage: vi.fn() } }),
@@ -74,10 +78,13 @@ const baseSettings = {
 describe('Settings page - All mode two-tier picker (refs #337)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useCurrentProfile).mockReturnValue({
+    allModeViewMode = 'per-server';
+    // mockImplementation, not mockReturnValue: allModeViewMode is mutated
+    // between renders inside a test, and a captured object would not see it.
+    vi.mocked(useCurrentProfile).mockImplementation(() => ({
       currentProfile: null, isAllMode: true, hasProfile: false,
-      settings: baseSettings as never,
-    });
+      settings: { ...baseSettings, allModeViewMode } as never,
+    }));
     vi.mocked(useProfileById).mockImplementation((id) => ({
       profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
       settings: baseSettings as never,
@@ -99,5 +106,71 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   it('shows the picker above the server-scoped block, defaulted to the first profile', () => {
     render(<Settings />);
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
+  });
+
+  // The All-Servers Streaming Mode row: without it the ALL bucket's viewMode
+  // is unwritable, and the stream path's two-tier read has no way to be told
+  // anything but "follow each server" (refs #337).
+  describe('All Servers Streaming Mode', () => {
+    it('imposes streaming on every server when picked', () => {
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
+        allModeViewMode: 'streaming',
+      });
+    });
+
+    it('imposes snapshot on every server when picked', () => {
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-streaming-option-snapshot'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
+        allModeViewMode: 'snapshot',
+      });
+    });
+
+    it('hands every server back its own mode when "Per server" is picked', () => {
+      allModeViewMode = 'streaming';
+      render(<Settings />);
+
+      fireEvent.click(screen.getByTestId('all-mode-streaming-option-per-server'));
+
+      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
+        allModeViewMode: 'per-server',
+      });
+    });
+
+    // The row's description is what tells the user which state they are in;
+    // the trigger's own label comes from Radix, which is stubbed here.
+    it('describes the current state, defaulting to per-server', () => {
+      const { unmount } = render(<Settings />);
+      expect(
+        screen.getByText('settings.all_mode_streaming_per_server_desc')
+      ).toBeInTheDocument();
+      unmount();
+
+      allModeViewMode = 'snapshot';
+      render(<Settings />);
+      expect(
+        screen.getByText('settings.all_mode_streaming_snapshot_desc')
+      ).toBeInTheDocument();
+    });
+
+    it('is absent in single mode, where Streaming Mode is per-profile', () => {
+      vi.mocked(useCurrentProfile).mockReturnValue({
+        currentProfile: profileA, isAllMode: false, hasProfile: true,
+        settings: baseSettings as never,
+      });
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
+      });
+
+      render(<Settings />);
+
+      expect(screen.queryByTestId('all-mode-streaming-select')).not.toBeInTheDocument();
+    });
   });
 });

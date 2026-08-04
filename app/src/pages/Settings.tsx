@@ -15,6 +15,7 @@ import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
 import { useProfileScope } from '../hooks/useProfileScope';
 import { ALL_PROFILES_ID, type ProfileId } from '../api/types';
 import { AppearanceSection } from '../components/settings/AppearanceSection';
+import { AllServersStreamingSection } from '../components/settings/AllServersStreamingSection';
 import { LiveStreamingSection } from '../components/settings/LiveStreamingSection';
 import { PlaybackSection } from '../components/settings/PlaybackSection';
 import { AssistantSection } from '../components/settings/AssistantSection';
@@ -75,11 +76,19 @@ export default function Settings() {
       <AppearanceSection settings={settings} update={update} />
 
       {isAllMode && (
-        <ProfilePicker
-          profiles={scope?.profiles ?? []}
-          value={defaultPickedId}
-          onChange={setPickedProfileId}
-        />
+        <>
+          {/* Governs every tile from every server; above the picker so it does
+              not read as another row belonging to the picked profile. */}
+          <AllServersStreamingSection
+            value={settings.allModeViewMode}
+            onChange={(value) => update('allModeViewMode', value)}
+          />
+          <ProfilePicker
+            profiles={scope?.profiles ?? []}
+            value={defaultPickedId}
+            onChange={setPickedProfileId}
+          />
+        </>
       )}
 
       <LiveStreamingSection

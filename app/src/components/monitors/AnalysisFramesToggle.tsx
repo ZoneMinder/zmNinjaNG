@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { ScanEye } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { usePageViewMode } from '../../hooks/useViewPrefs';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 
@@ -37,7 +38,11 @@ export function AnalysisFramesToggle({ className, alwaysStreaming = false }: Ana
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  const unavailable = !alwaysStreaming && settings.viewMode === 'snapshot';
+  // Not settings.viewMode: in All mode under "Per server" the ALL bucket
+  // imposes no Streaming Mode, and reading its own would disable a control
+  // that still governs every streaming server's tiles (refs #337).
+  const pageViewMode = usePageViewMode();
+  const unavailable = !alwaysStreaming && pageViewMode === 'snapshot';
   const isOn = settings.showAnalysisFrames;
   const label = t('video.analysis_frames');
   const title = unavailable ? t('video.analysis_needs_streaming') : t('video.analysis_frames_hint');
