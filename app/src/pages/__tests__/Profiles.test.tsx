@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Profiles from '../Profiles';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { ProfileGuardError } from '../../stores/profile';
 
 const mockNavigate = vi.fn();
@@ -157,6 +157,22 @@ describe('Profiles Page', () => {
     expect(allCard).toBeInTheDocument();
     expect(allCard).toHaveTextContent('profiles.all_servers');
     expect(screen.getByTestId('profile-active-indicator')).toBeInTheDocument();
+  });
+
+  // A group aggregates like All Servers but is a different selection, so the
+  // All Servers card must not claim to be the active one (refs #337).
+  it('leaves the All Servers card unmarked while a group is current', () => {
+    const group = mintVirtualProfileId();
+    useCurrentProfileMock.mockReturnValue({
+      currentProfile: null,
+      isAllMode: true,
+    });
+    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], group));
+
+    render(<Profiles />);
+
+    expect(screen.getByTestId('profile-card-all')).toBeInTheDocument();
+    expect(screen.queryByTestId('profile-active-indicator')).not.toBeInTheDocument();
   });
 
   // refs #337 round 2: the All Servers card moved to the end of the list.

@@ -22,7 +22,8 @@ import {
 import { Button } from './ui/button';
 import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
-import { ALL_PROFILES_ID } from '../api/types';
+import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
+import { useAggregateLabel } from '../hooks/useAggregateLabel';
 
 import { useTranslation } from 'react-i18next';
 
@@ -41,7 +42,11 @@ export function ProfileSwitcher() {
   // freshly-allocated (but element-wise identical) filtered array. Refs #337.
   const profiles = useProfileStore(useShallow((state) => state.profiles.filter((p) => !p.disabled)));
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-  const isAllMode = currentProfileId === ALL_PROFILES_ID;
+  // Any aggregate hides the single-profile label; which aggregate decides what
+  // the trigger says. The All Servers row's own tick asks the narrower
+  // question, so a group never marks it as the current selection (refs #337).
+  const isAggregate = isAggregateProfileId(currentProfileId);
+  const aggregateLabel = useAggregateLabel();
   const currentProfile = useProfileStore(
     useShallow((state) => {
       const { profiles, currentProfileId } = state;
@@ -53,10 +58,10 @@ export function ProfileSwitcher() {
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitch = async (profileId: string) => {
-    const isAll = profileId === ALL_PROFILES_ID;
+    const isAggregateTarget = isAggregateProfileId(profileId);
     const profile = profiles.find((p) => p.id === profileId);
-    if (!isAll && !profile) return;
-    const name = isAll ? t('profiles.all_servers') : profile!.name;
+    if (!isAggregateTarget && !profile) return;
+    const name = isAggregateTarget ? aggregateLabel(profileId) : profile!.name;
 
     // Abort any in-flight switch
     if (switchAbortRef.current) switchAbortRef.current.abort();
@@ -110,7 +115,9 @@ export function ProfileSwitcher() {
               <Server className="h-4 w-4 shrink-0" />
             )}
             <span className="truncate">
-              {isAllMode ? t('profiles.all_servers') : currentProfile?.name || t('profiles.select_profile')}
+              {isAggregate
+                ? aggregateLabel(currentProfileId)
+                : currentProfile?.name || t('profiles.select_profile')}
             </span>
           </div>
           {!isLoading && <ChevronDown className="h-4 w-4 opacity-50" />}
@@ -156,7 +163,9 @@ export function ProfileSwitcher() {
               <Layers className="h-4 w-4 text-muted-foreground" />
               <span className="font-medium">{t('profiles.all_servers')}</span>
             </div>
-            {isAllMode && <Check className="h-4 w-4 text-primary" />}
+            {currentProfileId === ALL_PROFILES_ID && (
+              <Check className="h-4 w-4 text-primary" data-testid="profile-switcher-all-active" />
+            )}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

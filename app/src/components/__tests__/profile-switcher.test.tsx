@@ -14,7 +14,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ProfileSwitcher } from '../profile-switcher';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -68,6 +68,7 @@ vi.mock('../../stores/profile', () => ({
 
 let mockProfileState: {
   profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>;
+  virtualProfiles: Array<{ id: string; name: string; memberProfileIds: string[] }>;
   currentProfileId: string | null;
   switchProfile: typeof switchProfileMock;
 };
@@ -75,6 +76,7 @@ let mockProfileState: {
 function setProfiles(profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>) {
   mockProfileState = {
     profiles,
+    virtualProfiles: [],
     currentProfileId: profiles[0]?.id ?? null,
     switchProfile: switchProfileMock,
   };
@@ -122,6 +124,42 @@ describe('ProfileSwitcher', () => {
 
     const items = screen.getAllByTestId(/^profile-switcher-(item-.+|all)$/);
     expect(items.at(-1)).toBe(screen.getByTestId('profile-switcher-all'));
+  });
+
+  // A group is an aggregate too, but a different one: the trigger names it,
+  // and the All Servers row must not read as the current selection (refs #337).
+  describe('with a group active', () => {
+    const group = mintVirtualProfileId();
+
+    beforeEach(() => {
+      setProfiles([profileA, profileB]);
+      mockProfileState.currentProfileId = group;
+      mockProfileState.virtualProfiles = [
+        { id: group, name: 'Backyard', memberProfileIds: ['profile-b'] },
+      ];
+    });
+
+    it("names the group on the trigger", () => {
+      render(<ProfileSwitcher />);
+
+      expect(screen.getByTestId('profile-switcher-trigger')).toHaveTextContent('Backyard');
+    });
+
+    it('leaves the All Servers item unmarked', () => {
+      render(<ProfileSwitcher />);
+
+      expect(screen.queryByTestId('profile-switcher-all-active')).not.toBeInTheDocument();
+    });
+  });
+
+  it('marks the All Servers item while the sentinel is active', () => {
+    setProfiles([profileA, profileB]);
+    mockProfileState.currentProfileId = ALL_PROFILES_ID;
+
+    render(<ProfileSwitcher />);
+
+    expect(screen.getByTestId('profile-switcher-all-active')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-switcher-trigger')).toHaveTextContent('profiles.all_servers');
   });
 
   it('hides a disabled profile from the list (refs #337)', () => {

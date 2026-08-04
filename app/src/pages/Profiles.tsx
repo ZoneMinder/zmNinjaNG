@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { useProfileStore, ProfileGuardError } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useAggregateLabel } from '../hooks/useAggregateLabel';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -37,7 +38,7 @@ import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers, Power,
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
 import type { Profile } from '../api/types';
-import { ALL_PROFILES_ID } from '../api/types';
+import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { discoverUrls } from '../services/discovery';
@@ -53,7 +54,12 @@ export default function Profiles() {
   // The All Servers card is only meaningful with 2+ SELECTABLE profiles - a
   // disabled one can never join the aggregate (refs #337).
   const enabledProfileCount = profiles.filter((p) => !p.disabled).length;
-  const { currentProfile, isAllMode } = useCurrentProfile();
+  const { currentProfile } = useCurrentProfile();
+  // The All Servers card marks itself active for its own sentinel only: a
+  // group is an aggregate too, and claims its own card (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const isAllCardActive = currentProfileId === ALL_PROFILES_ID;
+  const aggregateLabel = useAggregateLabel();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const deleteProfile = useProfileStore((state) => state.deleteProfile);
   const deleteAllProfiles = useProfileStore((state) => state.deleteAllProfiles);
@@ -293,12 +299,12 @@ export default function Profiles() {
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitchProfile = async (profileId: string) => {
-    const isAll = profileId === ALL_PROFILES_ID;
+    const isAggregateTarget = isAggregateProfileId(profileId);
     const profile = profiles.find((p) => p.id === profileId);
-    // The All Servers sentinel has no profile record; every other id must
+    // No aggregate id has a profile record behind it; every other id must
     // resolve to one.
-    if (!isAll && !profile) return;
-    const name = isAll ? t('profiles.all_servers') : profile!.name;
+    if (!isAggregateTarget && !profile) return;
+    const name = isAggregateTarget ? aggregateLabel(profileId) : profile!.name;
 
     // Abort any in-flight switch attempt
     if (switchAbortRef.current) {
@@ -484,7 +490,7 @@ export default function Profiles() {
               </div>
               {enabledProfileCount >= 2 && (
                 <div
-                  className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/15 transition-colors cursor-pointer mt-3 ${isAllMode ? 'ring-1 ring-blue-500' : ''}`}
+                  className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/15 transition-colors cursor-pointer mt-3 ${isAllCardActive ? 'ring-1 ring-blue-500' : ''}`}
                   data-testid="profile-card-all"
                   onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
                   onKeyDown={(e) => {
@@ -497,7 +503,7 @@ export default function Profiles() {
                   tabIndex={0}
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {isAllMode && (
+                    {isAllCardActive && (
                       <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
                     )}
                     <Layers className="h-5 w-5 text-blue-500 shrink-0" />
