@@ -4,7 +4,16 @@ import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, LIVE_ACTIVITY, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import {
+  ALL_MODE_PERFORMANCE,
+  API_REQUEST,
+  ASSISTANT,
+  DEFAULT_EVENT_PLAYBACK_RATE,
+  LIVE_ACTIVITY,
+  MONTAGE_GRID,
+  NOTIFICATIONS_SERVICE,
+  STORAGE_KEYS,
+} from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
 import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
 import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
@@ -24,7 +33,12 @@ export type AllModeNotifications = 'live' | 'muted' | 'off';
 /** All mode's Streaming Mode: one of the two real modes imposed on every
  *  server, or 'per-server' to leave each server's own choice alone. */
 export type AllModeViewMode = ViewMode | 'per-server';
+/** All mode only: how much each aggregated tile's stream is dialed back.
+ *  'off' streams exactly as single mode does; 'reduced' trades frame rate and
+ *  scale for the bandwidth of running many servers at once. */
+export type AllModeStreamTuning = 'off' | 'reduced';
 export const ALL_MODE_NOTIFICATIONS_VALUES: readonly AllModeNotifications[] = ['live', 'muted', 'off'] as const;
+export const ALL_MODE_STREAM_TUNING_VALUES: readonly AllModeStreamTuning[] = ['off', 'reduced'] as const;
 // Declared by the modules that consume them, so those modules do not import
 // this store (refs #281). Re-exported for the existing callers.
 export type { DateFormatPreset, TimeFormatPreset };
@@ -151,6 +165,33 @@ export interface ProfileSettings {
    *  state the ALL bucket can stay in. Stored under the ALL settings bucket
    *  (refs #337). */
   allModeViewMode: AllModeViewMode;
+  /** All mode only: how many montage tiles (== live streams) render across
+   *  every profile's monitors combined before the rest collapse into an
+   *  overflow notice. Single mode is uncapped and ignores this. Stored under
+   *  the ALL settings bucket (refs #337). */
+  allModeMaxStreams: number;
+  /** All mode only: how many (profile, monitor) pairs the Live Activity page
+   *  watches at once, drawn round-robin so one busy server cannot crowd out
+   *  the rest. Stored under the ALL settings bucket (refs #337). */
+  allModeMaxWatched: number;
+  /** All mode only: floor under the Live Activity alarm poll interval, in
+   *  seconds. It CLAMPS the bandwidth-derived interval rather than replacing
+   *  it, so a slower configured poll stays slower. Stored under the ALL
+   *  settings bucket (refs #337). */
+  allModePollFloorSeconds: number;
+  /** All mode only: how long, in seconds, events from different servers keep
+   *  collapsing into one summary toast instead of one toast each. Stored
+   *  under the ALL settings bucket (refs #337). */
+  allModeBurstSeconds: number;
+  /** All mode only: whether aggregated tiles stream at reduced frame rate and
+   *  scale. Stored under the ALL settings bucket (refs #337). */
+  allModeStreamTuning: AllModeStreamTuning;
+  /** All mode only: whether streams stop while the app is in the background or
+   *  the tab is hidden. Stored under the ALL settings bucket (refs #337). */
+  allModePauseHidden: boolean;
+  /** All mode only: minutes of no interaction before aggregated streams stand
+   *  down. 0 means never. Stored under the ALL settings bucket (refs #337). */
+  allModeIdleMinutes: number;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -349,6 +390,18 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   eventsServerFilter: null,
   allModeNotifications: 'live',
   allModeViewMode: 'per-server',
+  // Each All-mode guardrail starts at the value its consumer used to hardcode,
+  // so a profile that never opens the performance section behaves exactly as
+  // it did before the knobs existed (refs #337).
+  allModeMaxStreams: MONTAGE_GRID.allModeMaxStreams,
+  allModeMaxWatched: LIVE_ACTIVITY.allModeMaxWatched,
+  allModePollFloorSeconds: LIVE_ACTIVITY.allModePollFloorSeconds,
+  allModeBurstSeconds: NOTIFICATIONS_SERVICE.allModeBurstWindowMs / 1000,
+  // Connection optimizations ship opt-in: the defaults below leave All mode
+  // streaming exactly as it does today until a user turns one on.
+  allModeStreamTuning: 'off',
+  allModePauseHidden: false,
+  allModeIdleMinutes: 0,
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
@@ -463,7 +516,64 @@ export function mergeProfileSettings(raw: Partial<ProfileSettings> | undefined):
   } else if (!ALL_MODE_NOTIFICATIONS_VALUES.includes(merged.allModeNotifications)) {
     merged.allModeNotifications = 'live';
   }
+  coerceAllModePerformance(merged);
   return merged;
+}
+
+/** Clamps one persisted numeric setting into its editable range, falling back
+ *  to the shipped default for anything that is not a finite number. Counts and
+ *  whole-second/minute windows only, hence the rounding. */
+function clampSetting(value: unknown, min: number, max: number, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/**
+ * Brings every All-mode performance knob back inside its bounds, in place.
+ *
+ * These are read straight off persisted storage, which is a trust boundary
+ * (I1): the settings blob survives app upgrades, is editable by hand, and a
+ * value from a build where a bound was wider would otherwise reach the
+ * consumer unchecked. Each consumer gets to treat its setting as already
+ * valid because this runs on every read, imperative and reactive alike.
+ */
+function coerceAllModePerformance(merged: ProfileSettings): void {
+  merged.allModeMaxStreams = clampSetting(
+    merged.allModeMaxStreams,
+    ALL_MODE_PERFORMANCE.minStreams,
+    ALL_MODE_PERFORMANCE.maxStreams,
+    DEFAULT_SETTINGS.allModeMaxStreams
+  );
+  merged.allModeMaxWatched = clampSetting(
+    merged.allModeMaxWatched,
+    ALL_MODE_PERFORMANCE.minWatched,
+    ALL_MODE_PERFORMANCE.maxWatched,
+    DEFAULT_SETTINGS.allModeMaxWatched
+  );
+  merged.allModePollFloorSeconds = clampSetting(
+    merged.allModePollFloorSeconds,
+    ALL_MODE_PERFORMANCE.minPollFloorSeconds,
+    ALL_MODE_PERFORMANCE.maxPollFloorSeconds,
+    DEFAULT_SETTINGS.allModePollFloorSeconds
+  );
+  merged.allModeBurstSeconds = clampSetting(
+    merged.allModeBurstSeconds,
+    ALL_MODE_PERFORMANCE.minBurstSeconds,
+    ALL_MODE_PERFORMANCE.maxBurstSeconds,
+    DEFAULT_SETTINGS.allModeBurstSeconds
+  );
+  merged.allModeIdleMinutes = clampSetting(
+    merged.allModeIdleMinutes,
+    ALL_MODE_PERFORMANCE.minIdleMinutes,
+    ALL_MODE_PERFORMANCE.maxIdleMinutes,
+    DEFAULT_SETTINGS.allModeIdleMinutes
+  );
+  if (!ALL_MODE_STREAM_TUNING_VALUES.includes(merged.allModeStreamTuning)) {
+    merged.allModeStreamTuning = DEFAULT_SETTINGS.allModeStreamTuning;
+  }
+  if (typeof merged.allModePauseHidden !== 'boolean') {
+    merged.allModePauseHidden = DEFAULT_SETTINGS.allModePauseHidden;
+  }
 }
 
 /**

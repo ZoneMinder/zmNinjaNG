@@ -1245,3 +1245,46 @@ export const LIVE_ACTIVITY = {
   // tighter floor while fanning its poll out across every scope profile.
   allModePollFloorSeconds: 10,
 } as const;
+
+/**
+ * All Servers Performance Bounds
+ *
+ * Range each All-mode tuning knob may be edited within (Settings > All Servers
+ * performance, All mode only). The DEFAULTS are not here: each one stays with
+ * the subsystem it guards (MONTAGE_GRID.allModeMaxStreams,
+ * LIVE_ACTIVITY.allModeMaxWatched / allModePollFloorSeconds,
+ * NOTIFICATIONS_SERVICE.allModeBurstWindowMs), and DEFAULT_SETTINGS references
+ * those. Only the editable range lives here, because a range is a property of
+ * the setting rather than of the subsystem.
+ *
+ * The bounds exist so a stored value can never take a fan-out guardrail
+ * somewhere absurd: the minimums keep every aggregate surface able to show at
+ * least something, and the maximums keep a hand-edited storage blob from
+ * opening hundreds of simultaneous connections across servers (refs #337).
+ */
+export const ALL_MODE_PERFORMANCE = {
+  // Montage tiles (== live streams) across every profile combined. One tile is
+  // still a usable montage; 64 is past what any browser opens happily and is a
+  // ceiling rather than a recommendation.
+  minStreams: 1,
+  maxStreams: 64,
+  // (profile, monitor) pairs the Live Activity page watches. The alarm endpoint
+  // is one request per monitor per poll, so this bounds concurrent requests.
+  minWatched: 1,
+  maxWatched: 128,
+  // Floor under the Live Activity alarm poll interval in All mode. Same range
+  // as the poll interval it floors (LIVE_ACTIVITY.min/maxPollSeconds): a floor
+  // outside that range would either not floor anything or pin every poll to
+  // the ceiling regardless of what the user set.
+  minPollFloorSeconds: LIVE_ACTIVITY.minPollSeconds,
+  maxPollFloorSeconds: LIVE_ACTIVITY.maxPollSeconds,
+  // Window that collapses simultaneous events from several servers into one
+  // summary toast. Below a second there is nothing left to coalesce; above
+  // half a minute a toast arrives long after the event that caused it.
+  minBurstSeconds: 1,
+  maxBurstSeconds: 30,
+  // Idle timeout before All mode stands its connections down. 0 is a real
+  // value here (off), not a floor that disables the feature by accident.
+  minIdleMinutes: 0,
+  maxIdleMinutes: 120,
+} as const;
