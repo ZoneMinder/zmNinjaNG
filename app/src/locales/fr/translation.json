@@ -253,7 +253,9 @@
     "filter_by_server": "Filtrer par serveur",
     "filter_hides_everything": "Le filtre ci-dessus masque tous les serveurs",
     "show_all_servers": "Afficher tous les serveurs",
-    "failed_to_load": "Impossible de charger les événements : {{error}}"
+    "failed_to_load": "Impossible de charger les événements : {{error}}",
+    "delete_permission_denied": "Supprimer des événements exige la permission Events: Edit.",
+    "archive_permission_denied": "Archiver des événements exige la permission Events: Edit."
   },
   "event_detail": {
     "event_id": "ID Événement",
@@ -1235,7 +1237,8 @@
     "storage_server": "Serveur",
     "storage_used": "Utilisé",
     "storage_total": "Total",
-    "no_storage": "Aucun stockage"
+    "no_storage": "Aucun stockage",
+    "run_state_permission_denied": "Changer l'état d'exécution exige la permission System: Edit."
   },
   "eventMontage": {
     "grid_layout_applied": "Grille appliquée : {{cols}} colonnes",

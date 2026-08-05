@@ -16,7 +16,7 @@ import {
   canViewEvents,
   canUseControl,
   canViewGroups,
-  canViewLogs,
+  canViewSystem,
   canChangeRunState,
   parsePermissionLevel,
   type ZmPermissions,
@@ -66,7 +66,7 @@ describe('verdicts before the probe lands', () => {
     expect(canEditEvents(undefined)).toBe('unknown');
     expect(canUseControl(undefined)).toBe('unknown');
     expect(canViewGroups(undefined)).toBe('unknown');
-    expect(canViewLogs(undefined)).toBe('unknown');
+    expect(canViewSystem(undefined)).toBe('unknown');
     expect(canChangeRunState(undefined)).toBe('unknown');
   });
 });
@@ -119,9 +119,9 @@ describe('PTZ control', () => {
 
 describe('system surfaces', () => {
   it('lets a View user read logs but not change the run state', () => {
-    expect(canViewLogs(viewer)).toBe('allowed');
+    expect(canViewSystem(viewer)).toBe('allowed');
     expect(canChangeRunState(viewer)).toBe('denied');
-    expect(canViewLogs(SYSTEM_NONE_PERMISSIONS)).toBe('denied');
+    expect(canViewSystem(SYSTEM_NONE_PERMISSIONS)).toBe('denied');
     expect(canChangeRunState(admin)).toBe('allowed');
   });
 });

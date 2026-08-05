@@ -253,7 +253,9 @@
     "filter_by_server": "按服务器筛选",
     "filter_hides_everything": "上方的筛选条件隐藏了所有服务器",
     "show_all_servers": "显示所有服务器",
-    "failed_to_load": "加载事件失败：{{error}}"
+    "failed_to_load": "加载事件失败：{{error}}",
+    "delete_permission_denied": "删除事件需要 Events: Edit 权限。",
+    "archive_permission_denied": "归档事件需要 Events: Edit 权限。"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -1235,7 +1237,8 @@
     "storage_server": "服务器",
     "storage_used": "已用",
     "storage_total": "总共",
-    "no_storage": "无存储信息"
+    "no_storage": "无存储信息",
+    "run_state_permission_denied": "更改运行状态需要 System: Edit 权限。"
   },
   "eventMontage": {
     "grid_layout_applied": "网格布局应用: {{cols}} 列",

@@ -140,8 +140,8 @@ export function canViewGroups(permissions: ZmPermissions | undefined): Permissio
   return atLeast(permissions?.groups, 'View');
 }
 
-/** Whether `logs.json` and `states.json` will answer. */
-export function canViewLogs(permissions: ZmPermissions | undefined): PermissionVerdict {
+/** Whether the system endpoints answer: `logs.json`, `states.json`, `servers.json`. */
+export function canViewSystem(permissions: ZmPermissions | undefined): PermissionVerdict {
   return atLeast(permissions?.system, 'View');
 }
 

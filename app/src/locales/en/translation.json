@@ -253,7 +253,9 @@
     "filter_by_server": "Filter by server",
     "filter_hides_everything": "Every server is hidden by the filter above",
     "show_all_servers": "Show all servers",
-    "failed_to_load": "Failed to load events: {{error}}"
+    "failed_to_load": "Failed to load events: {{error}}",
+    "delete_permission_denied": "Deleting events needs Events: Edit permission.",
+    "archive_permission_denied": "Archiving events needs Events: Edit permission."
   },
   "event_detail": {
     "event_id": "Event ID",
@@ -1235,7 +1237,8 @@
     "storage_server": "Server",
     "storage_used": "Used",
     "storage_total": "Total",
-    "no_storage": "No storage info"
+    "no_storage": "No storage info",
+    "run_state_permission_denied": "Changing the run state needs System: Edit permission."
   },
   "eventMontage": {
     "grid_layout_applied": "Grid layout applied: {{cols}} columns",

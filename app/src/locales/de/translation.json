@@ -253,7 +253,9 @@
     "filter_by_server": "Nach Server filtern",
     "filter_hides_everything": "Alle Server sind durch den Filter oben ausgeblendet",
     "show_all_servers": "Alle Server anzeigen",
-    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}"
+    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}",
+    "delete_permission_denied": "Zum Löschen von Ereignissen wird Events: Edit benötigt.",
+    "archive_permission_denied": "Zum Archivieren von Ereignissen wird Events: Edit benötigt."
   },
   "event_detail": {
     "event_id": "Ereignis ID",
@@ -1235,7 +1237,8 @@
     "storage_server": "Server",
     "storage_used": "Belegt",
     "storage_total": "Gesamt",
-    "no_storage": "Kein Speicherinfo"
+    "no_storage": "Kein Speicherinfo",
+    "run_state_permission_denied": "Zum Ändern des Laufzustands wird System: Edit benötigt."
   },
   "eventMontage": {
     "grid_layout_applied": "Rasterlayout angewendet: {{cols}} Spalten",

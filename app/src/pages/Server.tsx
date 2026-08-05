@@ -37,6 +37,9 @@ import { useTranslation } from 'react-i18next';
 import { getServers, getLoad, getDiskPercent, getDaemonCheck, getStorages } from '../api/server';
 import { getServerTimeZone } from '../api/time';
 import { getStates, changeState } from '../api/states';
+import { usePermissions } from '../hooks/usePermissions';
+import { canChangeRunState, canViewSystem } from '../lib/permissions/zm-permissions';
+import { useDeniedControl } from '../hooks/useDeniedControl';
 import { getSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
 import { log, LogLevel } from '../lib/logger';
@@ -153,6 +156,18 @@ export default function Server() {
       changeStateMutation.mutate(effectiveAction);
     }
   };
+
+  // Changing the run state needs System: Edit (StatesController). Greyed rather
+  // than hidden: a System View account may legitimately read the current state,
+  // and the greyed button is what tells an administrator why it is inert
+  // (refs #344).
+  const { permissions } = usePermissions(currentProfile?.id);
+  const applyProps = useDeniedControl({
+    denied: canChangeRunState(permissions) === 'denied',
+    message: t('server.run_state_permission_denied'),
+    onClick: handleApply,
+    className: 'flex items-center gap-2',
+  });
 
   const formatMemory = (bytes: number | undefined) => {
     if (!bytes) return t('common.unknown');
@@ -516,7 +531,11 @@ export default function Server() {
       )}
 
       {/* ZoneMinder Control */}
-      <Card>
+      {/* ZoneMinder control. states.json needs System View, so an account
+          without it has nothing to show here rather than an empty picker
+          (refs #344). */}
+      {canViewSystem(permissions) !== 'denied' && (
+      <Card data-testid="server-zm-control-card">
         <CardHeader>
           <div className="flex items-center gap-2">
             <PlayCircle className="h-5 w-5 text-primary" />
@@ -590,9 +609,8 @@ export default function Server() {
                   </SelectContent>
                 </Select>
                 <Button
-                  onClick={handleApply}
+                  {...applyProps}
                   disabled={!effectiveAction || changeStateMutation.isPending}
-                  className="flex items-center gap-2"
                   data-testid="server-apply-button"
                 >
                   {changeStateMutation.isPending ? (
@@ -613,6 +631,7 @@ export default function Server() {
           </div>
         </CardContent>
       </Card>
+      )}
     </PageContainer>
   );
 }

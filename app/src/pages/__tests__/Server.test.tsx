@@ -10,6 +10,12 @@ import { getSession } from '../../services/sessions';
 import { getServers } from '../../api/server';
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
+// The permission probe reaches the profile store, which this suite's session
+// mock cannot satisfy; permissions are not what it tests (refs #344).
+vi.mock('../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: { system: 'Edit' }, isLoading: false }),
+}));
+
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
 }));
