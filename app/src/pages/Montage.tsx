@@ -246,7 +246,7 @@ export default function Montage() {
   const showToolbar = settings.montageShowToolbar;
 
   // Fullscreen mode. currentProfileId (not currentProfile.id): the real
-  // profile id in single mode, ALL_PROFILES_ID in All mode, where
+  // profile id in single mode, the active aggregate's id otherwise, where
   // currentProfile itself is null (refs #337).
   const { isFullscreen, handleToggleFullscreen } =
     useFullscreenMode({

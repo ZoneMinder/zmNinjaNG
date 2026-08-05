@@ -25,9 +25,9 @@ export function NotificationBadge() {
   const scope = useProfileScope();
   const isAllMode = scope?.mode === 'all';
   const unreadCount = useNotificationStore((state) => {
-    // All mode: sum every scope profile's own bucket. The ALL_PROFILES_ID
-    // sentinel bucket is never written to (refs #337), so it is never read
-    // here either - only real profile ids.
+    // Aggregating: sum every scope profile's own bucket. No aggregate's
+    // bucket is ever written to (refs #337), so none is ever read here
+    // either - only real profile ids.
     if (isAllMode) {
       return scope.profiles.reduce(
         (sum, p) => sum + (state.profileEvents[p.id] || []).filter((e) => !e.read).length,

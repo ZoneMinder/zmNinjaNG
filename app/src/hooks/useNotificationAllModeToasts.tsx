@@ -4,16 +4,16 @@
  * All-mode toast display (refs #337). Each connected profile's events honor
  * that profile's OWN showToasts/playSound settings - never the app's
  * "current" profile (there isn't one while aggregating: useCurrentProfile
- * resolves to null for the ALL_PROFILES_ID sentinel).
+ * resolves to null for any aggregate id).
  *
  * Events arriving within the burst window of each other (allModeBurstSeconds
- * in the ALL settings bucket, Settings > All Servers performance) collapse
+ * in the active aggregate's settings bucket, Settings > performance) collapse
  * into one summary toast instead of one per event, so aggregating several
  * busy servers doesn't flood the screen. A single event in the window still
  * shows the normal per-event toast. At most one notification sound plays per
  * window.
  *
- * The all-mode notifications setting (settings store, ALL_PROFILES_ID bucket)
+ * The all-mode notifications setting (settings store, aggregate bucket)
  * 'muted' value suppresses toasts and sound entirely; badge counts and
  * history are unaffected (addEvent, in stores/notifications.ts, always runs
  * regardless). 'off' means no connector ever mounts, so this hook simply

@@ -7,11 +7,11 @@
  * monitor exclusion (Settings > hidden monitors), which hides a monitor
  * everywhere.
  *
- * Two-tier in All mode (refs #337, AGENTS.project.md's Aggregation
+ * Two-tier while aggregating (refs #337, AGENTS.project.md's Aggregation
  * contract): poll/dwell/tiles are view-level preferences and live in the
- * shared ALL bucket (`profileId` below - the real profile id in single
- * mode, ALL_PROFILES_ID in All mode). The ignore list is a per-server DATA
- * preference and has no meaning in the ALL bucket, so it edits whichever
+ * active aggregate's own bucket (`profileId` below - the real profile id in
+ * single mode, the aggregate's id otherwise). The ignore list is a per-server
+ * DATA preference and has no meaning in an aggregate bucket, so it edits whichever
  * profile is picked via the shared ProfilePicker (`scopeProfiles`), never
  * `profileId` itself. Single mode passes no `scopeProfiles`, so the picker
  * never renders and the ignore list falls back to editing `profileId`
@@ -36,7 +36,7 @@ export interface LiveActivitySettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** View-level bucket for poll/dwell/tiles: the real profile id in single
-   *  mode, ALL_PROFILES_ID in All mode. */
+   *  mode, the active aggregate's id while aggregating. */
   profileId: ProfileId;
   /** Single mode: this profile's monitors, and what the ignore list reads/
    *  writes `profileId` against directly. Ignored when `scopeProfiles` is

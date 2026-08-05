@@ -508,9 +508,9 @@ export function AskPanel() {
         sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
-      // getSession(profileId), not getCurrentSession(): under the All-mode
-      // ALL_PROFILES_ID sentinel there is no session for the sentinel
-      // itself, so getCurrentSession() throws (swallowed below, silently
+      // getSession(profileId), not getCurrentSession(): an aggregate id
+      // names no server, so there is no session for it and
+      // getCurrentSession() throws (swallowed below, silently
       // dropping the version from the system prompt every turn). profileId
       // here is the resolved pinned/current profile, matching every other
       // read in this block (refs #337).

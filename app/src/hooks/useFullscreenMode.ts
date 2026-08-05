@@ -8,12 +8,12 @@
  *
  * Controls stay visible in fullscreen; there is no auto-hide logic here.
  *
- * Takes a bucket id, not a `Profile`: in All mode there is no `Profile`
- * object (useCurrentProfile resolves `currentProfile` to null for the
- * ALL_PROFILES_ID sentinel), but the flag is still a view-level preference
- * that belongs in the shared ALL bucket, same as every other All-mode
+ * Takes a bucket id, not a `Profile`: while aggregating there is no `Profile`
+ * object (useCurrentProfile resolves `currentProfile` to null for any
+ * aggregate id), but the flag is still a view-level preference that belongs
+ * in the active aggregate's own bucket, same as every other aggregate
  * view-level setting. Callers pass the raw currentProfileId - the real
- * profile id in single mode, ALL_PROFILES_ID in All mode - rather than
+ * profile id in single mode, the aggregate's id otherwise - rather than
  * `currentProfile?.id`, which is null exactly when this would otherwise be
  * needed (refs #337).
  */

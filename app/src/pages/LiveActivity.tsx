@@ -57,9 +57,9 @@ import { PageContainer } from '../components/common/PageContainer';
 export default function LiveActivity() {
   const navigate = useNavigate();
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
-  // The raw store value: the real profile id in single mode, ALL_PROFILES_ID
-  // in All mode (where currentProfile above is null). View-level writes that
-  // must still work in All mode - the grid column count, fullscreen, the
+  // The raw store value: the real profile id in single mode, the active
+  // aggregate's id otherwise (where currentProfile above is null). View-level
+  // writes that must still work while aggregating - the grid column count, fullscreen, the
   // settings dialog's own bucket - target this id rather than
   // currentProfile?.id, same pattern Montage.tsx uses (refs #337).
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
