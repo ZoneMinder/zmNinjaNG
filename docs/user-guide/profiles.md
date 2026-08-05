@@ -48,11 +48,11 @@ Preferences are two-tier: All Servers mode has its own settings (grid layout, fe
 
 Streaming Mode gets a third option while aggregating. An **All Servers Streaming Mode** row appears at the top of Settings, above the per-server picker: leave it on **Per server** and each server's tiles keep following that server's own Streaming Mode, or pick **Streaming** or **Snapshot** to impose one choice on every tile from every server. Per server is the default, so switching into All Servers mode never changes how anything streams until you ask it to.
 
-## Server Groups
+## Virtual Profile Groups
 
-All Servers mode combines every enabled profile. A group combines the ones you pick. Everything All Servers mode does, a group does for its members only: the same aggregated Monitors, Montage, Events, Timeline, Dashboard and Live Activity, the same server chips, the same per-server pickers on the screens that need one server.
+All Servers mode combines every enabled profile. A virtual profile group combines the ones you pick. Everything All Servers mode does, a group does for its members only: the same aggregated Monitors, Montage, Events, Timeline, Dashboard and Live Activity, the same server chips, the same per-server pickers on the screens that need one server.
 
-Once you have two or more enabled profiles, a **New group** button appears under the All Servers card. Give the group a name and tick the servers it holds. A group needs at least one server, and its name has to be free: no other group and no profile can already be using it, since both appear side by side in the profile switcher. Groups can only hold profiles, never other groups.
+Once you have two or more enabled profiles, a **New Virtual Profile Group** button appears under the All Servers card. Give the group a name and tick the servers it holds. A group needs at least one server, and its name has to be free: no other group and no profile can already be using it, since both appear side by side in the profile switcher. Groups can only hold profiles, never other groups.
 
 Each group gets its own card below the All Servers card, showing how many servers it holds. Tap the card to switch into the group, or use its edit and delete icons. The profile switcher lists groups under the All Servers entry, both behind the same two-enabled-profiles rule as the All Servers card itself.
 

@@ -2636,7 +2636,7 @@ where that list comes from - the same per-profile React Query key
 profile whose monitors are already cached.
 
 All Servers is one of two aggregates, and this flow is the other one's too. A
-virtual profile (a named group of profiles, ``VirtualProfile`` in
+virtual profile (a virtual profile group in the UI, ``VirtualProfile`` in
 ``api/types.ts``) is stored on the profile store and gets an id shaped
 ``__virtual_<uuid>``, which is what ``isVirtualProfileId`` tests and what
 ``isAggregateProfileId`` folds together with the sentinel. Every step below
@@ -2647,8 +2647,8 @@ is filtered to the group's members (dropping any that were deleted or
 disabled) rather than being every enabled profile, and the ``'all'`` arm
 carries ``aggregateId`` and ``aggregateName`` so surfaces that name the
 aggregate can say which one. Nothing downstream asks which aggregate it is
-aggregating, which is why generalizing All Servers to named groups touched no
-consumer in this flow.
+aggregating, which is why generalizing All Servers to virtual profile groups
+touched no consumer in this flow.
 
 .. mermaid::
 
