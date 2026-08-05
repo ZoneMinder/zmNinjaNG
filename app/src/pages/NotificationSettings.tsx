@@ -82,8 +82,9 @@ export default function NotificationSettings() {
   // to write back to.
   const allModeNotifications = scope?.settings.allModeNotifications ?? 'live';
   const aggregateId = scope?.mode === 'all' ? scope.aggregateId : null;
-  // What the row calls itself: the group's name, or the localized All Servers
-  // label for the sentinel, which has none stored.
+  // What the row calls itself: the group's name. The All Servers fallback is
+  // legacy - only the retired sentinel has no stored name, and it is migrated
+  // away on rehydrate (refs #337).
   const aggregateName =
     (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
   const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);

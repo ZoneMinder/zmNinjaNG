@@ -588,10 +588,15 @@ export function asProfileId(id: string): ProfileId {
 }
 
 /**
- * Sentinel profile id for the virtual "All Profiles" aggregate view. Never a
+ * Sentinel profile id for the retired "All Profiles" aggregate view. Never a
  * real server: it names no server, and services/sessions.ts's getSession
  * rejects it rather than resolving it to a profile. Never sent to a server.
- * Refs #337.
+ *
+ * LEGACY: no surface selects it any more - virtual profile groups replaced it,
+ * and switchProfile rejects it. It survives so the guards that keep an
+ * aggregate id out of session/token/notification paths still recognize a
+ * stored one, and so services/profile-initialization.ts can migrate it away on
+ * rehydrate. Nothing new should reference it. Refs #337.
  */
 export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
 

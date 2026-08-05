@@ -540,7 +540,29 @@ describe('Profile Store', () => {
       expect(queryClient.getQueryData(['monitors', 'p2'])).toEqual(['m2']);
     });
 
-    it('switching to ALL_PROFILES_ID sets the sentinel without building a session or running bootstrap (refs #337)', async () => {
+    it('switching to a group sets its id without building a session or running bootstrap (refs #337)', async () => {
+      useProfileStore.setState({
+        profiles: [
+          { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
+          { id: asProfileId('p2'), name: 'Away', apiUrl: 'http://b', portalUrl: 'http://b', cgiUrl: 'http://b/cgi-bin', isDefault: false, createdAt: 2 },
+        ],
+        currentProfileId: asProfileId('p1'),
+      });
+      const group = useProfileStore
+        .getState()
+        .addVirtualProfile('Upstairs', [asProfileId('p1'), asProfileId('p2')]);
+
+      await useProfileStore.getState().switchProfile(group);
+
+      expect(useProfileStore.getState().currentProfileId).toBe(group);
+      expect(hasSession(group)).toBe(false);
+      expect(createStoreApiClient).not.toHaveBeenCalled();
+    });
+
+    // The All Servers sentinel is retired: nothing offers it, and a caller
+    // that still asks for it is asking for a selection the app cannot render
+    // its way out of (refs #337).
+    it('rejects the retired All Servers sentinel and keeps the current profile', async () => {
       useProfileStore.setState({
         profiles: [
           { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
@@ -548,11 +570,8 @@ describe('Profile Store', () => {
         currentProfileId: asProfileId('p1'),
       });
 
-      await useProfileStore.getState().switchProfile(ALL_PROFILES_ID);
-
-      expect(useProfileStore.getState().currentProfileId).toBe(ALL_PROFILES_ID);
-      expect(hasSession(ALL_PROFILES_ID)).toBe(false);
-      expect(createStoreApiClient).not.toHaveBeenCalled();
+      await expect(useProfileStore.getState().switchProfile(ALL_PROFILES_ID)).rejects.toThrow();
+      expect(useProfileStore.getState().currentProfileId).toBe(asProfileId('p1'));
     });
   });
 
@@ -583,9 +602,12 @@ describe('Profile Store', () => {
       expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
     });
 
-    it('switching to All mode drops the queue', async () => {
+    it('switching to a group drops the queue', async () => {
       twoProfiles();
-      await useProfileStore.getState().switchProfile(ALL_PROFILES_ID);
+      const group = useProfileStore
+        .getState()
+        .addVirtualProfile('Queue Group', [asProfileId('p1'), asProfileId('p2')]);
+      await useProfileStore.getState().switchProfile(group);
       expect(useDeleteSelectionStore.getState().selectedKeys).toEqual([]);
     });
 

@@ -2,7 +2,9 @@
  * useAggregateLabel
  *
  * The name to show for any aggregate id: a group's own stored name, or the
- * localized "All Servers" for the built-in sentinel, which has no stored name.
+ * localized "All Servers" for the retired sentinel, which has no stored name.
+ * That arm is legacy - the sentinel is unreachable and migrated away on
+ * rehydrate - and stays so a pre-migration frame names what it is showing.
  *
  * Resolves by id rather than from the active scope because the callers name an
  * aggregate they are not in yet - the switcher and the Profiles page both

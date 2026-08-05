@@ -12,7 +12,7 @@
  * 5. Set initialization flags to allow UI to render
  */
 
-import { isAggregateProfileId, type Profile, type ProfileId } from '../api/types';
+import { ALL_PROFILES_ID, isAggregateProfileId, type Profile, type ProfileId } from '../api/types';
 import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
@@ -193,11 +193,30 @@ export async function handleProfileRehydration(
     return;
   }
 
-  // Case 2: An aggregate id - the All Profiles sentinel or a virtual profile.
-  // No single profile to bootstrap. Each real profile's own aggregate query
-  // (useScopedMonitors) self-heals its own auth on first fetch, so there is
-  // nothing to do here beyond marking the app initialized. Without this the
-  // id falls into Case 3's "profile not found" ERROR branch. Refs #337.
+  // Case 2a: the retired All Servers sentinel. Virtual profile groups replaced
+  // it, so no surface can select it any more - a persisted one is state from
+  // before the retirement. Drop the selection (the app lands on profile
+  // selection, where the user picks a server or a group) and delete the two
+  // buckets that selection owned, which nothing can reach again. Guarded on
+  // the sentinel so a user who never used All mode sees no writes at all, and
+  // idempotent: the reset is persisted, so the next load takes Case 1.
+  // Refs #337.
+  if (state.currentProfileId === ALL_PROFILES_ID) {
+    safeLog('Retired All Servers selection found on load; resetting to no profile', LogLevel.INFO);
+    storeSet({ currentProfileId: null });
+    const { useSettingsStore } = await import('../stores/settings');
+    useSettingsStore.getState().removeProfileSettings(ALL_PROFILES_ID);
+    const { useDashboardStore } = await import('../stores/dashboard');
+    useDashboardStore.getState().clearProfile(ALL_PROFILES_ID);
+    setInitializationState(storeSet, false);
+    return;
+  }
+
+  // Case 2b: A virtual profile id. No single profile to bootstrap. Each real
+  // profile's own aggregate query (useScopedMonitors) self-heals its own auth
+  // on first fetch, so there is nothing to do here beyond marking the app
+  // initialized. Without this the id falls into Case 3's "profile not found"
+  // ERROR branch. Refs #337.
   if (isAggregateProfileId(state.currentProfileId)) {
     safeLog('App loading in aggregate mode; skipping single-profile bootstrap', LogLevel.INFO);
     setInitializationState(storeSet, false);

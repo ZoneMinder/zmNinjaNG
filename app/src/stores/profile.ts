@@ -15,7 +15,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile, ProfileId, VirtualProfile } from '../api/types';
-import { asProfileId, isAggregateProfileId, isVirtualProfileId, mintVirtualProfileId } from '../api/types';
+import { ALL_PROFILES_ID, asProfileId, isAggregateProfileId, isVirtualProfileId, mintVirtualProfileId } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { isProfileNameAvailable } from '../lib/profile/profile-validation';
@@ -477,24 +477,27 @@ export const useProfileStore = create<ProfileState>()(
          * isolation primitive, which keeps other profiles' data warm for
          * All mode. Includes rollback logic if switching fails.
          *
-         * An aggregate id - the All Servers sentinel or a virtual profile -
-         * names no real server: it skips the lookup below along with
-         * session/bootstrap/lastUsed. Leaving an aggregate for a real
-         * profile has no single outgoing profile to target, so it quits
-         * every stream via the same no-arg call (refs #337).
+         * An aggregate id - a virtual profile group - names no real server:
+         * it skips the lookup below along with session/bootstrap/lastUsed.
+         * Leaving an aggregate for a real profile has no single outgoing
+         * profile to target, so it quits every stream via the same no-arg
+         * call (refs #337).
          */
         switchProfile: async (id) => {
           if (isAggregateProfileId(id)) {
+            // The All Servers sentinel is retired: groups replaced it and no
+            // surface offers it, so a caller naming it is naming a selection
+            // that can no longer be reached. Rejected rather than accepted,
+            // which would re-create the state rehydration just migrated away.
+            if (id === ALL_PROFILES_ID) {
+              throw new Error(`Profile ${id} is retired`);
+            }
             // A virtual id has an entity behind it, so it can be stale
             // (deleted in another tab, hand-edited storage). Reject it the
             // same way an unknown real profile id is rejected, rather than
-            // selecting a group that resolves to nothing. The ALL sentinel
-            // is built in and always resolvable.
+            // selecting a group that resolves to nothing.
             const aggregateId = asProfileId(id);
-            if (
-              isVirtualProfileId(aggregateId) &&
-              !(get().virtualProfiles ?? []).some((v) => v.id === aggregateId)
-            ) {
+            if (!(get().virtualProfiles ?? []).some((v) => v.id === aggregateId)) {
               throw new Error(`Profile ${id} not found`);
             }
 

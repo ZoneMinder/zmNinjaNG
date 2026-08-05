@@ -109,9 +109,11 @@ function _isProfileActive(state: Pick<NotificationState, 'currentProfileId' | 'c
 }
 
 /** Whether the app's current scope still owns `profileId`'s connection: it IS
- *  that profile, it is All Servers (which spans every enabled profile), or it
- *  is a virtual profile listing it as a member. Anything else means no
- *  connector is left behind the socket. Refs #337. */
+ *  that profile, or it is a virtual profile listing it as a member. Anything
+ *  else means no connector is left behind the socket. The All Servers clause
+ *  is legacy: the sentinel is retired and migrated away on rehydrate, so it
+ *  can only be current for the frames before that runs - dropping the clause
+ *  would tear down live connections in those frames. Refs #337. */
 function _aggregateOwnsConnection(appCurrentProfileId: string, profileId: string): boolean {
   if (appCurrentProfileId === profileId || appCurrentProfileId === ALL_PROFILES_ID) return true;
   if (!isVirtualProfileId(appCurrentProfileId)) return false;

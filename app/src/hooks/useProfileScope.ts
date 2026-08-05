@@ -6,11 +6,16 @@
  * consumers fan out over `scope.profiles` identically in both modes, with no
  * branches.
  *
- * There are two kinds of aggregate and the mode does not distinguish them:
- * All Servers (the ALL_PROFILES_ID sentinel, every enabled profile) and a
- * virtual profile (a stored, named group, its own members). Every consumer
- * asks "am I aggregating", never "which aggregate", so both resolve to
- * `mode: 'all'` and differ only in `aggregateId`/`aggregateName`. Refs #337.
+ * An aggregate is a virtual profile: a stored, named group over its own
+ * members. Consumers ask "am I aggregating", never "which aggregate", so it
+ * resolves to `mode: 'all'` with its own `aggregateId`/`aggregateName`.
+ *
+ * The retired All Servers sentinel still resolves here (every enabled
+ * profile, no stored name). It is unreachable through the UI and migrated
+ * away on rehydrate, so this arm only fires for a stored id that has not been
+ * through the migration yet - state written by another tab running an older
+ * build, say. Keeping it means such a frame renders an aggregate rather than
+ * an empty screen. Refs #337.
  *
  * IMPORTANT: mirrors useCurrentProfile's selector discipline: stable
  * primitives from the profile store, useShallow for arrays/objects, and

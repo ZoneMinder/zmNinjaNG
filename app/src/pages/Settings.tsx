@@ -34,8 +34,9 @@ export default function Settings() {
   // aggregate bucket makes no sense for per-server data. Picker defaults to
   // the first profile in scope (refs #337).
   const scope = useProfileScope();
-  // What the aggregate sections call themselves. A group answers with its own
-  // name; All Servers has none stored, so it uses the localized label.
+  // What the aggregate sections call themselves: the group's own name. The
+  // All Servers fallback is legacy - only the retired sentinel has no stored
+  // name, and it is migrated away on rehydrate (refs #337).
   const aggregateName =
     (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
 
