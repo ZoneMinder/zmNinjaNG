@@ -559,10 +559,11 @@ describe('Profile Store', () => {
       expect(createStoreApiClient).not.toHaveBeenCalled();
     });
 
-    // The All Servers sentinel is retired: nothing offers it, and a caller
-    // that still asks for it is asking for a selection the app cannot render
-    // its way out of (refs #337).
-    it('rejects the retired All Servers sentinel and keeps the current profile', async () => {
+    // The All Servers sentinel is retired: nothing offers it, and nothing
+    // stores it either, so it fails the same membership check any unknown
+    // aggregate id fails. The message is asserted because it is what
+    // discriminates against a branch that merely happens to throw (refs #337).
+    it('rejects the retired sentinel like any unknown id, keeping the current profile', async () => {
       useProfileStore.setState({
         profiles: [
           { id: asProfileId('p1'), name: 'Home', apiUrl: 'http://a', portalUrl: 'http://a', cgiUrl: 'http://a/cgi-bin', isDefault: true, createdAt: 1 },
@@ -570,7 +571,9 @@ describe('Profile Store', () => {
         currentProfileId: asProfileId('p1'),
       });
 
-      await expect(useProfileStore.getState().switchProfile(ALL_PROFILES_ID)).rejects.toThrow();
+      await expect(useProfileStore.getState().switchProfile(ALL_PROFILES_ID)).rejects.toThrow(
+        `Profile ${ALL_PROFILES_ID} not found`
+      );
       expect(useProfileStore.getState().currentProfileId).toBe(asProfileId('p1'));
     });
   });

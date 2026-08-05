@@ -15,7 +15,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile, ProfileId, VirtualProfile } from '../api/types';
-import { ALL_PROFILES_ID, asProfileId, isAggregateProfileId, isVirtualProfileId, mintVirtualProfileId } from '../api/types';
+import { asProfileId, isAggregateProfileId, isVirtualProfileId, mintVirtualProfileId } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { isProfileNameAvailable } from '../lib/profile/profile-validation';
@@ -485,17 +485,12 @@ export const useProfileStore = create<ProfileState>()(
          */
         switchProfile: async (id) => {
           if (isAggregateProfileId(id)) {
-            // The All Servers sentinel is retired: groups replaced it and no
-            // surface offers it, so a caller naming it is naming a selection
-            // that can no longer be reached. Rejected rather than accepted,
-            // which would re-create the state rehydration just migrated away.
-            if (id === ALL_PROFILES_ID) {
-              throw new Error(`Profile ${id} is retired`);
-            }
-            // A virtual id has an entity behind it, so it can be stale
+            // An aggregate id has an entity behind it, so it can be stale
             // (deleted in another tab, hand-edited storage). Reject it the
             // same way an unknown real profile id is rejected, rather than
-            // selecting a group that resolves to nothing.
+            // selecting a group that resolves to nothing. The retired All
+            // Servers sentinel has no entity at all, so it falls out here
+            // too, which is how it stays unreachable (refs #337).
             const aggregateId = asProfileId(id);
             if (!(get().virtualProfiles ?? []).some((v) => v.id === aggregateId)) {
               throw new Error(`Profile ${id} not found`);
