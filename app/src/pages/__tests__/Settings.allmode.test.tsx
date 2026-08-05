@@ -113,6 +113,25 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, { tvMode: true });
   });
 
+  // The other side of the same helper: single mode still writes the real
+  // profile's own bucket, so the aggregate resolution never leaks into it.
+  it('AppearanceSection writes to the real profile in single mode', async () => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: profileA, isAllMode: false, hasProfile: true,
+      settings: baseSettings as never,
+    });
+    vi.mocked(useProfileScope).mockReturnValue({
+      mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
+    });
+
+    render(<Settings />);
+
+    await screen.findByTestId('settings-tv-mode');
+    fireEvent.click(screen.getByTestId('settings-tv-mode'));
+
+    expect(updateProfileSettings).toHaveBeenCalledWith(profileA.id, { tvMode: true });
+  });
+
   it('shows the picker above the server-scoped block, defaulted to the first profile', () => {
     render(<Settings />);
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();

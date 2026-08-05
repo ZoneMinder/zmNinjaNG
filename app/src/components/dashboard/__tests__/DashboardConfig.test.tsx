@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { DashboardConfig } from '../DashboardConfig';
+import { mintVirtualProfileId } from '../../../api/types';
 
 const addWidget = vi.fn();
 
@@ -9,17 +10,12 @@ vi.mock('../../../stores/dashboard', () => ({
     selector({ addWidget }),
 }));
 
+// Mutable so a test can put the app in a group and check which bucket the
+// new widget is filed under.
+let profileState: Record<string, unknown> = {};
+
 vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { profiles: any[]; currentProfileId: string }) => unknown) =>
-    selector({
-      profiles: [
-        {
-          id: 'profile-1',
-          name: 'Home',
-        },
-      ],
-      currentProfileId: 'profile-1',
-    }),
+  useProfileStore: (selector: (state: Record<string, unknown>) => unknown) => selector(profileState),
 }));
 
 vi.mock('zustand/react/shallow', () => ({
@@ -46,6 +42,11 @@ vi.mock('react-i18next', () => ({
 describe('DashboardConfig', () => {
   beforeEach(() => {
     addWidget.mockClear();
+    profileState = {
+      profiles: [{ id: 'profile-1', name: 'Home' }],
+      currentProfileId: 'profile-1',
+      virtualProfiles: [],
+    };
   });
 
   it('adds a monitor widget when a monitor is selected', () => {
@@ -82,5 +83,24 @@ describe('DashboardConfig', () => {
         settings: { monitorId: undefined, eventCount: 5 },
       })
     );
+  });
+
+  // Each aggregate keeps its own dashboard, so a widget added while a group is
+  // active is filed under the group, not the All Servers sentinel (refs #337).
+  it("files a new widget under the active group's own bucket", () => {
+    const group = mintVirtualProfileId();
+    profileState = {
+      profiles: [{ id: 'profile-1', name: 'Home' }],
+      currentProfileId: group,
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
+    };
+
+    render(<DashboardConfig />);
+
+    fireEvent.click(screen.getByTestId('add-widget-trigger'));
+    fireEvent.click(screen.getByTestId('widget-type-events'));
+    fireEvent.click(screen.getByTestId('widget-add-button'));
+
+    expect(addWidget).toHaveBeenCalledWith(group, expect.objectContaining({ type: 'events' }));
   });
 });
