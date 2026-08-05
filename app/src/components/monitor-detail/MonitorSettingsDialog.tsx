@@ -210,7 +210,7 @@ export function MonitorSettingsDialog({
           </TabsList>
 
           {/* Tab: Capture & Recording */}
-          <TabsContent value="capture" className="mt-4 space-y-0 overflow-y-auto">
+          <TabsContent value="capture" className="mt-4 space-y-0 overflow-y-auto px-1 -mx-1">
             {is138Plus ? (
               <>
                 <SettingsRow label={t('monitor_detail.capturing_label')} testId="settings-capturing-row" editable>
@@ -365,7 +365,7 @@ export function MonitorSettingsDialog({
           </TabsContent>
 
           {/* Tab: Video */}
-          <TabsContent value="video" className="mt-4 space-y-0 overflow-y-auto">
+          <TabsContent value="video" className="mt-4 space-y-0 overflow-y-auto px-1 -mx-1">
             {/* App-local per-monitor preferences. Applied on toggle, never part
                 of the ZM save payload below. */}
             <MonitorAppPreferences monitor={monitor} profileId={profileId} />

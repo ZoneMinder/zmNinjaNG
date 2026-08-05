@@ -47,7 +47,11 @@ export function MonitorRestrictedSettings({
   const isControllable = monitor.Controllable === '1' || monitor.Controllable === 'true';
 
   return (
-    <div className="mt-2 overflow-y-auto" data-testid="monitor-settings-readonly">
+    // px-1 -mx-1: a scroll container computes overflow-x to auto, and the
+    // switches sit flush right with a 4px focus ring outside their own box.
+    // The padding reserves room for it; the negative margin keeps the rows
+    // aligned where they were.
+    <div className="mt-2 overflow-y-auto px-1 -mx-1" data-testid="monitor-settings-readonly">
       <MonitorAppPreferences monitor={monitor} profileId={profileId} />
 
       {onCycleSecondsChange && cycleSeconds !== undefined && (
