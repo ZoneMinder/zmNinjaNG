@@ -1,9 +1,32 @@
-# All Profiles: a retrospective on the agent workflow
+# All Profiles to virtual profile groups: a retrospective on the agent workflow
 
 Written 2026-08-04 by the orchestrating agent, at the maintainer's
-request. It evaluates the agent framework this repository uses, against a
-baseline of out-of-the-box Claude Code, using the All Profiles feature as
-the test case. Out-of-the-box Claude Code can and does spawn subagents on
+request; rewritten and extended 2026-08-05 after the maintainer asked for
+substantially more depth and after two further programs ran under the
+same process. It evaluates the agent framework this repository uses,
+against a baseline of out-of-the-box Claude Code, using three consecutive
+programs as the test case:
+
+1. **All Profiles** (Aug 2-3): the original feature - one virtual "All
+   Servers" mode aggregating every configured server.
+2. **The hardening program** (Aug 4): nine tasks turning every All-mode
+   surface fully functional - a crash fix, ~20 dead controls, filter
+   persistence, palette/shortcut/tag fan-outs, a user-visible performance
+   settings section, five connection optimizations, and a 20-item
+   cleanup.
+3. **Virtual profile groups** (Aug 4-5): the generalization - named
+   groups of servers replace the single All Servers mode, which was then
+   retired at the maintainer's direction, with a migration for existing
+   users. Merged to main via
+   [#338](https://github.com/ZoneMinder/zmNinjaNg/pull/338) and
+   [#339](https://github.com/ZoneMinder/zmNinjaNg/pull/339) on Aug 5.
+
+Sections 1-3 cover the first program in the depth the original report
+had. Sections 4 and 5 are new: they walk the second and third programs
+incident by incident, because that is where the process was tested
+hardest - by then the easy defects were gone and what remained was
+lifecycle and concurrency work, plus two agent deaths, a usage-limit
+kill, and a shared-checkout race that all had to be recovered live. Out-of-the-box Claude Code can and does spawn subagents on
 its own; what it lacks is everything this repository adds on top: written
 rules and contracts, mandated independent review, mechanical gates, and a
 recorded process. The comparison is discipline versus discretion, not
@@ -46,32 +69,38 @@ fix gets a regression test, and whether an invariant survives a refactor
 all depend on the model's judgment in the moment, with nothing written
 down to hold it and nothing mechanical to stop a bad commit.
 
-A note on method. This report is compiled from two sources: the git history
-of the two feature branches, and the orchestrator's own session record of
-every dispatch, review, and fix round. Where I cite a commit, the link is
-real and checked. Where I make a judgment, I say it is a judgment. Where I
-have no evidence one way or the other, I say that.
+A note on method. This report is compiled from two sources: the git
+history (now on main; both merges preserved every commit hash) and the
+orchestrator's own session record of every dispatch, review, and fix
+round. Where I cite a commit, the link is real and checked - every hash
+in this report was verified with `git cat-file` before citing. Where I
+quote a test failure or a probe result, it is quoted from the agent
+report that produced it, not reconstructed. Where I make a judgment, I
+say it is a judgment. Where I have no evidence one way or the other, I
+say that.
 
 All commit links are to `github.com/ZoneMinder/zmNinjaNg`.
 
 ## Verdict by pillar
 
-Details and evidence follow in sections 3 and 4; this table is the summary.
+Details and evidence follow in sections 3-6; this table is the summary.
 "Helped" means it produced outcomes out-of-the-box Claude Code would
-probably have missed, with incidents to show for it.
+probably have missed, with incidents to show for it. Counts cover all
+three programs.
 
 | Pillar | What it adds over standard Claude | Verdict |
 |---|---|---|
-| Independent review loop (separate reviewer per task, re-review per fix round) | A second context re-derives correctness instead of the author grading their own work | Helped; largest single effect: 10 user-visible defects caught before merge (3.1) |
-| Mechanical gates (contract tests, lint ratchet, instruction word budget) | Invariants enforced by failing tests, not by memory or goodwill | Helped; blocked real drift 4+ times, including against the orchestrator (3.2, 3.7) |
-| Architecture contracts in [AGENTS.project.md](../../../AGENTS.project.md) | Written invariants quoted in every brief and review | Helped; mostly by prevention, visible as absence of whole defect classes (3.3) |
-| Test-first with proven-red regression tests ([P2](../../../AGENTS.md#process)) | A fix's test must be shown failing on pre-fix code | Helped where verifiable; caught 2 tests that could not fail (3.4) |
-| Raw-output rule ([P6](../../../AGENTS.md#process)) | Verification reads raw command output, never summaries | Helped; decisive twice (3.5) |
-| Ledger and committed phase plans | Progress state survives crashes and restarts | Helped; 3 environment failures recovered cheaply (3.6) |
-| Playbooks and domain knowledge | Per-domain facts agents read before working | Mixed; pre-existing playbooks helped, closeout additions unproven (3.8) |
-| Brief-driven dispatch | Orchestrator writes the task, implementer builds exactly that | Mixed; propagates orchestrator mistakes with full test coverage (4.1) |
-| Multi-agent messaging and lifecycle | Parallelism across ~40 agents | Keep; the parallelism worked and the agent count matched the task size. The losses (report delivery, idle noise, shared-worktree races) are harness defects to fix, not a reason to use fewer agents (4.2) |
-| Live-server e2e testing | End-to-end checks against a real ZoneMinder | Keep; it verified the feature against a real server and caught bugs unit tests could not. The flakiness is shared-server infrastructure debt to fix, not a reason to drop e2e (4.3) |
+| Independent review loop (separate reviewer per task, re-review per fix round) | A second context re-derives correctness instead of the author grading their own work | Helped; largest single effect: 10 user-visible defects in program 1 (3.1), and every High/Critical of programs 2-3 - the unwritable streaming mode, the connkey leak, the wrong-port quit, the cold-mount mint/quit, the ownerless socket, the keyboard trap (4, 5) |
+| Mechanical gates (contract tests, lint ratchet, instruction word budget, locale parity) | Invariants enforced by failing tests, not by memory or goodwill | Helped; blocked real drift repeatedly, including against the orchestrator twice, and one gate caught a live rules-of-hooks bug mid-wave (3.2, 3.7, 4.3, 4.9) |
+| Architecture contracts in [AGENTS.project.md](../../../AGENTS.project.md) | Written invariants quoted in every brief and review | Helped; mostly by prevention, visible as absence of whole defect classes; the composite-id contract written after program 1 was load-bearing in programs 2-3 (3.3, 4.2) |
+| Test-first with proven-red regression tests ([P2](../../../AGENTS.md#process)) | A fix's test must be shown failing on pre-fix code | Helped; caught 2 vacuous tests in program 1 and kept catching them (a defect-encoding assertion, a mock that could not fail, a pin on an absent element) in 2-3 (3.4, 4.4, 5.4) |
+| Mutation verification (reviewers re-apply defects and demand the test fail) | Proves tests discriminate rather than decorate | Helped; grew from an occasional check into the standard reviewer move - batteries of 5-11 mutants per wave, and the survivors were findings themselves (4.7, 5.2) |
+| Raw-output rule ([P6](../../../AGENTS.md#process)) | Verification reads raw command output, never summaries | Helped; decisive twice in program 1, twice more later (a wrapper hiding vitest output, an npx-from-wrong-directory failure mistaken for a regression) (3.5, 6.2) |
+| Ledger, committed plans, audit-first recovery | Progress state survives crashes and restarts | Helped; five failures recovered across the arc: reboot, network drop, LAN outage, a usage-limit kill, an API-drop kill - the last two mid-task with uncommitted work (3.6, 4.4, 5.5) |
+| Playbooks and domain knowledge (M5 pipeline) | Per-domain facts agents read before working | Now proven both directions: facts recorded during the arc (seeding trap, fixture spreading, npx trap) were consumed by later waves and visibly prevented repeats (3.8, 5.1) |
+| Brief-driven dispatch | Orchestrator writes the task, implementer builds exactly that | Mixed; propagates orchestrator mistakes with full test coverage, and briefs' line numbers rot within hours on an active branch (6.1) |
+| Multi-agent messaging and lifecycle | Parallelism across ~90 agent contexts over four days | Keep; the losses (report delivery, idle noise, shared-checkout races, unrecoverable kills) are harness defects to fix, not a reason to use fewer agents (6.2) |
+| Live-server e2e testing | End-to-end checks against a real ZoneMinder | Keep; it found what unit tests structurally could not - the seeding trap, a react-grid-layout ref bug, a viewport-gating no-op - and the flakiness stayed attributable to shared infrastructure every time it was checked (4.3, 5.3, 6.3) |
 
 ---
 
@@ -474,11 +503,20 @@ degradation pattern) were written into
 at closeout. They did not help this project, because they were learned
 here; they can only help future work. I want to be clear about that
 distinction: writing them down is following rule
-[M5](../../../AGENTS.md#meta-governs-this-file), but I have no
-evidence yet that the M5 pipeline pays off, only that this run *consumed*
-several facts recorded by earlier runs (the RTK output warning and the
-device e2e manual-only rule both came from memory/playbooks and both
-mattered).
+[M5](../../../AGENTS.md#meta-governs-this-file), but at the time of the
+original report I had no evidence the M5 pipeline pays off, only that
+this run *consumed* facts recorded by earlier runs.
+
+**Postscript, Aug 5: the pipeline is now proven in both directions.**
+The seeding trap documented at the end of program 2 (section 4.3)
+directly shaped a program-3 design decision within a day - independent
+settings buckets instead of inheritance, chosen BECAUSE the recorded
+trap says absence-as-state cannot work (section 5.1). The
+fixture-spreading trap recorded after the four-commit P3 breach
+(section 4.6) was cited in every subsequent brief and the breach class
+did not recur. And the npx trap entry converted a third would-be
+incident into a seconds-long recognition (section 6.2). Recording facts
+where the next agent must read them is no longer a bet; it has receipts.
 
 One domain rule was discovered too late to be cheap: composite ids.
 Monitor and event ids collide across servers as a matter of course, and
@@ -497,13 +535,565 @@ missing rule had a measurable cost.
 
 ---
 
-## 4. Where the process cost time, split by cause
+## 4. The hardening program (Aug 4): nine waves, incident by incident
+
+The maintainer opened the day with three lines: label the montage
+monitor list by server, explain two greyed buttons, and propose
+connection optimizations. Two directives turned that into a program:
+"nothing in All mode should be disabled due to currentProfile - we
+already have an All-profile bucket," and "make it easy for users to view
+what all is different (and change them if needed)." A read-only audit
+agent swept every All-mode surface and produced the work list; nine
+tasks ran through the same implement/review/fix/re-review loop as
+program 1. This section walks the waves in order, at the depth the
+incidents deserve, because several of them are the best evidence in this
+report.
+
+### 4.1 The audit, and what "greyed buttons" actually was
+
+The audit (its first downstream fix landed as
+[`7374f94`](https://github.com/ZoneMinder/zmNinjaNg/commit/7374f949))
+found the two greyed buttons were the visible tip of ~20 controls that
+were disabled, or worse, silently inert in All mode: feed-fit wrote to
+nothing, saved layouts saved nothing, the insomnia toggle rendered the
+wrong state AND did nothing, kiosk unlock left insomnia stuck on, every
+keyboard shortcut was dead, and the command palette silently listed no
+monitors. It also found one latent crash: bulk event delete in All mode
+called `getCurrentSession()` on the aggregate sentinel, which throws,
+inside a try/finally with no catch - an invisible failure on a
+destructive path, reachable from every All-mode event card.
+
+The audit's classification (view-level vs data-level per control) is
+what made the fixes mechanical: view-level controls got the established
+sentinel-bucket write target; data-level surfaces (palette monitors,
+tags) got scoped fan-outs; and one item (cross-server group filtering)
+was explicitly parked rather than improvised. Program 1 had ended with a
+finding that its own audit-then-wave discipline was its best tool; this
+day was that discipline applied from hour one.
+
+### 4.2 Bulk delete: the composite-id contract catches its first crash
+
+The fix ([`c732a9c`](https://github.com/ZoneMinder/zmNinjaNg/commit/c732a9ce))
+is the clearest demonstration that program 1's closeout contract work
+paid off. The selection store held bare event ids; the Aggregation
+contract written two days earlier says bare ids may never key aggregate
+state, because event 1234 exists on both servers. The implementer's
+proof-of-red was the production crash itself: with `getCurrentSession`
+mocked to throw exactly as it does in All mode, all four All-mode tests
+failed with `getSession: ALL_PROFILES_ID has no session` while all four
+single-mode tests stayed green - the correct shape for a no-regression
+suite. The redesign routed each delete to its owning profile's session,
+made selection keys composite, kept partial failures queued for retry,
+and - beyond the brief - fixed the same collision one layer down, where
+deleting profile A's event 1234 would have evicted profile B's 1234
+from the React Query cache.
+
+The review ran a seven-mutant battery (reversed key parsing, dropped
+profile scoping in the cache predicate, bare-id selection, and so on);
+every mutant died except one, and the survivor was itself the finding:
+the owner-vs-fallback precedence was never exercised with a non-null
+current profile, so the wrong-target mutant `effectiveProfileId ??
+owner` survived a green suite. The fix round
+([`6d1fe28`](https://github.com/ZoneMinder/zmNinjaNg/commit/6d1fe289))
+added the discriminating test plus the review's real find: the
+destructive selection queue survived profile switches - tick an event on
+server A, switch away, and the confirm button would delete on a server
+no longer displayed. The queue now clears at every profile-context
+change (switch, delete, delete-all
+[`48ae505`](https://github.com/ZoneMinder/zmNinjaNg/commit/48ae5059),
+disable), each clear pinned by its own test, with the placement subtlety
+tested too: a REJECTED switch keeps the queue, because the context never
+changed.
+
+### 4.3 The Streaming Mode that did not exist
+
+The controls wave
+([`f30d630`](https://github.com/ZoneMinder/zmNinjaNg/commit/f30d6300),
+[`8b9b2e7`](https://github.com/ZoneMinder/zmNinjaNg/commit/8b9b2e74),
+[`980859d`](https://github.com/ZoneMinder/zmNinjaNg/commit/980859d2))
+enabled the ~20 controls and produced the program's best Critical, worth
+telling in full because every actor did their job and the defect still
+nearly shipped.
+
+The two-tier design rule says view preferences in All mode come from the
+ALL settings bucket. The implementer duly made the stream path read the
+ALL bucket's `viewMode`. The reviewer then asked the question nobody
+had: who WRITES that value? The answer was nobody - the only Streaming
+Mode control in the app wrote to the picked server's bucket, never the
+sentinel's, and the merged default for an unwritten bucket is
+`snapshot`. So the commit's own description ("tiles now follow the All
+Servers Streaming Mode setting") referred to a setting that did not
+exist, and every All-mode montage would have become permanent stills
+with no reachable state that restores streaming. The reviewer proved it
+with a runtime probe, and pointed at the implementer's own test as
+evidence: it had to hand-seed
+`updateProfileSettings(ALL_PROFILES_ID, {viewMode:'streaming'})` - a
+state no user action could produce.
+
+The fix attempt then hit a second wall that only the live browser
+found. The clean design - treat "unset" as "per server" - is
+unimplementable in this codebase: the settings store seeds a fresh
+bucket with the entire defaults object on the first write of ANY key,
+and the app writes `lastRoute` on the first navigation, so "unset" is
+not a state a bucket can stay in. The unit suite passed the clean
+design; the e2e failed it on first contact (`Expected substring: "Per
+server", Received string: "Snapshot"` on a montage that had only been
+navigated to). The shipped design
+([`52e2bd6`](https://github.com/ZoneMinder/zmNinjaNg/commit/52e2bd61))
+is a separate explicit tri-state, `allModeViewMode:
+'per-server'|'streaming'|'snapshot'`, defaulting to per-server so
+nothing changes until asked. The seeding trap went into the developer
+guide so nobody retries absence-as-state, and the re-reviewer - who had
+recommended the clean design - withdrew its own recommendation on the
+evidence: "it would have shipped the bug back within one navigation."
+
+One more catch in the same wave belongs to the gates, not the
+reviewers: the analysis-frames rework briefly shipped a short-circuited
+hook call (`!alwaysStreaming && usePageViewMode()`), a genuine
+rules-of-hooks violation. The ratchet config allows zero of those, so
+the gate failed the commit before any review saw it - the cheapest
+catch of the day.
+
+### 4.4 Filter persistence, and the first agent death
+
+The filters task retargeted Events/Timeline filter persistence to the
+current aggregate bucket with composite monitor tokens
+([`6a607c4`](https://github.com/ZoneMinder/zmNinjaNg/commit/6a607c40)).
+Its implementer died mid-task - a usage-limit kill - leaving one commit
+plus uncommitted edits. The recovery is worth describing precisely
+because it shows what the audit-first rule buys. The uncommitted diff
+REVERTED the committed fix; read naively, that looks like the agent
+changing its mind. Read against the process, it is recognizable as the
+prove-red-by-reverting-the-guard technique mid-flight: the agent had
+written its e2e scenario, reverted the fix to watch the scenario fail,
+and died before restoring. The orchestrator discarded the reversion
+(the commit is authoritative), kept the scenario, verified it green
+against the live server, and committed it with the recovery documented
+in the message
+([`4983a29`](https://github.com/ZoneMinder/zmNinjaNg/commit/4983a290)).
+The subsequent review found the recovered state coherent and added one
+insight: the restore-path guard was unreachable symmetry, proven by the
+fact that reverting it left all 54 tests green - so it was documented as
+symmetry at the guard itself rather than pretended to be covered
+([`5de836e`](https://github.com/ZoneMinder/zmNinjaNg/commit/5de836ed)).
+One instruction-file fix rode along under the self-improvement protocol:
+the Aggregation contract's "data prefs" wording would have wrongly
+flagged this very fix, and became "server-scoped prefs" in a
+one-for-one word swap that kept the 2,000-word budget gate green
+([`bd0da65`](https://github.com/ZoneMinder/zmNinjaNg/commit/bd0da657)).
+
+### 4.5 The fan-out wave and the empty-resolution leak class
+
+Shortcuts, palette, and tags fanned out
+([`4016b57`](https://github.com/ZoneMinder/zmNinjaNg/commit/4016b57b),
+[`c38ab31`](https://github.com/ZoneMinder/zmNinjaNg/commit/c38ab311),
+[`d7951884`](https://github.com/ZoneMinder/zmNinjaNg/commit/d7951884)).
+Two defects here define a class worth naming: **empty resolution must
+mean an impossible filter, not no filter.** The implementer found the
+first instance itself: filtering by a tag that only server A defines
+resolved to an empty id list on server B, and the API layer treated an
+empty list as "no filter" - so server B would have contributed EVERY
+event to a filter meant to narrow. It fixed that and flagged, without
+being asked, that the monitor filter had the identical defect one file
+over, where the existing test ENCODED the wrong behavior
+(`expect(callFor(profileB)?.monitorId).toBeUndefined()`). The reviewer
+confirmed it with a proven-red (B's event appearing in a filter for A's
+cameras), specified the fix shape with a warning attached - do not use
+`enabled: false`, because the aggregation combine treats an all-disabled
+scope as loading forever - and the fix landed with the defect-encoding
+assertion rewritten
+([`c7de7f1`](https://github.com/ZoneMinder/zmNinjaNg/commit/c7de7f1d)).
+
+The same review caught a performance regression invisible to every
+test: the new tag hook returned a `Map` from React Query's `combine`,
+and query-core's `replaceEqualDeep` only stabilizes plain arrays and
+objects - so the map's identity churned every render, which recomputed
+the row list, which minted fresh row objects, which defeated
+`memo(EventItem)` for every card on every Events render. Proven red
+with `expected Map{…} to be Map{…} // Object.is equality`, fixed by
+returning entry arrays and building the Map in `useMemo`
+([`77489f2`](https://github.com/ZoneMinder/zmNinjaNg/commit/77489f2e)).
+
+The wave also produced the best debugging story of the day. Enabling
+the global Escape shortcut broke a previously-passing e2e scenario. The
+implementer bisected to its own commit, probed the DOM state at the
+failing keydown (`{poppers: 0, panel: false, target: BODY}` - the app
+was behaving correctly), diagnosed the STEP as the defect (it pressed
+Escape unconditionally; applying a filter had already dismissed the
+popover, so the stray Escape hit the now-live back shortcut and
+navigated off the page), fixed the step, built a speculative
+component-level guard for a suspected Radix race, proved it red/green,
+and then DELETED it once the probe showed the race was not happening.
+No speculative code shipped. The app-level safety question the incident
+raised - can global Escape fire under an open dialog? - was separately
+verified: a real overlay guard covers Radix dialogs, popovers, and
+dropdowns.
+
+### 4.6 The performance settings section, and an understated self-report
+
+Task 6 made every All-mode tuning knob user-visible and editable
+([`8ffe527`](https://github.com/ZoneMinder/zmNinjaNg/commit/8ffe5278),
+[`38cbe72`](https://github.com/ZoneMinder/zmNinjaNg/commit/38cbe729)) -
+the maintainer's second directive made real: stream cap, watch cap,
+poll floor, burst window, plus three rows plumbed for the optimizations
+to come. Two process incidents matter more than the feature here.
+
+First, a [P3](../../../AGENTS.md#process) breach with a lesson about
+gate scoping. The implementer self-reported committing once on a broken
+test; the reviewer bisected and found the breach spanned FOUR commits -
+the broken suite was `LiveActivity.test.tsx`, whose hand-listed settings
+fixture silently missed the new keys, and the per-commit scoped gates
+missed it because that file does not import the changed module. The
+correction is now a playbook rule: scoped gates must include suites that
+CONSUME a changed settings shape, not just files importing the changed
+file. Second, the honest-numbers norm held under small stakes: when a
+later cleanup dropped the lint backlog by one, the implementer first
+attributed it to the wrong cause, checked before committing, and
+corrected itself - the commit message carries the true cause (a test
+mock's `any` annotation removed), because per
+[M2](../../../AGENTS.md#meta-governs-this-file) the number must describe
+what it claims.
+
+The wave also fixed a real input bug its own review found: the shared
+clamped-number field committed fractional values the store would round
+on read, so typing 2.5 left the field showing 2.5 forever while every
+consumer used 3, with the raw 2.5 persisted
+([`736ed2f`](https://github.com/ZoneMinder/zmNinjaNg/commit/736ed2f4)).
+Fixed in the shared hook rather than the caller, because the Live
+Activity dialog's three fields had the same latent desync - the
+root-cause rule applied at the right layer.
+
+### 4.7 The stream-lifecycle waves: where the process was tested hardest
+
+The optimizations task
+([`e4e7835`](https://github.com/ZoneMinder/zmNinjaNg/commit/e4e7835a)
+per-server budget,
+[`99ecd9a`](https://github.com/ZoneMinder/zmNinjaNg/commit/99ecd9a4)
+reduced tuning,
+[`6bc7b12`](https://github.com/ZoneMinder/zmNinjaNg/commit/6bc7b120)
+pause-when-hidden,
+[`4f91a5d`](https://github.com/ZoneMinder/zmNinjaNg/commit/4f91a5da)
+idle downgrade) touched the subsystem with the project's worst defect
+history, and the history repeated on schedule: the review found a HIGH
+in exactly the historic class, the fix contained a blocker of its own,
+and only the third pass shipped clean. The full anatomy:
+
+**The HIGH: idle downgrade orphaned the streaming connkey.** The idle
+feature flipped tiles to snapshot mode via a `viewMode` override -
+but the stream lifecycle hook regenerates and quits only on
+`[monitorId, enabled]`; a viewMode change is not a lifecycle event. So
+the flip sent no CMD_QUIT (the server-side `nph-zms` process stayed
+up), and worse, the cleanup params were rewritten to say "snapshot"
+before any teardown ran, and the quit function early-returns for
+non-streaming params - so the unmount and disable teardowns could never
+quit that key either. The reviewer's probe recorded ZERO quit requests
+across flip and unmount where the control case records one. Every
+All-mode tile would leak a server process after every idle period. The
+root cause predated the wave (a user manually toggling Streaming Mode
+leaked the same way), so the fix landed at the root: a
+streaming-to-snapshot transition is now itself a teardown event
+([`314cf52`](https://github.com/ZoneMinder/zmNinjaNg/commit/314cf52c)),
+closing the manual case too. The implementer's report is worth quoting
+for what the review loop is for: its first guard was wrong (a surviving
+mutant told it so), its second guard was wrong for a subtler reason,
+and the shipped identity-comparison guard was the third attempt - each
+iteration forced by a test that refused to pass.
+
+**The blocker inside the fix: the quit missed on multi-port installs.**
+The re-review found that the forced teardown restored `viewMode` into
+the quit parameters but not `minStreamingPort`, which co-varies with
+viewMode - so on any multi-port ZoneMinder (a common configuration),
+the CMD_QUIT went to the portal's default port, the leak survived, and
+the app now LOGGED a successful quit: worse than the silent original.
+The reason no test saw it is an
+[M2](../../../AGENTS.md#meta-governs-this-file) lesson: the test's
+`getZmsControlUrl` mock dropped the port argument entirely, so every
+quit URL in the suite looked identical - the gate's input did not
+measure what the gate claimed. Round 2
+([`ccf108e7`](https://github.com/ZoneMinder/zmNinjaNg/commit/ccf108e7))
+carried the port through the identity ref, made the mock mirror the
+real port math, and asserted the PORT in the quit URL. The re-reviewer
+then probed the case neither side had written - a port change WITHOUT
+a flip, then a flip - and found the ref-update ordering handled it
+correctly, quitting on the port the stream had actually moved to.
+
+Alongside the HIGH: pause left the visibility-resume hook's away-marker
+stale (the next quick tab flick reconnected every tile at once - the
+reconnect storm the grace period exists to prevent), and pause left the
+frames-latch set (resume re-armed the freeze watchdog against a stream
+that had not reconnected, burning retries on slow resumes). Both proven
+red, both fixed in
+[`b464435`](https://github.com/ZoneMinder/zmNinjaNg/commit/b464435e).
+And of ten mutants the reviewer ran across the wave, exactly one
+survived - the watchdog interlock, the single lever protecting the
+defect class the task existed for - and that became its own finding
+with its own now-failing test.
+
+### 4.8 Viewport gating: the bugs only a real browser shows
+
+The final optimization
+([`cf853c3`](https://github.com/ZoneMinder/zmNinjaNg/commit/cf853c30))
+gates off-screen montage tiles from holding connections. Its implementer
+did the thing the unit tier cannot: drove the real montage in Chromium
+with the knob on, and found that NO tile ever streamed - two real bugs
+invisible to 3,800 unit tests:
+
+- react-grid-layout clones every child with its own ref, silently
+  REPLACING the tile's ref, so the observed element was never
+  registered. The fix moved the observed element one level in, and the
+  test mock now clones-with-ref the way the real library does, so the
+  class fails at unit tier from now on
+  ([`c8d0d83`](https://github.com/ZoneMinder/zmNinjaNg/commit/c8d0d833)).
+- The per-tile ref-callback cache dropped entries on detach, so React
+  saw a new callback each render and detached/re-attached the observer
+  in a loop, seeded by StrictMode's own double-mount.
+
+Both went into the domain playbook the same day. The review then found
+the wave's own HIGH: the gating predicate included "observer root
+exists," and the root is React state that is null on the first render -
+so every tile rendered UNGATED for exactly one render, minting a
+connkey, then gated on render two, quitting it: a 20-tile montage paid
+20 mint/quit round trips on every page entry, the precise waste the
+design document claimed to avoid. The entire suite passed because every
+test read state after effects settled. The one-line fix (drop the root
+from the predicate; the construction guard already handles it) came
+with a first-render regression test using a render-recorder that
+captures BOTH renders - against the old code it records `[false, true]`,
+the mint-then-quit flash made visible
+([`92a55c1`](https://github.com/ZoneMinder/zmNinjaNg/commit/92a55c1b)).
+The same round produced the day's best pushback: I instructed an e2e
+cleanup hook against cross-scenario state leakage; the implementer
+rejected the instruction with evidence (Playwright runs each scenario
+in a fresh browser context - no storageState, 24/24 login detections in
+the logs - so the leak is structurally impossible and the hook would be
+dead code), and the reviewer verified the config claim independently
+and withdrew the finding. The framework's value is not that the
+orchestrator is right; it is that being wrong gets caught in either
+direction.
+
+### 4.9 Cleanup: twenty parked items and a new gate
+
+The cleanup wave closed every minor parked across the day - among them
+a shared profile-chip component that turned out to be duplicated in
+FOUR places, not the two the review had seen
+([`2db6bef`](https://github.com/ZoneMinder/zmNinjaNg/commit/2db6befb));
+ALL-bucket pruning for deleted monitors with a partial-knowledge
+safety constraint
+([`76777fc`](https://github.com/ZoneMinder/zmNinjaNg/commit/76777fc2));
+a per-row subscription reduction
+([`049fd3b`](https://github.com/ZoneMinder/zmNinjaNg/commit/049fd3b1));
+and a NEW mechanical gate born from a review observation: nothing
+checked that locale files carry the same `{{placeholder}}` sets as
+English, so a translator dropping a parameter was invisible. The gate
+([`ee8f22d`](https://github.com/ZoneMinder/zmNinjaNg/commit/ee8f22df))
+was proven able to fail two ways before landing (dropped and renamed
+placeholder), and its own floors were reviewed for
+[M2](../../../AGENTS.md#meta-governs-this-file) honesty - the reviewer
+found the en-key floor 2.7x below reality and had it raised so a
+partial parse cannot report parity.
+
+The wave also settled an advisory-lint annoyance properly: two
+set-state-in-effect warnings on the Events page turned out to be the
+"you might not need an effect" case - state that restated what the URL
+and settings already said - and deleting the state dropped the lint
+ratchet 205 to 203
+([`ccc357d`](https://github.com/ZoneMinder/zmNinjaNg/commit/ccc357d5)).
+The review then found the one seam that deletion left uncovered
+(the montage-to-list toggle-back rode on a single unasserted line) and
+the final commit pinned it at both tiers, with the e2e scenario that
+was literally named "Switch between list and montage views" finally
+switching back
+([`7400f99`](https://github.com/ZoneMinder/zmNinjaNg/commit/7400f999)).
+Its #342 contribution: the known events-suite flakes were re-attributed
+by running the branch against a reverted baseline - identical failure
+sets, so branch-exonerated - and the impossible-DOM-state analysis
+(panel visible but its unconditional child missing) pointed the flake
+at popover-mount timing, posted to the issue with the method's limits
+stated.
+
+Day totals: tasks 1-9 landed as roughly 50 commits, the unit suite grew
+from 3,614 to 3,884, the ratchet fell 207 to 203 (the day-1 figure
+counted one rule; these count the full 12-rule backlog), and the
+all-profiles e2e feature grew from 12 to 24 scenarios.
+
+---
+
+## 5. Virtual profile groups (Aug 4-5): generalize, then retire
+
+The maintainer asked whether "All Profiles" could become "Multiple
+Profiles" - named groups of servers. The assessment said medium, not
+huge, for one architectural reason: every aggregate surface fans out
+over `useProfileScope().profiles` and none of them care which profiles
+are in the array. The program that followed is the best evidence in
+this report that the earlier work's structure held, because the feature
+landed in three waves with the aggregation core untouched.
+
+### 5.1 Audit-first, and the one decision that shaped the diff
+
+A read-only audit inventoried every site assuming exactly one aggregate
+id: 54 non-test sites in five classes (scope-derived, predicate,
+write-target, literal, guard), each classified by what would break. Its
+key finding was not a bug but a constraint: service modules compare
+profile ids without store access, so the virtual id scheme had to be
+answerable from the id's shape alone. That produced the spec's first
+decision - prefixed ids (`__virtual_<uuid>`) with a pure-string
+predicate - which collapsed two whole classes of the sweep to
+mechanical edits. The spec
+([`7015c18`](https://github.com/ZoneMinder/zmNinjaNg/commit/7015c18f))
+recorded twelve decisions, including flat-only membership (nesting
+flattens to a member list anyway, so banning it costs nothing and
+deletes cycle handling, settings ambiguity, and recursive resolution)
+and fully independent settings buckets (live inheritance would need
+absence-as-state, which section 4.3's seeding trap already proved
+unimplementable - the trap paid for itself within a day of being
+documented).
+
+### 5.2 Wave A: the ownerless socket, and mechanically-right-semantically-wrong
+
+Wave A ([`204ae10`](https://github.com/ZoneMinder/zmNinjaNg/commit/204ae10e),
+[`e83b0f1`](https://github.com/ZoneMinder/zmNinjaNg/commit/e83b0f1f),
+[`25f9033`](https://github.com/ZoneMinder/zmNinjaNg/commit/25f90330),
+[`b80fdbe`](https://github.com/ZoneMinder/zmNinjaNg/commit/b80fdbeb))
+made virtual ids representable and safe with no UI. The review's
+MEDIUM is the program's most instructive defect: the notification
+store's guard said "do not tear down a connection while an aggregate is
+current," extended mechanically from the All Servers case. For All
+Servers that is correct because every enabled profile is a member. For
+a group it is wrong: a profile whose connect was in flight when the
+user switched to a group that EXCLUDES it kept its socket with no
+connector owning it - live for the session, streaming events for a
+server outside the current scope. The reviewer proved it with a probe
+(connect A in flight, switch to a group of only B, resolve: A reads
+`connected`), and the fix
+([`d7f5699`](https://github.com/ZoneMinder/zmNinjaNg/commit/d7f56993))
+replaced the predicate with an ownership helper whose four cases
+(member kept, non-member dropped, missing-group dropped, ALL keeps
+all) each die under their own mutation. The general lesson got a name
+in the review: a guard extension can be mechanically correct and
+semantically wrong the moment "aggregate" stops implying "everything."
+
+The same round hardened the store against its future UI (blank names,
+ghost members, nested groups all rejected at the write, in one shared
+validator pinned on both call paths) and tightened the new sentinel
+gate after the reviewer showed the prefix grep missed suffixed
+literals - the tightened gate's first catch was the implementer's own
+test ids ([`344f709`](https://github.com/ZoneMinder/zmNinjaNg/commit/344f7094)).
+
+### 5.3 Wave B: the sweep, ordered so no commit is wrong
+
+The generalization sweep
+([`79424dd`](https://github.com/ZoneMinder/zmNinjaNg/commit/79424dd3),
+[`67a8833`](https://github.com/ZoneMinder/zmNinjaNg/commit/67a88337),
+[`4e35449`](https://github.com/ZoneMinder/zmNinjaNg/commit/4e35449f),
+[`38e3bce`](https://github.com/ZoneMinder/zmNinjaNg/commit/38e3bce0))
+was committed in a deliberate order: every write target, label, and
+read resolved the active aggregate BEFORE the predicate widened, so no
+intermediate commit could render aggregate UI that wrote the wrong
+bucket - verified by the reviewer building the middle commit standalone.
+The implementer caught a bug the brief would have caused: with the
+predicate widened, the "All Servers" entry would have shown as SELECTED
+whenever a group was current; the fix kept the narrow sentinel check on
+exactly the All-entry sites and added a testid so the absence is
+assertable. Proven-reds here used opposite-values seeding (ALL bucket
+says snapshot, group bucket says streaming) so only the correct read
+can pass. The review's two MEDIUMs were both coverage, not behavior -
+the Dashboard read and write targets survived an ALL-hardcode mutation
+with the full suite green - and the fix round
+([`35822ff`](https://github.com/ZoneMinder/zmNinjaNg/commit/35822ff6))
+pinned them with a case that cannot pass by accident: widgets ONLY in
+the ALL bucket while a group is current must show NO chrome.
+
+### 5.4 Wave C: the keyboard trap
+
+The visible wave
+([`0c44459`](https://github.com/ZoneMinder/zmNinjaNg/commit/0c444595),
+[`dc006f8`](https://github.com/ZoneMinder/zmNinjaNg/commit/dc006f87),
+[`043625b`](https://github.com/ZoneMinder/zmNinjaNg/commit/043625ba))
+shipped the cards, dialog, and switcher entries, with an e2e lifecycle
+scenario whose discriminator was mutation-anchored (breaking scope
+resolution fails exactly at "every monitor profile chip should name
+Second"). The review's HIGH is the arc's best accessibility catch: the
+group card is the first element in the app that is both
+`role="button"` and contains inner buttons, and its keydown handler
+fired for keys bubbling up FROM those buttons - so a keyboard user
+pressing Enter on Edit got `preventDefault` (killing the button) and
+then a profile switch. Measured: `onEdit` 0 calls, `onSwitch` 1.
+Mouse worked, a11y lint passed (it cannot model nested interactives),
+and no precedent existed to copy. The one-line origin guard
+([`0c9ac6f`](https://github.com/ZoneMinder/zmNinjaNg/commit/0c9ac6fd))
+filters by event origin rather than by key, covering future inner
+controls too, and the fix round also closed a spec deviation (group
+names now trim before the availability check - the ordering that makes
+"Backyard " collide with "Backyard" instead of slipping past
+[`f8c0076`](https://github.com/ZoneMinder/zmNinjaNg/commit/f8c00767))
+and guarded the zero-active-members dead-end
+([`4764097`](https://github.com/ZoneMinder/zmNinjaNg/commit/47640979)):
+such a group stays fully editable but refuses the switch, keeping
+`aria-disabled` with focus so screen-reader users hear why instead of
+watching the card vanish from the tab order.
+
+### 5.5 The retirement: an override, a migration, and a second death
+
+My recommendation was to keep All Servers (its membership is dynamic;
+groups are static lists). The maintainer overrode it - "virtual profile
+group supersedes it" - and the override is recorded with its accepted
+consequence: adding a server no longer auto-aggregates anywhere. The
+removal
+([`d2624564`](https://github.com/ZoneMinder/zmNinjaNg/commit/d2624564))
+kept every guard and the sentinel machinery (groups run on it; legacy
+stored state needs it) and shipped an
+[I2](../../../AGENTS.md#invariants-never-simplified-away)-grade
+migration
+([`75dbc02`](https://github.com/ZoneMinder/zmNinjaNg/commit/75dbc025)):
+a persisted All Servers selection resets to profile selection once,
+its orphaned settings and dashboard buckets are deleted, and a user who
+never used All mode sees zero writes. The reviewer verified durability
+at the source - reading zustand's persist middleware to confirm the
+captured `set` is the persisting one - and separately established that
+the zero-writes property holds only because the calls sit inside the
+sentinel guard, not because of the store's early-returns, since
+zustand persists on every `set` regardless.
+
+The first removal implementer died mid-task (an API connection drop),
+leaving those two commits unreviewed plus uncommitted e2e edits. The
+recovery agent audited rather than trusted: it re-proved the migration
+red itself, checked that the MOCKED store methods exist by name in the
+real modules (a wrong name would have passed every test and crashed at
+runtime), judged the uncommitted e2e migration coherent, and completed
+the wave - every one of the 25 scenarios found a group-expressible
+form, none dropped, with the settings-independence proof upgraded to
+two groups holding different Streaming Modes across reloads
+([`2a4621b`](https://github.com/ZoneMinder/zmNinjaNg/commit/2a4621b9)).
+The review's findings were all docs and dead code - among them one
+instructive inversion: the removal added an explicit "sentinel
+rejected" branch plus a test, and the reviewer proved the branch
+unreachable (the widened membership check already rejects it) and the
+test unable to fail for the code it named; the fix deleted the branch
+and re-aimed the test at the check that does the work
+([`7f18eab`](https://github.com/ZoneMinder/zmNinjaNg/commit/7f18eabf),
+[`140d307`](https://github.com/ZoneMinder/zmNinjaNg/commit/140d307b),
+residuals [`7ec3cf3`](https://github.com/ZoneMinder/zmNinjaNg/commit/7ec3cf38)).
+Both PRs merged to main the same morning
+([`86d27df`](https://github.com/ZoneMinder/zmNinjaNg/commit/86d27df4),
+[`61dca16`](https://github.com/ZoneMinder/zmNinjaNg/commit/61dca165)),
+followed by a terminology rename to "virtual profile groups" with
+pixel-measured 320px label checks per locale
+([`8f96f05`](https://github.com/ZoneMinder/zmNinjaNg/commit/8f96f058)).
+
+Program totals: audit, spec, three feature waves, rename, retirement -
+roughly 45 commits, suite 3,884 to 3,992 (the retirement deleted the
+All-card tests after the peak of 4,001), ratchet 203 to 202, word
+budget ending 1,996 of 2,000.
+
+---
+
+## 6. Where the process cost time, split by cause
 
 The maintainer asked me to separate failures of the rules from failures of
 the surrounding framework. On review, most of the friction came from the
 framework and from my own plan-writing, not from the rules.
 
-### 4.1 Failures of the process design (the rules' side)
+### 6.1 Failures of the process design (the rules' side)
 
 **My briefs contained defects, and the process amplified them.** The
 implementer/reviewer split means implementers faithfully build what the
@@ -570,8 +1160,33 @@ conclusion: staging by explicit path is not sufficient; either one
 committer at a time, or worktree isolation for agents that commit. This
 was operator error combined with git's whole-index commit behavior, not a
 defect in any written rule, but no written rule prevented it either.
+The class struck a third time on Aug 5, in a new shape: another agent
+working an unrelated issue SWITCHED the shared checkout's branch between
+my edit and my commit, so the commit landed on their branch. The naive
+recovery (`git reset --hard`) would have destroyed their staged work;
+the actual recovery used `reset --soft` plus a single-path restore, and
+the commit moved to its target via a temporary worktree. The rule that
+came out of it is now in the playbook: verify the current branch
+immediately before every commit, and make out-of-band commits from a
+temporary worktree, never the shared checkout.
 
-### 4.2 Failures of the framework (not the rules)
+**Cadence: what actually consumed wall-clock without buying safety.**
+Measured against the whole arc, four habits - none of them required by
+any rule - were the real time sinks, and all four are now playbook
+lines: briefs cited line numbers that rotted within hours on an active
+branch (every implementer paid a re-verification pass); reviewer-
+specified one-line fixes went through full re-review rounds early on
+(later practice: the orchestrator inspects those diffs directly);
+mutation batteries ran up to three times per finding (implementer
+proves red, review runs its battery, re-review re-applied everything -
+the third pass now re-applies only finding-linked mutants); and full
+gate runs (~3-4 minutes each) ran roughly 25 times in one day when
+[P3](../../../AGENTS.md#process) only requires the full suite at push.
+None of these were rule defects; all were orchestration habits that a
+future run can drop without losing a single catch, which is exactly why
+they are recorded.
+
+### 6.2 Failures of the framework (not the rules)
 
 These cost real time and none of them are addressable by editing
 [AGENTS.md](../../../AGENTS.md). I list them separately because a reading of the session log
@@ -598,11 +1213,24 @@ noisier than it should be.
   idle notifications that arrive as messages and have to be read and
   dismissed. Dozens of them across the run. No rule change addresses this;
   it is framework noise and belongs on a framework issue list.
-- **Two agent deaths from environment failures** (host reboot, network
-  drop) left half-done worktrees. The recovery worked (section 3.6), but
-  the deaths themselves and the fact that an interrupted agent leaves no
-  handoff note are framework properties. The ledger compensates for
-  them; it does not prevent them.
+- **Four agent deaths across the arc** - host reboot and network drop in
+  program 1, a usage-limit kill mid-task in program 2, and an API
+  connection drop mid-task in program 3. All four left half-done work
+  with no handoff note; all four were recovered by the audit-first
+  pattern (sections 3.6, 4.4, 5.5), including one where the dead agent's
+  uncommitted diff was a prove-red reversion that would have looked like
+  a regression to anyone not reading it against the process. The
+  recoveries worked; the deaths and the silence are framework
+  properties the ledger compensates for but cannot prevent.
+- **The npx-from-the-wrong-directory trap** cost three separate
+  incidents before it was written down: a shell whose working directory
+  drifted after git commands ran `npx vitest` from the repo root, which
+  resolves a cached install without the project's jsdom config and fails
+  dozens of tests with `document is not defined` - a failure shape
+  indistinguishable from a real regression until the raw output is read
+  ([P6](../../../AGENTS.md#process) again). It is now a playbook trap
+  entry, and the third near-miss was recognized from the entry within
+  seconds.
 - **Output-summarizing wrappers** (the rtk tee) hid a suite failure once.
   The project already distrusts them by rule
   ([P6](../../../AGENTS.md#process)), which is how the
@@ -613,7 +1241,7 @@ noisier than it should be.
   means a fresh spawn and re-established context. This shaped the
   keep-reviewers-alive practice above.
 
-### 4.3 Weak spots that are neither rules nor framework
+### 6.3 Weak spots that are neither rules nor framework
 
 **End-to-end testing was the least reliable form of verification, and
 the cause is infrastructure.** All e2e runs share one live ZoneMinder demo server with
@@ -652,7 +1280,7 @@ instance is untested.
 
 ---
 
-## 5. Things I cannot fairly judge
+## 7. Things I cannot fairly judge
 
 - Whether plain test-first (as opposed to the proven-red discipline, which
   I could verify) changed outcomes. Implementers reported failing-first
@@ -679,34 +1307,57 @@ instance is untested.
 
 ---
 
-## 6. Conclusion
+## 8. Conclusion
 
-The facts that support the workflow: ten user-visible defects, including
-several regressions in the single-profile mode the project promised not
-to touch, were caught before merge by reviews the workflow mandated. At
-least four of them (the socket-leak triple and the unbootstrapped-profile
-omission) would have been hard to reproduce from field reports if they
-had shipped. The contracts kept style and architecture consistent across
-22,000 lines written by roughly forty separate agent contexts. The ledger
-made recovery from a reboot, a network drop, and a LAN outage cheap. The
-gates applied to the orchestrator's own commits twice, not only to
-implementers'.
+The facts that support the workflow, across the full arc. In program 1,
+ten user-visible defects were caught before merge, several of them
+regressions in the single-profile mode the project promised not to
+touch. Programs 2 and 3 - run when the easy defects were gone - added
+at least a dozen more substantive catches, and the profile of those
+catches is the argument: the unwritable Streaming Mode that would have
+turned every All-mode montage into stills (4.3), a server-process leak
+on every idle cycle plus a wrong-port quit hiding inside its own fix
+(4.7), a cold-mount mint-and-quit per tile that inverted an
+optimization's purpose (4.8), an ownerless socket for excluded profiles
+(5.2), a cross-server filter that showed everything instead of nothing
+(4.5), and a keyboard path that switched profiles when the user meant
+"edit" (5.4). Every one was plausible, tested, and green when it
+arrived at review; every one was proven by probe or mutation rather
+than argued; several were found in fixes for the previous finding,
+which is precisely the case self-review cannot handle.
 
-The costs: briefs with defects that implementers faithfully built, a
-fix-wave budget that concurrency work overran three rounds deep, one
-worktree shared by too many committers, and a messaging layer that
-required repeated manual workarounds. The first three have recorded fixes
-in the workflow files now; the last is a framework problem outside the
-reach of rule changes.
+The same period stress-tested the operational half: four agent deaths,
+a LAN outage, and a shared-checkout branch race were all recovered
+without losing work, using the ledger, audit-first recovery, and - in
+the last case - a recovery that had to protect ANOTHER agent's staged
+work while extracting a misplaced commit. The mechanical gates fired
+against implementers, against the orchestrator, and once before any
+reviewer saw the diff. The maintainer overrode the orchestrator's
+recommendation once (retiring All Servers) and the process recorded the
+override with its accepted cost and shipped it with an I2-grade
+migration - disagreement flowing in both directions and ending in the
+repository, not in a chat log.
 
-My assessment: for this feature, at this scale, with this much
-refactoring underneath it, the workflow helped, and the benefit clearly
-exceeded the overhead. The caveat is that most of the value came from two
-mechanisms, the independent review loop and the mechanical gates. A
-future project that keeps those two plus the ledger would keep most of
-the benefit with less process.
+The costs, honestly: briefs with defects that implementers faithfully
+built; brief line numbers that rot; a fix-wave budget that concurrency
+work overran every time it was tried; roughly a day-equivalent of
+wall-clock across the arc spent on cadence habits no rule required
+(triple mutation runs, ~25 full gate runs in a day, re-review rounds on
+reviewer-designed one-liners); and a messaging layer that needed
+babying throughout. All of the process-side costs now have playbook
+lines; the framework-side ones have a list for upstream.
 
-## 7. Follow-ups this report feeds
+My assessment stands, strengthened: the workflow helped decisively, and
+the margin GREW as the work got harder - the stream-lifecycle and
+guard-semantics catches of programs 2-3 are ones I would not expect any
+single-context session to make, because they required a second reader
+whose only job was disproof. The distilled version for any future
+project: keep the independent review loop with per-round re-reviews,
+keep the mechanical gates, keep the ledger, write the traps down where
+the next agent must read them, and spend the saved ceremony from
+section 6.1's cadence list on nothing at all.
+
+## 9. Follow-ups this report feeds
 
 1. A mechanical gate for composite ids in aggregate paths, the
    six-incident class (tracked; the
@@ -728,5 +1379,17 @@ the benefit with less process.
    this run; nothing
    from the original spec remains undelivered.
 5. Framework issues worth reporting upstream rather than working around:
-   report delivery reliability, stale idle pings from stopped agents, and
-   the inability to resume a stopped agent.
+   report delivery reliability, stale idle pings from stopped agents,
+   the inability to resume a stopped agent, and mid-task kills (usage
+   limits, connection drops) that leave no handoff state.
+6. Accepted migration debt on
+   [#337](https://github.com/ZoneMinder/zmNinjaNg/issues/337): ~40 unit
+   suites still use the retired sentinel as a stand-in aggregate id in
+   scope fixtures (they exercise the shared aggregate paths but never
+   membership filtering or group naming; loud, not silent, if the
+   sentinel ever stops resolving), and the tag-name-in-URL cross-mode
+   degeneracy documented at its write site.
+7. The five cadence lessons of section 6.1 are in the
+   [workflow playbook](../../../agents/generic/claude-workflows.md);
+   their test is whether the next program's wall-clock drops without
+   its catch-rate dropping.
