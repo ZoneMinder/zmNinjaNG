@@ -80,7 +80,7 @@ jobs:
         with:
           name: zmNinjaNg-macos-electron-dmg-${{ github.event.inputs.version || github.ref_name }}
           path: dist/macos/*.dmg
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload Electron to Release
         uses: softprops/action-gh-release@v1
