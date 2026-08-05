@@ -85,6 +85,17 @@ Then('I should see the monitor settings dialog', async ({ page }) => {
   await expect(dialog.first()).toBeVisible({ timeout: 10000 });
 });
 
+/**
+ * The permission gating (refs #344) hands an account without System Edit a
+ * read-only dialog. The configured test account has Edit, so the editor must
+ * survive: this fails if the probe ever mistakes an administrator for a
+ * restricted user, which is the regression that would hurt most.
+ */
+Then('the dialog should offer the camera source field', async ({ page }) => {
+  await expect(page.getByTestId('settings-source-input')).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId('monitor-settings-restricted-note')).toHaveCount(0);
+});
+
 // MJPEG streaming regression steps (issue #155, Tauri socket pool)
 
 /**

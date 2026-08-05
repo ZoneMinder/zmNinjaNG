@@ -33,7 +33,9 @@ import {
   GO2RTC_RETRY_INTERVAL_MIN,
 } from '../../lib/zmninja-ng-constants';
 import { Button } from '../ui/button';
-import { VideoOff } from 'lucide-react';
+import { VideoOff, ShieldOff } from 'lucide-react';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canViewStream } from '../../lib/permissions/zm-permissions';
 
 /**
  * Cache of monitors where Go2RTC failed: skip straight to MJPEG until TTL
@@ -189,6 +191,13 @@ export function LiveMonitorPlayer({
   const monitorOverride = rawSettings?.monitorStreamingOverrides?.[monitor.Id];
   const userStreamingPreference = monitorOverride ?? globalStreamingMethod;
 
+  // Streaming is a ZoneMinder permission of its own: zms.cpp checks Stream for
+  // a live monitor, independently of Monitors. Denied, the stream is an image
+  // that never loads - there is no failing request to catch - so the probe is
+  // the only thing that can tell the user why (refs #344).
+  const { permissions: accountPermissions } = usePermissions(profileId ?? profile?.id);
+  const streamDenied = canViewStream(accountPermissions) === 'denied';
+
   // Determine streaming method: WebRTC if supported and enabled, otherwise MJPEG
   const lastLoggedRef = useRef<string>('');
   const streamingMethod = useMemo(() => {
@@ -282,7 +291,7 @@ export function LiveMonitorPlayer({
     containerRef,
     protocols: rawSettings?.webrtcProtocols,
     expectedHost: portalHost,
-    enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed && !paused,
+    enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed && !paused && !streamDenied,
     muted,
     controls: showControls,
     useStun: rawSettings?.webrtcUseStun ?? false,
@@ -514,7 +523,7 @@ export function LiveMonitorPlayer({
       { maxfps: rawSettings?.streamMaxFps, scale: rawSettings?.streamScale },
       reduceStream,
     ),
-    enabled: (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) && !paused,
+    enabled: (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) && !paused && !streamDenied,
     viewModeOverride: forceViewMode,
     profileId,
   });
@@ -659,6 +668,18 @@ export function LiveMonitorPlayer({
     hasVideoFrames: hasLiveVideoFrames,
     hasMjpegFrame,
   });
+
+  if (streamDenied) {
+    return (
+      <div
+        className="relative w-full h-full flex flex-col items-center justify-center gap-2 bg-muted/30 p-3 text-center"
+        data-testid="video-player-no-permission"
+      >
+        <ShieldOff className="h-8 w-8 text-muted-foreground/40" aria-hidden="true" />
+        <p className="text-xs text-muted-foreground">{t('monitors.stream_permission_denied')}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-full" data-testid="video-player">

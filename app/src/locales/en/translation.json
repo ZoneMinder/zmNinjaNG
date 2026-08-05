@@ -41,6 +41,7 @@
     "selected": "Selected",
     "unknown_error": "Unknown error",
     "auth_required": "Authentication required",
+    "permission_denied": "Your ZoneMinder account doesn't have permission for this.",
     "cannot_reach_host": "Can't reach {{host}}. Check the address in Settings, or that the server is running.",
     "done": "Done",
     "default": "Default",
@@ -151,7 +152,9 @@
     "fit_none": "None",
     "fit_scale_down": "Scale down",
     "view_events": "Events",
-    "group_by_server": "Group by server"
+    "group_by_server": "Group by server",
+    "stream_permission_denied": "No streaming permission for this account.",
+    "no_monitor_permission": "This account has no monitor permissions."
   },
   "events": {
     "title": "Events",
@@ -251,7 +254,10 @@
     "filter_by_server": "Filter by server",
     "filter_hides_everything": "Every server is hidden by the filter above",
     "show_all_servers": "Show all servers",
-    "failed_to_load": "Failed to load events: {{error}}"
+    "failed_to_load": "Failed to load events: {{error}}",
+    "delete_permission_denied": "Deleting events needs Events: Edit permission.",
+    "archive_permission_denied": "Archiving events needs Events: Edit permission.",
+    "no_event_permission": "This account has no event permissions."
   },
   "event_detail": {
     "event_id": "Event ID",
@@ -789,7 +795,9 @@
     "orientation_90": "Rotate Right (90°)",
     "orientation_180": "Inverted (180°)",
     "orientation_270": "Rotate Left (270°)",
-    "settings_description": "Monitor #{{id}} · {{type}}"
+    "settings_description": "Monitor #{{id}} · {{type}}",
+    "settings_restricted_account": "Camera settings are read-only. Editing needs System: Edit permission on your ZoneMinder account.",
+    "settings_restricted_monitor": "Camera settings are read-only. ZoneMinder restricts this monitor for your account."
   },
   "montage": {
     "title": "Montage",
@@ -1231,7 +1239,17 @@
     "storage_server": "Server",
     "storage_used": "Used",
     "storage_total": "Total",
-    "no_storage": "No storage info"
+    "no_storage": "No storage info",
+    "run_state_permission_denied": "Changing the run state needs System: Edit permission.",
+    "permissions_title": "Account permissions",
+    "permissions_desc": "What this ZoneMinder account is allowed to do.",
+    "permission_system": "System",
+    "permission_monitors": "Monitors",
+    "permission_stream": "Stream",
+    "permission_events": "Events",
+    "permission_control": "Control",
+    "permission_groups": "Groups",
+    "permission_unknown": "Not determined"
   },
   "eventMontage": {
     "grid_layout_applied": "Grid layout applied: {{cols}} columns",

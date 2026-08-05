@@ -8,6 +8,12 @@ import { asProfileId } from '../../../api/types';
 import { useProfileStore } from '../../../stores/profile';
 
 const navigate = vi.fn();
+// EventDeleteButton probes permissions through React Query; this suite renders
+// without a provider and is not about permissions (refs #344).
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: { events: 'Edit' }, isLoading: false }),
+}));
+
 vi.mock('react-router-dom', async (orig) => ({
   ...(await orig<typeof import('react-router-dom')>()),
   useNavigate: () => navigate,

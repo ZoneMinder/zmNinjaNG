@@ -96,8 +96,10 @@ describe('formatForServer', () => {
   });
 
   it('falls back gracefully on timezone error', () => {
-    // Mock a timezone that might cause issues
-    vi.mocked(useProfileStore.getState).mockReturnValue({
+    // Once, not permanently: mockReturnValue would outlive this test, and
+    // vi.clearAllMocks() clears calls rather than implementations, so the
+    // override would still be in place for every later describe.
+    vi.mocked(useProfileStore.getState).mockReturnValueOnce({
       profiles: [{ id: 'profile-1', timezone: 'Invalid/Timezone' }],
       currentProfileId: 'profile-1',
     } as any);
@@ -110,7 +112,7 @@ describe('formatForServer', () => {
   });
 
   it('uses browser timezone when profile has no timezone', () => {
-    vi.mocked(useProfileStore.getState).mockReturnValue({
+    vi.mocked(useProfileStore.getState).mockReturnValueOnce({
       profiles: [],
       currentProfileId: null,
     } as any);

@@ -41,6 +41,7 @@
     "selected": "Ausgewählt",
     "unknown_error": "Unbekannter Fehler",
     "auth_required": "Authentifizierung erforderlich",
+    "permission_denied": "Dein ZoneMinder-Konto hat dafür keine Berechtigung.",
     "cannot_reach_host": "Keine Verbindung zu {{host}}. Adresse in den Einstellungen prüfen oder ob der Server läuft.",
     "running": "Läuft",
     "stopped": "Gestoppt",
@@ -151,7 +152,9 @@
     "fit_none": "Keine",
     "fit_scale_down": "Verkleinern",
     "view_events": "Ereignisse",
-    "group_by_server": "Nach Server gruppieren"
+    "group_by_server": "Nach Server gruppieren",
+    "stream_permission_denied": "Dieses Konto hat keine Streaming-Berechtigung.",
+    "no_monitor_permission": "Dieses Konto hat keine Monitor-Berechtigungen."
   },
   "events": {
     "title": "Ereignisse",
@@ -251,7 +254,10 @@
     "filter_by_server": "Nach Server filtern",
     "filter_hides_everything": "Alle Server sind durch den Filter oben ausgeblendet",
     "show_all_servers": "Alle Server anzeigen",
-    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}"
+    "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}",
+    "delete_permission_denied": "Zum Löschen von Ereignissen wird Events: Edit benötigt.",
+    "archive_permission_denied": "Zum Archivieren von Ereignissen wird Events: Edit benötigt.",
+    "no_event_permission": "Dieses Konto hat keine Ereignis-Berechtigungen."
   },
   "event_detail": {
     "event_id": "Ereignis ID",
@@ -789,7 +795,9 @@
     "orientation_90": "Rechts drehen (90°)",
     "orientation_180": "Invertiert (180°)",
     "orientation_270": "Links drehen (270°)",
-    "settings_description": "Monitor #{{id}} · {{type}}"
+    "settings_description": "Monitor #{{id}} · {{type}}",
+    "settings_restricted_account": "Kamera-Einstellungen sind schreibgeschützt. Zum Bearbeiten braucht dein ZoneMinder-Konto System: Edit.",
+    "settings_restricted_monitor": "Kamera-Einstellungen sind schreibgeschützt. ZoneMinder sperrt diesen Monitor für dein Konto."
   },
   "montage": {
     "title": "Montage",
@@ -1231,7 +1239,17 @@
     "storage_server": "Server",
     "storage_used": "Belegt",
     "storage_total": "Gesamt",
-    "no_storage": "Kein Speicherinfo"
+    "no_storage": "Kein Speicherinfo",
+    "run_state_permission_denied": "Zum Ändern des Laufzustands wird System: Edit benötigt.",
+    "permissions_title": "Kontoberechtigungen",
+    "permissions_desc": "Was dieses ZoneMinder-Konto darf.",
+    "permission_system": "System",
+    "permission_monitors": "Monitore",
+    "permission_stream": "Stream",
+    "permission_events": "Ereignisse",
+    "permission_control": "Steuerung",
+    "permission_groups": "Gruppen",
+    "permission_unknown": "Nicht ermittelt"
   },
   "eventMontage": {
     "grid_layout_applied": "Rasterlayout angewendet: {{cols}} Spalten",

@@ -73,6 +73,12 @@ Feature: Monitor Detail Page
     Then the dialog should close
 
   @all
+  Scenario: An account that may edit still gets the editor
+    When I open the monitor settings dialog
+    Then I should see the monitor settings dialog
+    And the dialog should offer the camera source field
+
+  @all
   Scenario: Settings dialog closes on backdrop tap
     When I click the settings button
     Then I should see the monitor settings dialog

@@ -3,11 +3,19 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ZoomIn, ZoomOut, Home, Squar
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { useTranslation } from 'react-i18next';
-import type { ZMControl } from '../../api/types';
+import type { ProfileId, ZMControl } from '../../api/types';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canUseControl } from '../../lib/permissions/zm-permissions';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { UI_INTERACTIONS } from '../../lib/zmninja-ng-constants';
 
 interface PTZControlsProps {
   onCommand: (command: string) => void;
+  /**
+   * Profile whose ZoneMinder account these commands run as. Defaults to the
+   * current profile; an All-mode caller must pass the monitor's owner.
+   */
+  profileId?: ProfileId | null;
   className?: string;
   disabled?: boolean;
   control?: ZMControl;
@@ -127,8 +135,15 @@ function HoldButton({
   );
 }
 
-export function PTZControls({ onCommand, className, disabled, control }: PTZControlsProps) {
+export function PTZControls({ onCommand, profileId, className, disabled, control }: PTZControlsProps) {
   const { t } = useTranslation();
+
+  // Controllable is what the camera can do; Control is what this account may
+  // ask of it. ZoneMinder checks the second in ajax/control.php, so a denied
+  // account gets no pad rather than buttons that always fail (refs #344).
+  const { currentProfile } = useCurrentProfile();
+  const { permissions } = usePermissions(profileId ?? currentProfile?.id);
+  const controlDenied = canUseControl(permissions) === 'denied';
 
   const canMove = control?.CanMove === '1';
   const canMoveDiag = control?.CanMoveDiag === '1';
@@ -161,6 +176,8 @@ export function PTZControls({ onCommand, className, disabled, control }: PTZCont
 
   const moveModeKey = canMoveCon ? 'ptz.mode_continuous' : (canMoveRel ? 'ptz.mode_relative' : (canMoveAbs ? 'ptz.mode_absolute' : null));
   const zoomModeKey = canZoomCon ? 'ptz.mode_continuous' : (canZoomRel ? 'ptz.mode_relative' : (canZoomAbs ? 'ptz.mode_absolute' : null));
+
+  if (controlDenied) return null;
 
   return (
     <div className={cn("flex flex-col items-center gap-4 p-4 bg-card/50 rounded-xl border shadow-sm backdrop-blur-sm", className)} data-testid="ptz-controls">

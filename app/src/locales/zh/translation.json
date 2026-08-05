@@ -41,6 +41,7 @@
     "selected": "已选择",
     "unknown_error": "未知错误",
     "auth_required": "需要身份验证",
+    "permission_denied": "你的 ZoneMinder 账户没有此权限。",
     "cannot_reach_host": "无法连接 {{host}}。请检查设置中的地址，或确认服务器正在运行。",
     "running": "运行中",
     "stopped": "已停止",
@@ -151,7 +152,9 @@
     "fit_none": "无",
     "fit_scale_down": "缩小",
     "view_events": "事件",
-    "group_by_server": "按服务器分组"
+    "group_by_server": "按服务器分组",
+    "stream_permission_denied": "此账户没有视频流权限。",
+    "no_monitor_permission": "此账户没有监视器权限。"
   },
   "events": {
     "title": "事件",
@@ -251,7 +254,10 @@
     "filter_by_server": "按服务器筛选",
     "filter_hides_everything": "上方的筛选条件隐藏了所有服务器",
     "show_all_servers": "显示所有服务器",
-    "failed_to_load": "加载事件失败：{{error}}"
+    "failed_to_load": "加载事件失败：{{error}}",
+    "delete_permission_denied": "删除事件需要 Events: Edit 权限。",
+    "archive_permission_denied": "归档事件需要 Events: Edit 权限。",
+    "no_event_permission": "此账户没有事件权限。"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -789,7 +795,9 @@
     "orientation_90": "向右旋转 (90°)",
     "orientation_180": "翻转 (180°)",
     "orientation_270": "向左旋转 (270°)",
-    "settings_description": "Monitor #{{id}} · {{type}}"
+    "settings_description": "Monitor #{{id}} · {{type}}",
+    "settings_restricted_account": "摄像机设置为只读。编辑需要 ZoneMinder 账户具备 System: Edit 权限。",
+    "settings_restricted_monitor": "摄像机设置为只读。ZoneMinder 对你的账户限制了此监视器。"
   },
   "montage": {
     "title": "蒙太奇",
@@ -1231,7 +1239,17 @@
     "storage_server": "服务器",
     "storage_used": "已用",
     "storage_total": "总共",
-    "no_storage": "无存储信息"
+    "no_storage": "无存储信息",
+    "run_state_permission_denied": "更改运行状态需要 System: Edit 权限。",
+    "permissions_title": "账户权限",
+    "permissions_desc": "此 ZoneMinder 账户可执行的操作。",
+    "permission_system": "系统",
+    "permission_monitors": "监视器",
+    "permission_stream": "视频流",
+    "permission_events": "事件",
+    "permission_control": "云台控制",
+    "permission_groups": "分组",
+    "permission_unknown": "未确定"
   },
   "eventMontage": {
     "grid_layout_applied": "网格布局应用: {{cols}} 列",

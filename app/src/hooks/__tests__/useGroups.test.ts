@@ -9,6 +9,13 @@ import type { GroupData } from '../../api/types';
 import { asProfileId } from '../../api/types';
 
 // Mock dependencies
+// The permission probe reaches the profile store through the sessions module
+// this suite stubs; groups permissions are covered in the permission model
+// tests (refs #344).
+vi.mock('../usePermissions', () => ({
+  usePermissions: () => ({ permissions: { groups: 'View' }, isLoading: false }),
+}));
+
 vi.mock('../../api/groups', () => ({
   getGroups: vi.fn(),
 }));

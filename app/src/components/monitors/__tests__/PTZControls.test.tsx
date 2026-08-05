@@ -10,6 +10,15 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+// Permission probe (refs #344). Tests set the verdict they need.
+let mockControlPermission: string | undefined;
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    permissions: mockControlPermission === undefined ? undefined : { control: mockControlPermission },
+    isLoading: false,
+  }),
+}));
+
 // jsdom does not implement pointer capture; the pointerdown handler calls it.
 beforeEach(() => {
   HTMLElement.prototype.setPointerCapture = vi.fn();
@@ -123,5 +132,43 @@ describe('PTZControls hold button', () => {
 
     vi.advanceTimersByTime(UI_INTERACTIONS.ptzHoldRepeatMs * 5);
     expect(onCommand).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * PTZ needs its own ZoneMinder permission (refs #344).
+ *
+ * `ajax/control.php` gates on canView('Control', id): a camera being
+ * controllable is a property of the hardware, and Control is the user's right
+ * to use it. Those are different questions, and only the second one decides
+ * whether these buttons can do anything.
+ */
+describe('PTZControls without control permission', () => {
+  const control = { CanMove: '1', CanMoveCon: '1', CanZoom: '1' } as unknown as ZMControl;
+
+  afterEach(() => {
+    mockControlPermission = undefined;
+  });
+
+  it('renders nothing when ZoneMinder denies control', () => {
+    mockControlPermission = 'None';
+
+    render(<PTZControls onCommand={vi.fn()} control={control} />);
+
+    expect(screen.queryByTestId('ptz-controls')).not.toBeInTheDocument();
+  });
+
+  it('renders at View, which is all ZoneMinder asks for', () => {
+    mockControlPermission = 'View';
+
+    render(<PTZControls onCommand={vi.fn()} control={control} />);
+
+    expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
+  });
+
+  it('renders while the permission is unknown', () => {
+    render(<PTZControls onCommand={vi.fn()} control={control} />);
+
+    expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
   });
 });

@@ -149,6 +149,8 @@ export const queryKeys = {
   states: (profileId: MaybeProfileId) => ['states', profileId] as const,
   timezone: (profileId: MaybeProfileId) => ['timezone', profileId] as const,
   storages: (profileId: MaybeProfileId) => ['storages', profileId] as const,
+  /** What the profile's ZoneMinder account is allowed to do (refs #344). */
+  accountPermissions: (profileId: MaybeProfileId) => ['account-permissions', profileId] as const,
 
   // --- Assistant ----------------------------------------------------------
   /** Ollama backend reachability probe, keyed by base URL so a URL change

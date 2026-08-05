@@ -44,6 +44,10 @@ import { useServerUrls } from '../hooks/useServerUrls';
 import { usePTZControl, useAlarmControl, useModeControl, useMonitorNavigation } from './hooks';
 
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
+import { usePermissions } from '../hooks/usePermissions';
+import { canEditMonitorSettings } from '../lib/permissions/zm-permissions';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { MonitorControlsCard } from '../components/monitor-detail/MonitorControlsCard';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
@@ -182,6 +186,14 @@ export default function MonitorDetail() {
   const zmVersion = useAuthSlice(ownerProfile?.id ?? null).version;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
+  // Whether the settings dialog offers an editor at all. Unknown permissions
+  // stay optimistic: System='None' with Monitors='Edit' is a legal account, so
+  // only a real denial takes the editor away (refs #344).
+  const { permissions } = usePermissions(ownerProfile?.id);
+  const monitorEditRefused = useIsPermissionDenied(ownerProfile?.id, 'monitor-settings', id);
+  const canEditSettings =
+    canEditMonitorSettings(permissions) !== 'denied' && !monitorEditRefused;
+
   // Settings dialog save handler: batches all changes into one or more API calls
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
@@ -200,11 +212,19 @@ export default function MonitorDetail() {
       toast.success(t('monitor_detail.capture_updated'));
     } catch (error) {
       log.monitorDetail('Settings save failed', LogLevel.ERROR, { error });
-      toast.error(t('monitor_detail.capture_failed'));
+      // ZoneMinder can refuse one monitor even when the account columns say
+      // Edit, through per-monitor permission rows the API never exposes. Latch
+      // it so the dialog stops offering an editor that cannot save (refs #344).
+      if (isPermissionDenied(error) && ownerProfile) {
+        markPermissionDenied(ownerProfile.id, 'monitor-settings', monitor.Monitor.Id);
+        toast.error(t('common.permission_denied'));
+      } else {
+        toast.error(t('monitor_detail.capture_failed'));
+      }
     } finally {
       setIsSavingSettings(false);
     }
-  }, [monitor?.Monitor.Id, routeProfileId, refetch, t]);
+  }, [monitor?.Monitor.Id, routeProfileId, refetch, t, ownerProfile]);
 
   // Computed values
   const orientedResolution = useMemo(
@@ -524,6 +544,7 @@ export default function MonitorDetail() {
               <div className="w-full flex flex-col items-center gap-4">
                 <PTZControls
                   onCommand={handlePTZCommand}
+                  profileId={ownerProfile?.id}
                   className="w-full"
                   control={controlData?.control.Control}
                 />
@@ -563,7 +584,8 @@ export default function MonitorDetail() {
         onOpenChange={setShowSettingsDialog}
         monitor={monitor.Monitor}
         zmVersion={zmVersion}
-        onSave={handleSaveSettings}
+        onSave={canEditSettings ? handleSaveSettings : undefined}
+        restrictedReason={monitorEditRefused ? 'monitor' : 'account'}
         isSaving={isSavingSettings}
         cycleSeconds={settings.monitorDetailCycleSeconds}
         onCycleSecondsChange={handleCycleSecondsChange}

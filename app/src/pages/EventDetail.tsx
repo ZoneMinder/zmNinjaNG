@@ -9,6 +9,9 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '../api/events';
+import { usePermissions } from '../hooks/usePermissions';
+import { canEditEvents } from '../lib/permissions/zm-permissions';
+import { useDeniedControl } from '../hooks/useDeniedControl';
 import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
 import { eventHasAlarmFrame } from '../lib/event/thumbnail-chain';
@@ -231,6 +234,17 @@ export default function EventDetail() {
       setIsArchiving(false);
     }
   }, [event, isArchived, isArchiving, routeProfileId, ownerProfile?.id, queryClient, t]);
+
+  // Archiving needs Events: Edit. Greyed and still live, so hover, hold and tap
+  // all say which permission is missing (refs #344).
+  const { permissions } = usePermissions(ownerProfile?.id);
+  const archiveProps = useDeniedControl({
+    denied: canEditEvents(permissions) === 'denied',
+    message: t('events.archive_permission_denied'),
+    onClick: handleArchiveToggle,
+    title: isArchived ? t('event_detail.unarchive') : t('event_detail.archive'),
+    className: 'gap-2 h-8 sm:h-9',
+  });
 
   // Generate video markers for alarm frames
   // NOTE: This hook must be called before any conditional returns
@@ -506,10 +520,8 @@ export default function EventDetail() {
           <Button
             variant={isArchived ? "default" : "outline"}
             size="sm"
-            className="gap-2 h-8 sm:h-9"
-            onClick={handleArchiveToggle}
+            {...archiveProps}
             disabled={isArchiving}
-            title={isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}
             data-testid="event-detail-archive"
           >
             <Archive className={isArchived ? "h-4 w-4 fill-current" : "h-4 w-4"} />

@@ -27,6 +27,9 @@ import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { resolveOwnMonitorIds } from '../../hooks/useScopedEvents';
 import { queryKeys } from '../../lib/query/query-keys';
 import { setEventArchived } from '../../api/events';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canEditEvents } from '../../lib/permissions/zm-permissions';
+import { useDeniedControl } from '../../hooks/useDeniedControl';
 import { getSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
@@ -104,6 +107,8 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
     }
   };
 
+  const { permissions } = usePermissions(ownerProfileId);
+
   const handleArchiveClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isArchiving || !ownerProfileId) return;
@@ -123,6 +128,20 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
       setIsArchiving(false);
     }
   };
+
+  // Archiving needs Events: Edit. The control stays live and greyed so it can
+  // still say why it does nothing (refs #344).
+  const archiveProps = useDeniedControl({
+    denied: canEditEvents(permissions) === 'denied',
+    message: t('events.archive_permission_denied'),
+    onClick: handleArchiveClick,
+    title: isArchived ? t('events.unarchive') : t('events.archive'),
+    className: cn(
+      'p-1 rounded-full hover:bg-accent transition-colors',
+      'focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+      'disabled:opacity-50 disabled:cursor-not-allowed'
+    ),
+  });
 
   return (
     <Card
@@ -223,15 +242,9 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
                   />
                 </HintButton>
                 <HintButton
-                  onClick={handleArchiveClick}
+                  {...archiveProps}
                   disabled={isArchiving}
-                  className={cn(
-                    "p-1 rounded-full hover:bg-accent transition-colors",
-                    "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
-                    "disabled:opacity-50 disabled:cursor-not-allowed"
-                  )}
                   aria-label={isArchived ? t('events.unarchive') : t('events.archive')}
-                  title={isArchived ? t('events.unarchive') : t('events.archive')}
                   data-testid="event-archive-button"
                 >
                   <Archive

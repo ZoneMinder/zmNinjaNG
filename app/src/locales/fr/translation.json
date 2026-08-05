@@ -41,6 +41,7 @@
     "selected": "Sélectionné",
     "unknown_error": "Erreur inconnue",
     "auth_required": "Authentification requise",
+    "permission_denied": "Votre compte ZoneMinder n'a pas la permission requise.",
     "cannot_reach_host": "Impossible de joindre {{host}}. Vérifiez l’adresse dans les Réglages ou que le serveur est démarré.",
     "running": "En cours d'exécution",
     "stopped": "Arrêté",
@@ -151,7 +152,9 @@
     "fit_none": "Aucun",
     "fit_scale_down": "Réduire",
     "view_events": "Événements",
-    "group_by_server": "Grouper par serveur"
+    "group_by_server": "Grouper par serveur",
+    "stream_permission_denied": "Ce compte n'a pas la permission de diffusion.",
+    "no_monitor_permission": "Ce compte n'a aucune permission sur les moniteurs."
   },
   "events": {
     "title": "Événements",
@@ -251,7 +254,10 @@
     "filter_by_server": "Filtrer par serveur",
     "filter_hides_everything": "Le filtre ci-dessus masque tous les serveurs",
     "show_all_servers": "Afficher tous les serveurs",
-    "failed_to_load": "Impossible de charger les événements : {{error}}"
+    "failed_to_load": "Impossible de charger les événements : {{error}}",
+    "delete_permission_denied": "Supprimer des événements exige la permission Events: Edit.",
+    "archive_permission_denied": "Archiver des événements exige la permission Events: Edit.",
+    "no_event_permission": "Ce compte n'a aucune permission sur les événements."
   },
   "event_detail": {
     "event_id": "ID Événement",
@@ -789,7 +795,9 @@
     "orientation_90": "Rotation droite (90°)",
     "orientation_180": "Inversé (180°)",
     "orientation_270": "Rotation gauche (270°)",
-    "settings_description": "Moniteur #{{id}} · {{type}}"
+    "settings_description": "Moniteur #{{id}} · {{type}}",
+    "settings_restricted_account": "Les réglages de la caméra sont en lecture seule. La modification exige la permission System: Edit sur votre compte ZoneMinder.",
+    "settings_restricted_monitor": "Les réglages de la caméra sont en lecture seule. ZoneMinder restreint ce moniteur pour votre compte."
   },
   "montage": {
     "title": "Montage",
@@ -1231,7 +1239,17 @@
     "storage_server": "Serveur",
     "storage_used": "Utilisé",
     "storage_total": "Total",
-    "no_storage": "Aucun stockage"
+    "no_storage": "Aucun stockage",
+    "run_state_permission_denied": "Changer l'état d'exécution exige la permission System: Edit.",
+    "permissions_title": "Permissions du compte",
+    "permissions_desc": "Ce que ce compte ZoneMinder peut faire.",
+    "permission_system": "Système",
+    "permission_monitors": "Moniteurs",
+    "permission_stream": "Diffusion",
+    "permission_events": "Événements",
+    "permission_control": "Contrôle",
+    "permission_groups": "Groupes",
+    "permission_unknown": "Non déterminé"
   },
   "eventMontage": {
     "grid_layout_applied": "Grille appliquée : {{cols}} colonnes",

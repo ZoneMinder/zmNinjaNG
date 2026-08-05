@@ -6,6 +6,12 @@ const useTimelineDataMock = vi.fn();
 const useScopedTimelineEventsMock = vi.fn();
 const useProfileScopeMock = vi.fn();
 
+// The permission probe is a React Query call; these suites render without a
+// provider and are not about permissions (refs #344).
+vi.mock('../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: undefined, isLoading: false }),
+}));
+
 vi.mock('../../hooks/useTimelineData', () => ({
   useTimelineData: (opts: unknown) => useTimelineDataMock(opts),
 }));

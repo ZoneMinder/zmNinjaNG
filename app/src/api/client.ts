@@ -2,6 +2,7 @@ import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
 
 export type ApiMethod = NonNullable<HttpOptions['method']>;
 
@@ -222,7 +223,18 @@ export function createApiClient(
       return response;
     } catch (error) {
       const httpError = error as HttpError;
-      if (httpError.status === 401 && !hasRetried && !skipAuth && !isLoginRequest) {
+      // ZoneMinder answers "you may not" and "log in again" with the same 401
+      // and separates them only in the body. Refreshing a token the server
+      // never objected to costs a refresh plus a retry and fails identically,
+      // so a privilege refusal skips recovery and reaches the caller intact
+      // (refs #344).
+      if (
+        httpError.status === 401 &&
+        !hasRetried &&
+        !skipAuth &&
+        !isLoginRequest &&
+        !isPermissionDenied(httpError)
+      ) {
         const recovered = await gates.auth.recoverFromAuthFailure(reLogin);
         if (recovered) {
           return request(method, url, data, config, true);

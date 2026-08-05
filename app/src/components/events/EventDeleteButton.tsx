@@ -9,6 +9,9 @@ import { cn } from '../../lib/utils';
 import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
 import type { ProfileId } from '../../api/types';
 import { HintButton } from '../ui/button';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canEditEvents } from '../../lib/permissions/zm-permissions';
+import { useDeniedControl } from '../../hooks/useDeniedControl';
 
 interface EventDeleteButtonProps {
   eventId: string;
@@ -26,21 +29,30 @@ export function EventDeleteButton({ eventId, profileId, size = 'md', className }
   const toggle = useDeleteSelectionStore((s) => s.toggle);
   const iconSize = size === 'sm' ? 'h-4 w-4' : 'h-4 w-4 sm:h-5 sm:w-5';
 
+  // Deleting needs Events: Edit. Greyed rather than hidden, so an
+  // administrator can see which permission their account is missing (refs #344).
+  const { permissions } = usePermissions(profileId);
+  const deniedProps = useDeniedControl({
+    denied: canEditEvents(permissions) === 'denied',
+    message: t('events.delete_permission_denied'),
+    onClick: (e) => {
+      e.stopPropagation();
+      toggle(selectionKey);
+    },
+    title: t('events.delete_toggle_aria'),
+    className: cn(
+      'p-1 rounded transition-colors',
+      'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      className
+    ),
+  });
+
   return (
     <HintButton
       type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        toggle(selectionKey);
-      }}
-      className={cn(
-        'p-1 rounded transition-colors',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        className
-      )}
+      {...deniedProps}
       aria-label={t('events.delete_toggle_aria')}
       aria-pressed={selected}
-      title={t('events.delete_toggle_aria')}
       data-testid="event-delete-button"
     >
       <Trash2

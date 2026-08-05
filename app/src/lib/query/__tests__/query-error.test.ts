@@ -23,6 +23,16 @@ describe('resolveQueryError', () => {
     expect(resolveQueryError(err, t)).toBe('common.auth_required');
   });
 
+  // "Log in again" is useless advice when the session is fine and the account
+  // simply may not do this (refs #344).
+  it('distinguishes a privilege refusal from an expired session', () => {
+    const err = createHttpError(401, 'Unauthorized', {
+      success: false,
+      data: { name: 'Insufficient Privileges' },
+    }, {});
+    expect(resolveQueryError(err, t)).toBe('common.permission_denied');
+  });
+
   it('returns the auth_required key when the message says unauthorized', () => {
     const err = new Error('Unauthorized: token expired');
     expect(resolveQueryError(err, t)).toBe('common.auth_required');

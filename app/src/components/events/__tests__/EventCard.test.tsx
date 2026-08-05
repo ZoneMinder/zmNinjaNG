@@ -11,6 +11,15 @@ function renderWithClient(ui: ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+// Permission probe (refs #344); tests set the verdict they need.
+let mockEventsPermission: string | undefined;
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    permissions: mockEventsPermission === undefined ? undefined : { events: mockEventsPermission },
+    isLoading: false,
+  }),
+}));
+
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
 }));
@@ -303,5 +312,40 @@ describe('EventCard', () => {
     const start = `${old.getFullYear()}-${pad(old.getMonth() + 1)}-${pad(old.getDate())} ${pad(old.getHours())}:${pad(old.getMinutes())}:${pad(old.getSeconds())}`;
     renderEventCard({ StartDateTime: start });
     expect(screen.queryByTestId('event-relative-time')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Archiving needs Events: Edit (refs #344).
+ *
+ * One greyed button per card, not one note per card: the explanation belongs on
+ * the control that stopped working, and a note repeated down a scrolling list
+ * would be noise.
+ */
+describe('EventCard without permission to archive', () => {
+  beforeEach(() => {
+    mockEventsPermission = undefined;
+  });
+
+  it('greys the archive control when ZoneMinder denies editing', () => {
+    mockEventsPermission = 'View';
+
+    renderEventCard({});
+
+    expect(screen.getByTestId('event-archive-button')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('leaves it alone at Edit', () => {
+    mockEventsPermission = 'Edit';
+
+    renderEventCard({});
+
+    expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('leaves it alone while the permission is unknown', () => {
+    renderEventCard({});
+
+    expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
   });
 });

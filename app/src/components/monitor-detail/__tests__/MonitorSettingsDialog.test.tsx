@@ -359,3 +359,92 @@ describe('MonitorSettingsDialog owning-profile scoping (refs #337)', () => {
     });
   });
 });
+
+/**
+ * The restricted dialog (refs #344).
+ *
+ * A ZoneMinder account without System Edit gets no editor. The gear stays,
+ * because the app-local preferences behind it - force-ZMS, per-monitor Go2RTC,
+ * cycle - are the stream troubleshooting knobs a restricted user most needs,
+ * and they are not ZoneMinder fields at all. What goes away is every ZM field,
+ * and with it the camera's address and password.
+ */
+describe('MonitorSettingsDialog without permission to edit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    disableLogRedaction = false;
+    forceZmsMonitorIds = [];
+    profileSettingsById = {};
+  });
+
+  const credentialed = {
+    ...baseMonitor,
+    Path: 'rtsp://192.168.1.10:554/h264',
+    User: 'admin',
+    Pass: 'hunter2',
+  } as unknown as Monitor;
+
+  function renderRestricted(props: Record<string, unknown> = {}) {
+    return render(
+      <MonitorSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        monitor={credentialed}
+        zmVersion="1.38.0"
+        profileId={asProfileId('p1')}
+        {...props}
+      />
+    );
+  }
+
+  it('shows no camera address, username, or password', () => {
+    renderRestricted();
+
+    expect(screen.queryByTestId('settings-source-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-username-row')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-password-row')).not.toBeInTheDocument();
+    // The password must not reach the DOM at all, masked or otherwise.
+    expect(document.body.innerHTML).not.toContain('hunter2');
+    expect(document.body.innerHTML).not.toContain('192.168.1.10');
+  });
+
+  it('offers no way to write a ZoneMinder field', () => {
+    renderRestricted();
+
+    expect(screen.queryByTestId('settings-video-save-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-save-button')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-capturing-select')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-orientation-select')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-event-start-cmd-row')).not.toBeInTheDocument();
+  });
+
+  it('keeps the app-local preferences usable', () => {
+    renderRestricted();
+
+    expect(screen.getByTestId('settings-monitor-force-zms-switch')).toBeInTheDocument();
+  });
+
+  it('keeps the read-only facts a viewer is entitled to', () => {
+    renderRestricted({ orientedResolution: '640x480' });
+
+    expect(screen.getByTestId('monitor-settings-readonly')).toHaveTextContent('640x480');
+  });
+
+  it('says why the fields are gone, naming the ZoneMinder permission', () => {
+    renderRestricted();
+
+    expect(screen.getByTestId('monitor-settings-restricted-note')).toHaveTextContent(
+      'monitor_detail.settings_restricted_account'
+    );
+  });
+
+  it('names the monitor, not the account, when ZoneMinder refused this one monitor', () => {
+    // Per-monitor permission rows override the account columns and are not in
+    // the API, so an account with System Edit can still be refused here.
+    renderRestricted({ restrictedReason: 'monitor' });
+
+    expect(screen.getByTestId('monitor-settings-restricted-note')).toHaveTextContent(
+      'monitor_detail.settings_restricted_monitor'
+    );
+  });
+});

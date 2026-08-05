@@ -18,6 +18,8 @@ import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
+import { usePermissions } from './usePermissions';
+import { canViewGroups } from '../lib/permissions/zm-permissions';
 import type { GroupData } from '../api/types';
 
 export interface UseGroupsReturn {
@@ -70,10 +72,17 @@ export function useGroups(): UseGroupsReturn {
   const { currentProfile } = useCurrentProfile();
   const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
+  // Groups is its own ZoneMinder column: full monitor access with Groups='None'
+  // is a real account, and groups.json refuses it outright. The filter already
+  // hides itself when no groups come back, so all this saves is a request that
+  // can only 401 - and the retries behind it (refs #344).
+  const { permissions } = usePermissions(currentProfile?.id);
+
   const { data, isLoading, isSuccess, error, refetch } = useQuery({
     queryKey: queryKeys.groups(currentProfile?.id),
     queryFn: () => getGroups(getCurrentSession().client),
-    enabled: !!currentProfile?.id && isAuthenticated,
+    enabled:
+      !!currentProfile?.id && isAuthenticated && canViewGroups(permissions) !== 'denied',
     // Groups rarely change, so we can use a longer stale time
     staleTime: 5 * 60 * 1000, // 5 minutes
   });

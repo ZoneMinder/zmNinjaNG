@@ -8,6 +8,7 @@
 
 import type { TFunction } from 'i18next';
 import { isAbortError } from '../is-abort-error';
+import { isPermissionDenied } from '../permissions/permission-error';
 
 export interface ResolveQueryErrorOptions {
   /**
@@ -26,6 +27,11 @@ export function resolveQueryError(
   // `createHttpError` (lib/http/types.ts) puts the code on a flat `status`.
   // Nothing here produces an axios-shaped `.response.status` envelope.
   const status = (err as { status?: number })?.status;
+  // A privilege refusal is also a 401, and telling that user to authenticate
+  // sends them to re-enter credentials that were never the problem (refs #344).
+  if (isPermissionDenied(err)) {
+    return t('common.permission_denied');
+  }
   if (status === 401 || /unauthorized/i.test(message)) {
     return t('common.auth_required');
   }
