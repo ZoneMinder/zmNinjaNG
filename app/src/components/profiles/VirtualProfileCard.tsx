@@ -43,6 +43,10 @@ export function VirtualProfileCard({
       data-testid={`profile-card-virtual-${group.id}`}
       onClick={onSwitch}
       onKeyDown={(e) => {
+        // Only the card's own keys. Enter and Space on the buttons inside it
+        // bubble up here, and preventDefault would cancel the activation the
+        // button was about to perform, switching profiles instead of editing.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onSwitch();
