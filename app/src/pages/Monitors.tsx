@@ -26,6 +26,10 @@ import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
 import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
+import { usePermissions } from '../hooks/usePermissions';
+import { canEditMonitorSettings } from '../lib/permissions/zm-permissions';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -174,11 +178,29 @@ export default function Monitors() {
       toast.success(t('monitor_detail.capture_updated'));
     } catch (error) {
       log.monitor('Settings save failed', LogLevel.ERROR, { error });
-      toast.error(t('monitor_detail.capture_failed'));
+      // Per-monitor permission rows can refuse a save the account columns
+      // allowed, and they are not in the API - so the refusal itself is the
+      // only way to learn about them (refs #344).
+      if (isPermissionDenied(error)) {
+        markPermissionDenied(settingsProfileId, 'monitor-settings', selectedMonitor.Id);
+        toast.error(t('common.permission_denied'));
+      } else {
+        toast.error(t('monitor_detail.capture_failed'));
+      }
     } finally {
       setIsSavingSettings(false);
     }
   }, [selectedMonitor, settingsProfileId, refetchProfile, t]);
+
+  // Unknown permissions stay optimistic; only a denial removes the editor.
+  const { permissions: settingsPermissions } = usePermissions(settingsProfileId);
+  const settingsMonitorRefused = useIsPermissionDenied(
+    settingsProfileId,
+    'monitor-settings',
+    selectedMonitor?.Id,
+  );
+  const canEditSettings =
+    canEditMonitorSettings(settingsPermissions) !== 'denied' && !settingsMonitorRefused;
 
   const handleFeedFitChange = (value: string) => {
     if (!currentProfileId) return;
@@ -443,7 +465,8 @@ export default function Monitors() {
           onOpenChange={setShowPropertiesDialog}
           monitor={selectedMonitor}
           zmVersion={settingsZmVersion}
-          onSave={handleSaveSettings}
+          onSave={canEditSettings ? handleSaveSettings : undefined}
+          restrictedReason={settingsMonitorRefused ? 'monitor' : 'account'}
           isSaving={isSavingSettings}
           profileId={settingsProfileId ?? undefined}
         />

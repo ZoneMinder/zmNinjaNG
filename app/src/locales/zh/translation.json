@@ -790,7 +790,9 @@
     "orientation_90": "向右旋转 (90°)",
     "orientation_180": "翻转 (180°)",
     "orientation_270": "向左旋转 (270°)",
-    "settings_description": "Monitor #{{id}} · {{type}}"
+    "settings_description": "Monitor #{{id}} · {{type}}",
+    "settings_restricted_account": "摄像机设置为只读。编辑需要 ZoneMinder 账户具备 System: Edit 权限。",
+    "settings_restricted_monitor": "摄像机设置为只读。ZoneMinder 对你的账户限制了此监视器。"
   },
   "montage": {
     "title": "蒙太奇",

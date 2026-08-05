@@ -59,8 +59,16 @@ vi.mock('../../components/monitors/MonitorCard', () => ({
 }));
 
 vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
-    selector({ currentProfileId: 'profile-1' }),
+  // `profiles` is read by usePermissions for the account name (refs #344).
+  useProfileStore: (
+    selector: (state: { currentProfileId: string; profiles: { id: string; username?: string }[] }) => unknown,
+  ) => selector({ currentProfileId: 'profile-1', profiles: [{ id: 'profile-1', username: 'admin' }] }),
+}));
+
+// The permission probe is a React Query call; this suite renders without a
+// QueryClientProvider and is not about permissions (refs #344).
+vi.mock('../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: { system: 'Edit' }, isLoading: false }),
 }));
 
 vi.mock('../../stores/settings', () => ({

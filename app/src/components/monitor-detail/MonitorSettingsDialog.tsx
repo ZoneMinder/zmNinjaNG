@@ -25,6 +25,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { SettingsRow } from './SettingsRow';
 import { MonitorAppPreferences } from './MonitorAppPreferences';
+import { MonitorRestrictedSettings, type RestrictedReason } from './MonitorRestrictedSettings';
 
 interface MonitorSettingsDialogProps {
   open: boolean;
@@ -44,6 +45,11 @@ interface MonitorSettingsDialogProps {
   monitorNames?: Record<string, string>;
   /** Owning profile for an /all/ deep route or All-mode monitor grid; defaults to the current profile. */
   profileId?: ProfileId;
+  /**
+   * Why `onSave` is absent, when it is absent because ZoneMinder said no
+   * rather than because the caller never offered saving (refs #344).
+   */
+  restrictedReason?: RestrictedReason;
 }
 
 export function MonitorSettingsDialog({
@@ -58,6 +64,7 @@ export function MonitorSettingsDialog({
   orientedResolution,
   monitorNames,
   profileId,
+  restrictedReason = 'account',
 }: MonitorSettingsDialogProps) {
   const { t } = useTranslation();
   const editable = !!onSave;
@@ -181,6 +188,17 @@ export function MonitorSettingsDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {!editable ? (
+          <MonitorRestrictedSettings
+            monitor={monitor}
+            profileId={profileId}
+            reason={restrictedReason}
+            cycleSeconds={cycleSeconds}
+            onCycleSecondsChange={onCycleSecondsChange}
+            orientedResolution={orientedResolution}
+            monitorNames={monitorNames}
+          />
+        ) : (
         <Tabs defaultValue="video" className="mt-2 flex flex-col min-h-0 flex-1">
           <TabsList className="w-full shrink-0">
             <TabsTrigger value="video" className="flex-1" data-testid="settings-tab-video">
@@ -533,6 +551,7 @@ export function MonitorSettingsDialog({
             )}
           </TabsContent>
         </Tabs>
+        )}
       </DialogContent>
     </Dialog>
   );

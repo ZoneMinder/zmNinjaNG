@@ -790,7 +790,9 @@
     "orientation_90": "Rotation droite (90°)",
     "orientation_180": "Inversé (180°)",
     "orientation_270": "Rotation gauche (270°)",
-    "settings_description": "Moniteur #{{id}} · {{type}}"
+    "settings_description": "Moniteur #{{id}} · {{type}}",
+    "settings_restricted_account": "Les réglages de la caméra sont en lecture seule. La modification exige la permission System: Edit sur votre compte ZoneMinder.",
+    "settings_restricted_monitor": "Les réglages de la caméra sont en lecture seule. ZoneMinder restreint ce moniteur pour votre compte."
   },
   "montage": {
     "title": "Montage",
