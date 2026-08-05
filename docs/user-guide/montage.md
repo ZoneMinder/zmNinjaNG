@@ -14,19 +14,19 @@ The toolbar appears above the grid. You can hide or show it using the eye icon i
 - **Fullscreen**: expand the grid to fill the entire screen
 - **More (⋮) → Show monitors**: uncheck a camera to drop its tile from the grid, check it again to bring it back. Nothing changes on the server, and the choice survives a reload
 
-In All Servers mode each entry in **Show monitors** names the server it comes
+While aggregating, each entry in **Show monitors** names the server it comes
 from, since two servers can have cameras with the same name. Hiding one
 server's camera leaves the other server's camera of that name on screen.
 
-In All Servers mode the grid opens a limited number of tiles at once, since
+While aggregating, the grid opens a limited number of tiles at once, since
 each tile is a live connection and combining servers multiplies them. The
 slots are shared out evenly between the servers in view, so every server is
 represented rather than the first one filling the grid on its own. Past that
 limit the remaining cameras collapse into an overflow notice above the grid
-rather than opening more connections. Raise or lower the limit under **All
-Servers performance** in {doc}`settings`.
+rather than opening more connections. Raise or lower the limit under
+**Aggregate performance** in {doc}`settings`.
 
-Every toolbar control works the same way in All Servers mode, including edit
+Every toolbar control works the same way while aggregating, including edit
 mode, column presets and saved layouts. The arrangement is kept separately
 from each profile's own, so rearranging the combined grid leaves each
 server's single-profile layout alone. Tiles are tracked per server, so two
@@ -70,7 +70,7 @@ On touch devices, pinch to zoom in or out on the grid. Zoom is disabled in fulls
 Each tile honors the same streaming rules as elsewhere in the app:
 
 - Monitors with Go2RTC enabled stream live video (WebRTC, MSE, or HLS).
-- Monitors on MJPEG follow the global *Streaming Mode* setting, *Streaming* shows continuous MJPEG, *Snapshot* shows a periodic JPEG that refreshes on the configured interval. In All Servers mode each tile follows its own server's setting unless you set an **All Servers Streaming Mode** in {doc}`settings`.
+- Monitors on MJPEG follow the global *Streaming Mode* setting, *Streaming* shows continuous MJPEG, *Snapshot* shows a periodic JPEG that refreshes on the configured interval. While aggregating, each tile follows its own server's setting unless you set the group's Streaming Mode in {doc}`settings`.
 
 Go2RTC streams in the montage are muted by default. The protocol label (MJPEG/MSE/WebRTC) visibility is controlled by the toolbar eye toggle. Monitors that cannot be reached display a VideoOff placeholder instead of a broken feed.
 
@@ -84,9 +84,9 @@ For a per-platform breakdown of where the ~6-stream limit applies, see {ref}`Con
 If you have many cameras, use **Low bandwidth mode** in Settings to reduce data usage. You can also filter to show only the cameras you need, or use saved layouts to switch between different subsets.
 :::
 
-### All Servers mode
+### While aggregating
 
-Combining servers multiplies all of the above, so **All Servers performance**
+Combining servers multiplies all of the above, so **Aggregate performance**
 in {doc}`settings` carries four switches that only apply to the combined
 montage. None of them change any server's own settings, and none apply when
 you are on a single server.

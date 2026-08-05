@@ -423,8 +423,8 @@ An eye-toggle button shows and hides the toolbar (group filter, grid
 controls, fit selector, refresh, edit, fullscreen). Stored per profile in
 ``settings.montageShowToolbar``. i18n key: ``montage.toggle_toolbar``.
 
-Keeping All Servers mode affordable
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Keeping aggregation affordable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 One montage across four servers is four servers' worth of encoding and one
 client's worth of decoding, so the page carries five guardrails that only
@@ -1086,10 +1086,11 @@ profile:
 Naming the active aggregate
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-There are two kinds of aggregate and they are named differently. All Servers
-is a sentinel id with nothing stored behind it, so its label is localized
-(``profiles.all_servers``); a virtual profile is a stored group and its label
-is the name the user gave it. Nothing should branch on that in a component.
+A virtual profile is a stored group, so its label is the name the user gave
+it. The localized ``profiles.all_servers`` label is the legacy fallback for
+the retired All Servers sentinel, which has nothing stored behind it and is
+migrated away on rehydrate (refs #337). Nothing should branch on that in a
+component.
 
 While a surface is describing the aggregate it is already in, take the name
 off the scope:
@@ -1100,9 +1101,9 @@ off the scope:
    const aggregateName =
      (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
 
-``aggregateName`` is ``null`` for All Servers, which is why the localized
-label is the fallback rather than a value the hook invents. Settings uses this
-for its aggregate section headings.
+``aggregateName`` is ``null`` only for the retired sentinel, which is why the
+localized label is the fallback rather than a value the hook invents. Settings
+uses this for its aggregate section headings.
 
 When a surface names an aggregate it is *not* in, the scope cannot answer:
 the profile switcher and the Profiles page both announce the aggregate they
@@ -1112,10 +1113,10 @@ are switching to, before the switch. Use ``useAggregateLabel``
 .. code:: tsx
 
    const aggregateLabel = useAggregateLabel();
-   const name = aggregateLabel(profileId); // group name, or "All Servers"
+   const name = aggregateLabel(profileId); // the group's name
 
 An id with no group behind it (deleted in another tab, hand-edited storage)
-falls back to ``profiles.select_profile`` rather than "All Servers", matching
+falls back to ``profiles.select_profile`` rather than an aggregate label, matching
 ``useProfileScope``, which collapses that id to no scope at all.
 
 Loading and error states

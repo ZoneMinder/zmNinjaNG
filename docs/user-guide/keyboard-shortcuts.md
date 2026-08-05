@@ -36,11 +36,11 @@ arrows to move the highlight. You can jump to any app page, to a monitor by name
 or ID, or to a monitor group. On a phone this is the quick way to navigate,
 since the letter keys need a hardware keyboard.
 
-In {doc}`profiles`' All Servers mode the palette lists monitors from every
-server, and each monitor row names the server it belongs to - two servers can
+In a {doc}`profiles` group the palette lists monitors from every server in it,
+and each monitor row names the server it belongs to - two servers can
 easily have a camera with the same name or the same ID, so the label is how you
-tell them apart. Opening one stays in All Servers mode. Monitor groups are not
-listed in All Servers mode: groups belong to a single server, and there is no
+tell them apart. Opening one stays in the group. Monitor groups are not
+listed while aggregating: they belong to a single server, and there is no
 combined view of them.
 
 ## Open a monitor by ID
@@ -50,7 +50,7 @@ ID (the same ID ZoneMinder shows for the monitor), not its position in the list,
 so it stays the same as you add or remove monitors. If no monitor has that ID
 (or it is hidden), you get a "No monitor" message.
 
-Every shortcut on this page works in All Servers mode too. Since monitor IDs
+Every shortcut on this page works while aggregating too. Since monitor IDs
 repeat across servers, a typed number opens the first monitor with that ID in
 the order the Monitors page lists them; use the command palette above when you
 want a specific server's copy.

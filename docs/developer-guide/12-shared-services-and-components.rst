@@ -1233,16 +1233,16 @@ useViewPrefs (``hooks/useViewPrefs.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Answers which settings bucket a rendered stream should obey. Preferences are
-two-tier: All Servers mode keeps its own bucket, stored under the
-``ALL_PROFILES_ID`` sentinel, separate from every individual profile's.
+two-tier: an aggregate keeps its own bucket, stored under the group's own id,
+separate from every individual profile's.
 
 Page-level controls get that for free, because ``useCurrentProfile`` already
 keys off ``currentProfileId`` and so resolves to the ALL bucket in All mode.
 The stream path does not. A montage tile owned by profile B passes
 ``profileId: B`` down the URL chain (``useServerUrls``, ``useFreshAccessToken``,
 ``useProfileById``) so its stream resolves against B's server, and reading its
-view preferences from the same place would leave the All Servers analysis-frames
-toggle and the Settings page's All Servers Streaming Mode row governing nothing.
+view preferences from the same place would leave the aggregate's analysis-frames
+toggle and the Settings page's aggregate Streaming Mode row governing nothing.
 
 .. code:: typescript
 
@@ -1300,8 +1300,8 @@ with no Apply button in the persistence path.
 - The restore effect reads settings on mount and on profile change using the
   raw ``_set*`` functions, bypassing the save wrappers so restore does not
   immediately re-save what it just read.
-- Persistence keys off ``currentProfileId``, so in All Servers mode filters
-  live in the ALL bucket, following the same two-tier rule as
+- Persistence keys off ``currentProfileId``, so while aggregating, filters
+  live in the aggregate's own bucket, following the same two-tier rule as
   ``useViewPrefs`` above.
 - In All mode the persisted ``monitorIds`` are composite
   ``profileId:monitorId`` tokens, the same form ``EventsFilterPopover``

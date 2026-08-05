@@ -264,7 +264,7 @@ Nothing explicitly pauses the MJPEG streams. The OS suspends the webview, the
 socket goes quiet, and the stream is simply dead when the app comes back.
 Recovery happens on resume, not on the way out.
 
-The montage in All Servers mode is the one exception, and only when
+The montage while aggregating is the one exception, and only when
 ``allModePauseHidden`` is on: ``useHiddenPause`` fires
 ``MONTAGE_GRID.pauseHiddenGraceMs`` after the page goes hidden and disables
 each tile's stream hooks, which CMD_QUITs the connkey instead of leaving the

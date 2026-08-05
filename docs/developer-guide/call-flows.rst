@@ -69,8 +69,8 @@ If you already know the symptom, jump straight to its flow:
     is missing from settings.
 20. A Live Activity poll tick: a tile will not leave, or a monitor never
     appears.
-21. Switching into All Servers mode: monitors from every profile show up
-    tagged with their origin, or one down server blanks the whole list.
+21. Switching into a virtual profile group: monitors from every server in it
+    show up tagged with their origin, or one down server blanks the whole list.
 
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
@@ -790,7 +790,7 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 #. **Store builds the config and listeners.** ``connect`` gets its own service
    instance per profile id, builds the server config, registers state/event
    listeners, and awaits the service connect - it no longer disconnects any
-   other profile, since All Servers mode needs more than one profile connected
+   other profile, since an aggregate needs more than one profile connected
    at once (refs #337; see Flow 23).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
    · → :doc:`03-state-management-zustand`
@@ -2624,31 +2624,38 @@ thrash ``nph-zms`` on the server, not just the display.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L246>`__
    · → :doc:`12-shared-services-and-components`
 
-Flow 21: Switching into All Servers mode
------------------------------------------
+Flow 21: Switching into a virtual profile group
+-----------------------------------------------
 
-All Servers mode is not a special-cased branch bolted onto the data layer: the
-"all profiles" scope is a sentinel id with no backing ``Profile`` record, and
-every hook that already fanned out over "the current profile" now fans out
-over a list of one or of many the exact same way. The counterintuitive part is
-where that list comes from - the same per-profile React Query key
-``useMonitors`` uses in single mode, so entering All mode never refetches a
-profile whose monitors are already cached.
+Aggregating is not a special-cased branch bolted onto the data layer: an
+aggregate scope is an id with no backing ``Profile`` record, and every hook
+that already fanned out over "the current profile" now fans out over a list of
+one or of many the exact same way. The counterintuitive part is where that
+list comes from - the same per-profile React Query key ``useMonitors`` uses in
+single mode, so entering all mode never refetches a profile whose monitors are
+already cached.
 
-All Servers is one of two aggregates, and this flow is the other one's too. A
-virtual profile (a virtual profile group in the UI, ``VirtualProfile`` in
+A virtual profile (a virtual profile group in the UI, ``VirtualProfile`` in
 ``api/types.ts``) is stored on the profile store and gets an id shaped
 ``__virtual_<uuid>``, which is what ``isVirtualProfileId`` tests and what
-``isAggregateProfileId`` folds together with the sentinel. Every step below
-holds for a group unchanged: the id is still not a profile, ``switchProfile``
-still takes the cheap branch, and ``useProfileScope`` still returns
-``mode: 'all'``. Only two things differ, both inside step 4: the profile list
-is filtered to the group's members (dropping any that were deleted or
-disabled) rather than being every enabled profile, and the ``'all'`` arm
-carries ``aggregateId`` and ``aggregateName`` so surfaces that name the
-aggregate can say which one. Nothing downstream asks which aggregate it is
-aggregating, which is why generalizing All Servers to virtual profile groups
-touched no consumer in this flow.
+``isAggregateProfileId`` recognizes. It is the only aggregate a user can
+select. Its ``'all'`` scope arm carries ``aggregateId`` and ``aggregateName``
+so surfaces that name the aggregate can say which one, and its profile list is
+the group's members filtered down to the ones still present and enabled.
+Nothing downstream asks which aggregate it is aggregating, which is why
+generalizing the original built-in aggregate to groups touched no consumer in
+this flow.
+
+.. note::
+
+   ``ALL_PROFILES_ID`` is the retired built-in "All Servers" aggregate. Groups
+   replaced it: no surface offers it, ``switchProfile`` rejects it, and
+   ``handleProfileRehydration`` (Flow 1) resets a stored one to ``null`` and
+   deletes the settings and dashboard buckets it owned. The sentinel itself
+   survives in ``api/types.ts`` so the guards that keep an aggregate id out of
+   session, token and notification paths still recognize a stored one, and so
+   a frame rendered before that migration runs shows an aggregate rather than
+   an empty screen. Nothing new should reference it. Refs #337.
 
 .. mermaid::
 
@@ -2663,9 +2670,9 @@ touched no consumer in this flow.
        participant A as Server A
        participant B as Server B
 
-       User->>Page: tap the All Servers card
-       Page->>Store: switchProfile(ALL_PROFILES_ID)
-       Store-->>Page: currentProfileId = ALL_PROFILES_ID (no session, no login)
+       User->>Page: tap the group's card
+       Page->>Store: switchProfile(__virtual_<uuid>)
+       Store-->>Page: currentProfileId = the group id (no session, no login)
        Page->>Mon: navigate('/monitors')
        Mon->>Scope: useProfileScope()
        Scope-->>Mon: {mode:'all', profile:null, profiles:[A,B]}
@@ -2677,35 +2684,37 @@ touched no consumer in this flow.
        Hook-->>Mon: {monitors: Scoped<MonitorData>[], errors: [B]}
        Mon->>Mon: render A's cards + chip, render a strip for B
 
-#. **The sentinel is not a profile.** ``ALL_PROFILES_ID`` is a fixed string id
-   with no ``Profile`` record behind it. ``currentProfileId`` can point at it
-   the same way it points at any real profile id, which is what lets the rest
-   of the store and every hook treat "all servers" as one more value rather
-   than a mode flag threaded through every consumer.
+#. **An aggregate id is not a profile.** A group id is a minted string with no
+   ``Profile`` record behind it. ``currentProfileId`` can point at it the same
+   way it points at any real profile id, which is what lets the rest of the
+   store and every hook treat "these servers" as one more value rather than a
+   mode flag threaded through every consumer.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/types.ts#L596>`__
    · → :doc:`03-state-management-zustand`
 
-#. **The card needs a real second profile to exist.** ``Profiles`` renders the
-   All Servers card only when ``profiles.length >= 2``; with one profile there
-   is nothing to aggregate and the card is absent, which is the ≥2 rule the
-   user guide documents.
+#. **Making a group needs a real second profile.** ``Profiles`` offers the new
+   group action only when two or more profiles are enabled; with one there is
+   nothing to aggregate, which is the ≥2 rule the user guide documents. The
+   cards of groups that already exist stay, since editing and deleting them is
+   the only way out of that state.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L364>`__
    · → :doc:`04-pages-and-views`
 
-#. **Switching to All is the cheap branch of switchProfile.** ``Profiles``'s
-   ``handleSwitchProfile`` calls the same ``switchProfile(id)`` action for the
-   All card as for every real card. The store special-cases
-   ``id === ALL_PROFILES_ID`` before it reaches any of the six per-profile
+#. **Switching to an aggregate is the cheap branch of switchProfile.**
+   ``Profiles``'s ``handleSwitchProfile`` calls the same ``switchProfile(id)``
+   action for a group card as for every real card. The store special-cases
+   ``isAggregateProfileId(id)`` before it reaches any of the six per-profile
    bootstrap steps Flow 1 walks: it quits every active stream and sets
-   ``currentProfileId``, nothing else, because a sentinel with no server has
-   no session to build.
+   ``currentProfileId``, nothing else, because an id with no server has no
+   session to build. A group id that no longer resolves to a stored group is
+   rejected instead, the same way an unknown profile id is.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L280>`__
    · → :doc:`03-state-management-zustand`
 
 #. **One branch point resolves the scope for everyone.** ``useProfileScope``
-   reads ``currentProfileId`` and, when it is the sentinel, returns
-   ``{mode:'all', profile:null, profiles}`` - the full profile list instead of
-   a one-element array. Every consumer below fans out over ``scope.profiles``
+   reads ``currentProfileId`` and, when it is an aggregate, returns
+   ``{mode:'all', profile:null, profiles}`` - the group's member list instead
+   of a one-element array. Every consumer below fans out over ``scope.profiles``
    identically in both modes, so this hook is the only place in the app that
    branches on the mode at all.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useProfileScope.ts#L66>`__
@@ -2759,8 +2768,8 @@ Monitors does here. Montage and Dashboard now resolve the same scope and
 aggregate identically - Montage additionally caps the number of simultaneous
 All-mode streams it opens, so a large combined camera count can't try to open a
 live stream to every camera on every server at once. That cap reads
-``settings.allModeMaxStreams`` from the ALL bucket, edited in Settings' All
-Servers performance section and defaulting to
+``settings.allModeMaxStreams`` from the aggregate's own bucket, edited in
+Settings' aggregate performance section and defaulting to
 ``MONTAGE_GRID.allModeMaxStreams``; Live Activity's watch cap and poll floor
 come from the same bucket the same way. Screens that are inherently single-server instead -
 Logs, Server, Notification settings, the server-scoped part of Settings, and
@@ -2774,7 +2783,7 @@ Flow 16 covers the other two ways a profile list changes shape, editing and
 deleting; this flow is the third, and the only one where "the current
 profile" can mean more than one server at a time.
 
-Flow 22: Merged events and direct tap-through in All Servers mode
+Flow 22: Merged events and direct tap-through while aggregating
 -------------------------------------------------------------------
 
 Events aggregation reuses Flow 21's shape - one ``useQueries`` fan-out over
@@ -2862,7 +2871,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    ``/all/monitors/:profileId/:monitorId`` when the card carries a
    ``profileId``, instead of Flow 21's switch-then-navigate; ``MonitorDetail``
    resolves its session from the route param, so the profile switcher still
-   reads "All Servers" the whole time - the outcome the deep-link e2e scenario
+   still names the group the whole time - the outcome the deep-link e2e scenario
    asserts.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
    · → :doc:`05-component-architecture`
@@ -2936,12 +2945,12 @@ with no gate notice.
 Flow 21 covers how a profile enters All mode in the first place; this flow
 picks up once it's there.
 
-Flow 23: Live notifications across every server in All Servers mode
+Flow 23: Live notifications across every server in an aggregate
 ---------------------------------------------------------------------
 
-Flow 7 covers one profile's websocket. All Servers mode does not multiplex
-that single connection - it mounts one independent connector per enabled
-profile, each running Flow 7's own connect/reconnect/backoff machinery
+Flow 7 covers one profile's websocket. Aggregating does not multiplex
+that single connection - it mounts one independent connector per profile in
+scope, each running Flow 7's own connect/reconnect/backoff machinery
 unchanged, so one server's flaky network never stalls another's toasts. The
 counterintuitive part is that no aggregation code decides which profile an
 event belongs to: each connector closes over its own profile id at mount, so

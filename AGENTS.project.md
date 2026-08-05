@@ -59,10 +59,10 @@ Path: subscriptions select every reactive field they read, with `useShallow` for
 Never: mutating objects returned by `getState`; whole-store subscriptions; minting objects inside a selector - `useShallow` never stabilizes them and the render loops.
 Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes need a real-store regression test (testing playbook).
 
-### Aggregation (All Servers and groups)
+### Aggregation (virtual profile groups)
 Owns: surfaces fanning out over multiple profiles.
-Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); an aggregate id is the ALL sentinel or a virtual profile id, tested with `isAggregateProfileId`; fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
-Never: bare monitor/event ids as aggregate keys; `=== ALL_PROFILES_ID` where a group aggregates too; `getCurrentSession` where an aggregate can be current; server-scoped prefs read from an aggregate bucket.
+Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); an aggregate id is a virtual profile id, tested with `isAggregateProfileId`; fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
+Never: bare monitor/event ids as aggregate keys; `ALL_PROFILES_ID`, the retired sentinel, outside its rehydrate migration; `getCurrentSession` where an aggregate can be current; server-scoped prefs read from an aggregate bucket.
 Gate: review; mechanizing these is a tracked follow-up.
 
 ### Notifications

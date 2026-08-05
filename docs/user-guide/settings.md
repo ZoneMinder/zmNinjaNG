@@ -116,9 +116,9 @@ A new profile picks a default based on the platform:
 
 Changing the Streaming Mode toggle overrides the default for that profile.
 
-#### In All Servers mode
+#### While aggregating
 
-While aggregating, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate aggregate Streaming Mode row appears at the top of the page. The row is named after whatever you are aggregating: **All Servers Streaming Mode** in All Servers mode, or the group's name when a virtual profile group is current. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile in the aggregate for as long as you are aggregating; neither touches any profile's own setting, and neither carries between one aggregate and another.
+In a virtual profile group, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate aggregate Streaming Mode row appears at the top of the page, named after the group. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile in the aggregate for as long as you are aggregating; neither touches any profile's own setting, and neither carries between one aggregate and another.
 
 (connection-limits-by-platform)=
 
@@ -196,12 +196,12 @@ Manage the PIN used to lock and unlock kiosk mode. See {doc}`kiosk` for full det
 | **Change PIN** | Requires verifying your current PIN or biometrics before setting a new one. |
 | **Clear PIN** | Removes the PIN. Requires verifying the current PIN or biometrics first. |
 
-## All Servers performance
+## Aggregate performance
 
 This section only appears while you are aggregating, above the server picker,
 because every row in it governs the combined view rather than one server. Its
-heading names the aggregate it belongs to: All Servers, or the virtual profile
-group you are currently in, whose values are its own. Each row shows the value it ships
+heading names the virtual profile group you are currently in, whose values are
+its own. Each row shows the value it ships
 with, and grows a reset button once you change it.
 
 Aggregating several servers multiplies work that one server does once: every

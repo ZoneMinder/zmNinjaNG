@@ -45,9 +45,9 @@ Every monitor is watched by default, including cameras set to record continuousl
 
 A push notification for a monitor promotes it onto the page immediately, rather than waiting for the next scheduled check.
 
-## All Servers Mode
+## In a virtual profile group
 
-While aggregating in {doc}`profiles`' All Servers mode, the page watches every enabled profile's monitors at once, each tile carrying a chip naming its server. The total watched across all servers is capped, drawn round-robin from each profile so one busy server can't crowd the rest out; hitting the cap adds an overflow line reporting how many monitors aren't being watched, on top of the usual "+N more active" overflow for tiles that are alarming but don't fit the grid. That cap is **Monitors watched for alarms** under **All Servers performance** in {doc}`settings`, alongside **Fastest alarm polling**, which stops the combined poll running faster than a set interval however low you set the check interval here. Check interval, dwell window, and maximum tiles stay one shared All Servers setting. **Monitors to watch** is still per server: the gear icon's ignore-list section gets its own profile picker in All Servers mode, so turning a monitor off here only affects that one server's list.
+While aggregating in a {doc}`profiles` group, the page watches every member's monitors at once, each tile carrying a chip naming its server. The total watched across the group is capped, drawn round-robin from each member so one busy server can't crowd the rest out; hitting the cap adds an overflow line reporting how many monitors aren't being watched, on top of the usual "+N more active" overflow for tiles that are alarming but don't fit the grid. That cap is **Monitors watched for alarms** under **Aggregate performance** in {doc}`settings`, alongside **Fastest alarm polling**, which stops the combined poll running faster than a set interval however low you set the check interval here. Check interval, dwell window, and maximum tiles stay one shared group-wide setting. **Monitors to watch** is still per server: the gear icon's ignore-list section gets its own profile picker while aggregating, so turning a monitor off here only affects that one server's list.
 
 ## When the server cannot be reached
 

@@ -823,7 +823,7 @@ than filtering out one profile's keys: the profile list just changed under a
 destructive queue, and dropping it is the safe direction.
 
 The entries are *not* raw ZoneMinder event ids. An event id is only unique
-within one server, so in All Servers mode ticking event 1234 on profile A also
+within one server, so while aggregating, ticking event 1234 on profile A also
 ticked event 1234 on profile B and would have deleted both. The store keys on
 ``eventSelectionKey(profileId, eventId)``, which is ``` `${profileId}:${eventId}` ```
 (refs #337) and mirrors ``monitorCacheKey`` in ``stores/monitors.ts``. With no
@@ -1093,8 +1093,8 @@ accept input once visible. ``EventHeatmap``'s tooltip carries the same pair.
 Invisible is not the same as non-interactive, and only a real iOS device shows
 the difference.
 
-Tuning the All Servers aggregate
--------------------------------
+Tuning the aggregate
+--------------------
 
 AllServersPerformanceSection
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
