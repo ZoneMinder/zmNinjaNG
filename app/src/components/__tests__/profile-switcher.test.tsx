@@ -145,6 +145,19 @@ describe('ProfileSwitcher', () => {
       expect(screen.getByTestId('profile-switcher-trigger')).toHaveTextContent('Backyard');
     });
 
+    // A group deleted in another tab, or hand-edited out of storage, leaves
+    // the id current with nothing behind it. Nothing is aggregating then, so
+    // naming it "All Servers" would claim a selection the user does not have.
+    it('does not claim All Servers when the current group no longer exists', () => {
+      mockProfileState.virtualProfiles = [];
+
+      render(<ProfileSwitcher />);
+
+      const trigger = screen.getByTestId('profile-switcher-trigger');
+      expect(trigger).toHaveTextContent('profiles.select_profile');
+      expect(trigger).not.toHaveTextContent('profiles.all_servers');
+    });
+
     it('leaves the All Servers item unmarked', () => {
       render(<ProfileSwitcher />);
 

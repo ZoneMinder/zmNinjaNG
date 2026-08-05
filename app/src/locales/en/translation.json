@@ -964,7 +964,7 @@
     "overview_disabled": "Disabled",
     "overview_direct_mode_host": "Direct polling",
     "overview_no_host": "No host set",
-    "all_mode_notifications_label": "All-mode notifications",
+    "all_mode_notifications_label": "{{name}} notifications",
     "all_mode_notifications_live": "Live",
     "all_mode_notifications_live_desc": "Every server connects live; toasts and sound play as events arrive.",
     "all_mode_notifications_muted": "Muted",

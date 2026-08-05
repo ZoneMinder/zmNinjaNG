@@ -964,7 +964,7 @@
     "overview_disabled": "Désactivé",
     "overview_direct_mode_host": "Sondage direct",
     "overview_no_host": "Aucun hôte défini",
-    "all_mode_notifications_label": "Notifications du mode Tous",
+    "all_mode_notifications_label": "Notifications : {{name}}",
     "all_mode_notifications_live": "En direct",
     "all_mode_notifications_live_desc": "Chaque serveur se connecte en direct ; les notifications et le son sont émis à l'arrivée des événements.",
     "all_mode_notifications_muted": "Coupé",

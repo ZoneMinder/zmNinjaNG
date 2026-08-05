@@ -12,8 +12,13 @@ import { getMonitors } from '../../api/monitors';
 import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 
+// Interpolation values are appended so a test can assert which aggregate a
+// label named, not just which key it used.
 vi.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+  useTranslation: () => ({
+    t: (k: string, params?: Record<string, unknown>) =>
+      params ? `${k}:${JSON.stringify(params)}` : k,
+  }),
 }));
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: vi.fn(),
@@ -244,6 +249,32 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
       await waitFor(() =>
         expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeNotifications).toBe('off')
       );
+    });
+
+    // The row governs the aggregate's own connections, so it is titled after
+    // the aggregate rather than after All Servers (refs #337).
+    it('names the aggregate in its label', async () => {
+      renderPage();
+
+      expect(
+        await screen.findByText(
+          'notification_settings.all_mode_notifications_label:{"name":"profiles.all_servers"}'
+        )
+      ).toBeInTheDocument();
+    });
+
+    it('names an active group in its label', async () => {
+      vi.mocked(useProfileScope).mockReturnValue({
+        mode: 'all', aggregateId: mintVirtualProfileId(), aggregateName: 'Backyard', profile: null,
+        profiles: [profileA, profileB], settings: { allModeNotifications: 'live' } as never,
+      });
+      renderPage();
+
+      expect(
+        await screen.findByText(
+          'notification_settings.all_mode_notifications_label:{"name":"Backyard"}'
+        )
+      ).toBeInTheDocument();
     });
 
     // Each aggregate owns its own bucket: muting a group must not mute All

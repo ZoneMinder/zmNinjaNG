@@ -82,6 +82,10 @@ export default function NotificationSettings() {
   // to write back to.
   const allModeNotifications = scope?.settings.allModeNotifications ?? 'live';
   const aggregateId = scope?.mode === 'all' ? scope.aggregateId : null;
+  // What the row calls itself: the group's name, or the localized All Servers
+  // label for the sentinel, which has none stored.
+  const aggregateName =
+    (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
   const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   // Subscribe reactively to this profile's settings and unread count so the
@@ -372,7 +376,7 @@ export default function NotificationSettings() {
             <CardContent className="flex items-center justify-between gap-3 p-4">
               <div className="flex-1 space-y-0.5">
                 <Label htmlFor="all-mode-notifications-select" className="text-base font-semibold">
-                  {t('notification_settings.all_mode_notifications_label')}
+                  {t('notification_settings.all_mode_notifications_label', { name: aggregateName })}
                 </Label>
                 <p className="text-sm text-muted-foreground">
                   {t(`notification_settings.all_mode_notifications_${allModeNotifications}_desc`)}

@@ -964,7 +964,7 @@
     "overview_disabled": "Deaktiviert",
     "overview_direct_mode_host": "Direktabfrage",
     "overview_no_host": "Kein Host festgelegt",
-    "all_mode_notifications_label": "Alle-Server-Benachrichtigungen",
+    "all_mode_notifications_label": "Benachrichtigungen: {{name}}",
     "all_mode_notifications_live": "Live",
     "all_mode_notifications_live_desc": "Jeder Server verbindet sich live; Toast-Meldungen und Ton werden bei Ereignissen abgespielt.",
     "all_mode_notifications_muted": "Stumm",

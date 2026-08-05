@@ -964,7 +964,7 @@
     "overview_disabled": "Deshabilitado",
     "overview_direct_mode_host": "Sondeo directo",
     "overview_no_host": "Sin host configurado",
-    "all_mode_notifications_label": "Notificaciones en modo Todos",
+    "all_mode_notifications_label": "Notificaciones: {{name}}",
     "all_mode_notifications_live": "En vivo",
     "all_mode_notifications_live_desc": "Cada servidor se conecta en vivo; los avisos y el sonido se reproducen al llegar eventos.",
     "all_mode_notifications_muted": "Silenciado",

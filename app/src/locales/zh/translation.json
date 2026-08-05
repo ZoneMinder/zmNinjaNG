@@ -964,7 +964,7 @@
     "overview_disabled": "已禁用",
     "overview_direct_mode_host": "直接轮询",
     "overview_no_host": "未设置主机",
-    "all_mode_notifications_label": "全部模式通知",
+    "all_mode_notifications_label": "{{name}}通知",
     "all_mode_notifications_live": "实时",
     "all_mode_notifications_live_desc": "每个服务器实时连接；事件到达时播放提示和声音。",
     "all_mode_notifications_muted": "静音",
