@@ -19,6 +19,46 @@ Feature: All Servers mode
     And I should see a monitor profile chip on every monitor card
     And the monitor card count should be double the recorded single-profile count
 
+  # A group is All Servers scoped to a chosen subset, so the whole loop has to
+  # hold: create it, aggregate only its member, keep settings the All bucket
+  # never sees, and delete it without taking its servers with it.
+  @web
+  Scenario: a group aggregates only its member and keeps its own settings
+    When I navigate to the "Monitors" page
+    Then I record the single-profile monitor card count
+    When I navigate to the "Profiles" page
+    And I create a group named "Backyard" holding only the "Second" profile
+    Then I should see the group card for "Backyard"
+    When I click the group card for "Backyard"
+    Then I should be on the monitors page
+    And every monitor profile chip should name "Second"
+    And the monitor card count should match the recorded single-profile count
+    When I navigate to the "Settings" page
+    Then the aggregate streaming mode should be named for "Backyard"
+    And the aggregate streaming mode should be "Per server"
+    When I set the aggregate streaming mode to "Streaming"
+    And I reload the current page
+    Then the aggregate streaming mode should be "Streaming"
+    # The settings bucket is the group's own, with nothing inherited from and
+    # nothing written back to All Servers.
+    When I navigate to the "Profiles" page
+    And I click the All Servers profile card
+    When I navigate to the "Settings" page
+    Then the aggregate streaming mode should be named for "All Servers"
+    And the aggregate streaming mode should be "Per server"
+    When I navigate to the "Profiles" page
+    And I click the group card for "Backyard"
+    When I navigate to the "Settings" page
+    Then the aggregate streaming mode should be "Streaming"
+    # Not cleanup: the browser context is this scenario's own, so the group
+    # dies with it either way. Deleting is the half that has to be asserted -
+    # the group goes, its member servers stay.
+    When I navigate to the "Profiles" page
+    And I delete the group named "Backyard"
+    Then I should not see the group card for "Backyard"
+    And I should see the "Second" profile card
+    And I should see the All Servers profile card
+
   @web
   Scenario: a partial-failure strip appears when one server is unreachable
     When I navigate to the "Profiles" page

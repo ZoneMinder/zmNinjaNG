@@ -162,6 +162,15 @@ Then('the monitor card count should be double the recorded single-profile count'
   }).toBe(singleProfileMonitorCount * 2);
 });
 
+// A one-member group aggregates one server's worth of monitors: the same
+// count single mode showed, not the doubled All-mode one (refs #337).
+Then('the monitor card count should match the recorded single-profile count', async ({ page }) => {
+  expect(singleProfileMonitorCount).toBeGreaterThan(0);
+  await expect.poll(async () => page.getByTestId('monitor-card').count(), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).toBe(singleProfileMonitorCount);
+});
+
 Then('I should see a profile error strip for {string}', async ({ page }, name: string) => {
   await expect(
     page.locator('[data-testid^="profile-error-strip-"]').filter({ hasText: name })
