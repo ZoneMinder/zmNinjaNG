@@ -152,7 +152,8 @@
     "fit_none": "无",
     "fit_scale_down": "缩小",
     "view_events": "事件",
-    "group_by_server": "按服务器分组"
+    "group_by_server": "按服务器分组",
+    "stream_permission_denied": "此账户没有视频流权限。"
   },
   "events": {
     "title": "事件",

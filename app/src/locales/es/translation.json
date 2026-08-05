@@ -152,7 +152,8 @@
     "fit_none": "Ninguno",
     "fit_scale_down": "Reducir",
     "view_events": "Eventos",
-    "group_by_server": "Agrupar por servidor"
+    "group_by_server": "Agrupar por servidor",
+    "stream_permission_denied": "Esta cuenta no tiene permiso de streaming."
   },
   "events": {
     "title": "Eventos",

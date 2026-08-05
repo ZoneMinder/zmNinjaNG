@@ -83,6 +83,15 @@ vi.mock('../../../lib/logger', () => ({
 // are set; every other read is optional-chained in the player.
 let mockSettings: { streamMaxFps?: number; streamScale?: number } | undefined;
 
+// Permission probe (refs #344). Individual tests override the verdict.
+let mockStreamPermission: string | undefined;
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({
+    permissions: mockStreamPermission === undefined ? undefined : { stream: mockStreamPermission },
+    isLoading: false,
+  }),
+}));
+
 vi.mock('../../../stores/settings', () => ({
   useSettingsStore: () => mockSettings,
 }));
@@ -458,5 +467,68 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
     // start the freeze watchdog against a stream that has not connected yet,
     // and its retries would fire before the first frame could arrive.
     expect(isShowingPlaceholder()).toBe(true);
+  });
+});
+
+/**
+ * Streaming is its own ZoneMinder permission (refs #344).
+ *
+ * `zms.cpp` checks Stream for a live monitor, independently of Monitors. An
+ * account with Monitors View and Stream None sees every camera listed and gets
+ * a stream that 403s - and because a denied stream is just an image that never
+ * loads, no failing request exists for the app to notice. Without the probe
+ * this is a permanently broken tile with no explanation.
+ */
+describe('LiveMonitorPlayer without streaming permission', () => {
+  beforeEach(() => {
+    mockStreamPermission = undefined;
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    mockStreamPermission = undefined;
+  });
+
+  it('explains the refusal instead of showing a tile that can never load', () => {
+    mockStreamPermission = 'None';
+
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.getByTestId('video-player-no-permission')).toBeInTheDocument();
+    expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
+  });
+
+  it('does not ask ZoneMinder for a stream it will refuse', () => {
+    mockStreamPermission = 'None';
+    streamCalls.length = 0;
+
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(streamCalls.every((call) => call.enabled === false)).toBe(true);
+  });
+
+  it('streams normally when the account may stream', () => {
+    mockStreamPermission = 'View';
+
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.queryByTestId('video-player-no-permission')).not.toBeInTheDocument();
+    expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument();
+  });
+
+  it('streams while the permission is still unknown', () => {
+    // Unknown must never withhold video: an account that can stream would lose
+    // it for no reason.
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.queryByTestId('video-player-no-permission')).not.toBeInTheDocument();
+    expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument();
   });
 });

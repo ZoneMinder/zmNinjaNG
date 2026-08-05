@@ -544,6 +544,7 @@ export default function MonitorDetail() {
               <div className="w-full flex flex-col items-center gap-4">
                 <PTZControls
                   onCommand={handlePTZCommand}
+                  profileId={ownerProfile?.id}
                   className="w-full"
                   control={controlData?.control.Control}
                 />

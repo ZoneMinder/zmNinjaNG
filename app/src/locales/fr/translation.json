@@ -152,7 +152,8 @@
     "fit_none": "Aucun",
     "fit_scale_down": "Réduire",
     "view_events": "Événements",
-    "group_by_server": "Grouper par serveur"
+    "group_by_server": "Grouper par serveur",
+    "stream_permission_denied": "Ce compte n'a pas la permission de diffusion."
   },
   "events": {
     "title": "Événements",
