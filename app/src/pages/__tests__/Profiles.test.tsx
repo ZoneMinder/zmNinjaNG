@@ -321,7 +321,7 @@ describe('Profiles Page', () => {
 
     // Same gate as the All Servers card: with one selectable server there is
     // nothing to group.
-    it('offers the New group action only with 2+ enabled profiles', () => {
+    it('offers the New Virtual Profile Group action only with 2+ enabled profiles', () => {
       const disabledOffice = { ...OFFICE, disabled: true };
       useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', []));
       const { unmount } = render(<Profiles />);
@@ -348,7 +348,7 @@ describe('Profiles Page', () => {
       expect(switchProfileMock).not.toHaveBeenCalled();
     });
 
-    it('opens the dialog in create mode from the New group action', async () => {
+    it('opens the dialog in create mode from the New Virtual Profile Group action', async () => {
       const user = userEvent.setup();
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
 
