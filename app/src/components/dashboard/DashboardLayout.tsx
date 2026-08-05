@@ -11,8 +11,10 @@
  */
 
 import { useDashboardStore } from '../../stores/dashboard';
-import { useProfileStore } from '../../stores/profile';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../hooks/useProfileScope';
 import { asProfileId } from '../../api/types';
+import type { ProfileId } from '../../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
 import { DashboardWidget } from './DashboardWidget';
@@ -31,16 +33,21 @@ const WrappedGridLayout = WidthProvider(GridLayout);
 
 export function DashboardLayout() {
     const { t } = useTranslation();
-    const currentProfile = useProfileStore(
-        useShallow((state) => {
-            const { profiles, currentProfileId } = state;
-            return profiles.find((p) => p.id === currentProfileId) || null;
-        })
-    );
+    const { currentProfile, isAllMode } = useCurrentProfile();
+    // Owning-profile resolution for the monitor widget (the one intrinsically
+    // single-server widget type - a monitorId only means something on one
+    // server): widget.settings.profileId if the edit dialog set one,
+    // otherwise the first profile in scope. Undefined outside All mode so
+    // MonitorWidget keeps its exact single-mode prop shape.
+    const scope = useProfileScope();
     // Boundary: 'default' is a synthesized placeholder key for the
     // no-profile-selected case (dashboard widget storage keys still need a
-    // key). Not a real profile id, so it must be minted explicitly.
-    const profileId = currentProfile?.id || asProfileId('default');
+    // key). Not a real profile id, so it must be minted explicitly. Each
+    // aggregate gets its own bucket instead of colliding with 'default' or
+    // with another aggregate (refs #337).
+    const profileId = scope?.mode === 'all'
+        ? scope.aggregateId
+        : (currentProfile?.id ?? asProfileId('default'));
 
     const widgets = useDashboardStore(
         useShallow((state) => state.widgets[profileId] ?? [])
@@ -178,6 +185,9 @@ export function DashboardLayout() {
                                     <MonitorWidget
                                         monitorIds={monitorIds}
                                         objectFit={widget.settings.feedFit || 'contain'}
+                                        profileId={isAllMode
+                                            ? ((widget.settings.profileId as ProfileId | undefined) ?? scope?.profiles[0]?.id)
+                                            : undefined}
                                     />
                                 )}
                                 {widget.type === 'events' && (

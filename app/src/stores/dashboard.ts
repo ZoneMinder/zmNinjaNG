@@ -43,6 +43,7 @@ interface DashboardState {
     updateWidget: (profileId: string, id: string, updates: Partial<DashboardWidget>) => void;
     updateLayouts: (profileId: string, layouts: Record<string, WidgetLayout[]>) => void;
     resetWidgetWidths: (profileId: string) => void;
+    clearProfile: (profileId: string) => void;
     toggleEditMode: () => void;
 }
 
@@ -88,6 +89,18 @@ export const useDashboardStore = create<DashboardState>()(
                             ]
                         },
                     };
+                }),
+
+            /** Drop a profile's whole widget bucket, for when the profile it
+             *  belongs to no longer exists (deleting a virtual profile, refs
+             *  #337). Named after monitorSeen's clearProfile, which does the
+             *  same job for its own per-profile map. */
+            clearProfile: (profileId) =>
+                set((state) => {
+                    if (!(profileId in state.widgets)) return state;
+                    const widgets = { ...state.widgets };
+                    delete widgets[profileId];
+                    return { widgets };
                 }),
 
             removeWidget: (profileId, id) =>

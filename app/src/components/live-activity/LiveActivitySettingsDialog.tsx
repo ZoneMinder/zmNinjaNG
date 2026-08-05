@@ -6,9 +6,19 @@
  * stays visible everywhere else. That is separate from the profile-wide
  * monitor exclusion (Settings > hidden monitors), which hides a monitor
  * everywhere.
+ *
+ * Two-tier while aggregating (refs #337, AGENTS.project.md's Aggregation
+ * contract): poll/dwell/tiles are view-level preferences and live in the
+ * active aggregate's own bucket (`profileId` below - the real profile id in
+ * single mode, the aggregate's id otherwise). The ignore list is a per-server
+ * DATA preference and has no meaning in an aggregate bucket, so it edits whichever
+ * profile is picked via the shared ProfilePicker (`scopeProfiles`), never
+ * `profileId` itself. Single mode passes no `scopeProfiles`, so the picker
+ * never renders and the ignore list falls back to editing `profileId`
+ * directly - byte-identical to before All mode existed.
  */
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -16,108 +26,27 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Separator } from '../ui/separator';
 import { Switch } from '../ui/switch';
+import { ProfilePicker } from '../profile-picker';
+import { useClampedNumberField } from '../../hooks/useClampedNumberField';
 import { useSettingsStore, mergeProfileSettings } from '../../stores/settings';
 import { LIVE_ACTIVITY } from '../../lib/zmninja-ng-constants';
-import type { MonitorData } from '../../api/types';
+import type { MonitorData, Profile, ProfileId } from '../../api/types';
 
 export interface LiveActivitySettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  profileId: string;
+  /** View-level bucket for poll/dwell/tiles: the real profile id in single
+   *  mode, the active aggregate's id while aggregating. */
+  profileId: ProfileId;
+  /** Single mode: this profile's monitors, and what the ignore list reads/
+   *  writes `profileId` against directly. Ignored when `scopeProfiles` is
+   *  given. */
   monitors: MonitorData[];
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, value));
-}
-
-/**
- * Local text draft for a store-backed numeric field, committed on blur (or
- * Enter) instead of on every keystroke.
- *
- * Committing on every `onChange` has two problems. Binding the input straight
- * to the committed store number makes it impossible to clear: `Number('')` is
- * 0, so an empty or partial value would clamp to the minimum and redraw into
- * the input mid-edit. Committing a clamped value on every keystroke is also
- * self-defeating even with a local draft: the commit changes `storedValue`,
- * which resyncs the draft to the clamped string, so the NEXT keystroke
- * appends to that clamped string instead of what the user actually typed
- * (typing "12" one digit at a time: "1" commits and clamps to the minimum
- * "2", the draft resyncs to "2", and the next keystroke produces "22").
- *
- * Committing only on blur/Enter removes the loop entirely: `onChange` only
- * ever touches local state, so `storedValue` cannot change mid-edit and the
- * resync below cannot fire while the user is still typing.
- *
- * Deliberate policy for a genuine conflict, an external write landing while
- * the field has focus: the user's in-progress edit wins. `lastStoredValue`
- * (the last external value actually applied to the draft) is only advanced
- * together with applying it, never on its own, so a `storedValue` change
- * that arrives while focused leaves `lastStoredValue` stale rather than
- * marking that value as seen without ever showing it. On blur, `commit()`
- * writes whatever the user typed, superseding the value that arrived
- * mid-edit; the render right after that commit then sees its own new
- * `storedValue` differ from the still-stale `lastStoredValue` and applies
- * it (a no-op here, since it already matches the just-typed draft). Because
- * the two pieces of state always advance together, a field can never end up
- * permanently desynced: any external write that arrived mid-edit and was
- * superseded, or one that lands after the field is unfocused, is picked up
- * the next time this runs unfocused.
- *
- * The resync itself runs during render rather than in a `useEffect`, per
- * React's documented pattern for "adjusting state when a prop changes"
- * (comparing against the last-seen prop value in state and calling
- * `setState` inline): it updates the draft before the browser paints the
- * stale value, where an effect-based resync would paint once with the old
- * draft and then again with the corrected one. Focus tracking uses state
- * rather than a ref for the same reason: the render-time guard below needs
- * to read it, and reading a ref during render is unsafe.
- */
-function useClampedNumberField(
-  storedValue: number,
-  min: number,
-  max: number,
-  onCommit: (clamped: number) => void
-) {
-  const [draft, setDraft] = useState(() => String(storedValue));
-  const [lastStoredValue, setLastStoredValue] = useState(storedValue);
-  const [isFocused, setIsFocused] = useState(false);
-
-  // Both pieces of state advance together, and only while unfocused: never
-  // mark a value as seen (lastStoredValue) without also applying it (draft).
-  if (storedValue !== lastStoredValue && !isFocused) {
-    setLastStoredValue(storedValue);
-    setDraft(String(storedValue));
-  }
-
-  const onChange = (raw: string) => {
-    setDraft(raw);
-  };
-
-  const onFocus = () => {
-    setIsFocused(true);
-  };
-
-  const commit = () => {
-    const trimmed = draft.trim();
-    const parsed = Number(trimmed);
-    const clamped =
-      trimmed === '' || !Number.isFinite(parsed) ? storedValue : clamp(parsed, min, max);
-    setDraft(String(clamped));
-    if (clamped !== storedValue) onCommit(clamped);
-  };
-
-  const onBlur = () => {
-    setIsFocused(false);
-    commit();
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') commit();
-  };
-
-  return { draft, onChange, onFocus, onBlur, onKeyDown };
+  /** All mode only: every scope profile plus its own full monitor list.
+   *  When present, the ignore-list section shows a ProfilePicker and reads/
+   *  writes the PICKED profile's own bucket instead of `profileId` and
+   *  `monitors`. */
+  scopeProfiles?: { profile: Profile; monitors: MonitorData[] }[];
 }
 
 export function LiveActivitySettingsDialog({
@@ -125,6 +54,7 @@ export function LiveActivitySettingsDialog({
   onOpenChange,
   profileId,
   monitors,
+  scopeProfiles,
 }: LiveActivitySettingsDialogProps) {
   const { t } = useTranslation();
 
@@ -133,10 +63,40 @@ export function LiveActivitySettingsDialog({
   );
   const settings = useMemo(() => mergeProfileSettings(rawSettings), [rawSettings]);
 
-  const ignoredSet = useMemo(
-    () => new Set(settings.liveActivityIgnoredMonitorIds),
-    [settings.liveActivityIgnoredMonitorIds]
+  // The user's last explicit pick from the ProfilePicker. NOT the ignore-list
+  // bucket by itself - this dialog is page-mounted and Radix only toggles it
+  // open/closed, so it never unmounts and this state is never reset. Without
+  // the derivation below, any in-app profile switch while it had been opened
+  // before (single mode included: switching to a different single profile,
+  // not just an All-mode re-pick) would leave the ignore list reading and
+  // writing this stale value forever after.
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId>(
+    () => scopeProfiles?.[0]?.profile.id ?? profileId
   );
+
+  // The actual ignore-list bucket, re-derived every render: `pickedProfileId`
+  // only wins while it is still a live member of `scopeProfiles`. The moment
+  // it isn't - scopeProfiles is undefined (single mode, where this always
+  // tracks the live `profileId` prop instead) or the previously-picked
+  // profile dropped out of scope - it falls back to the current first scope
+  // profile, or `profileId` in single mode.
+  const ignoreTarget: ProfileId = scopeProfiles?.some((sp) => sp.profile.id === pickedProfileId)
+    ? pickedProfileId
+    : scopeProfiles?.[0]?.profile.id ?? profileId;
+
+  const pickedRawSettings = useSettingsStore(
+    useShallow((state) => state.profileSettings?.[ignoreTarget])
+  );
+  const pickedSettings = useMemo(() => mergeProfileSettings(pickedRawSettings), [pickedRawSettings]);
+
+  const ignoredSet = useMemo(
+    () => new Set(pickedSettings.liveActivityIgnoredMonitorIds),
+    [pickedSettings.liveActivityIgnoredMonitorIds]
+  );
+
+  const ignoreListMonitors = scopeProfiles
+    ? scopeProfiles.find((sp) => sp.profile.id === ignoreTarget)?.monitors ?? []
+    : monitors;
 
   const pollField = useClampedNumberField(
     settings.liveActivityPollSeconds,
@@ -163,13 +123,13 @@ export function LiveActivitySettingsDialog({
   );
 
   const handleIgnoreToggle = (monitorId: string, watched: boolean) => {
-    const current = settings.liveActivityIgnoredMonitorIds;
+    const current = pickedSettings.liveActivityIgnoredMonitorIds;
     const next = watched
       ? current.filter((id) => id !== monitorId)
       : current.includes(monitorId)
         ? current
         : [...current, monitorId];
-    useSettingsStore.getState().updateProfileSettings(profileId, { liveActivityIgnoredMonitorIds: next });
+    useSettingsStore.getState().updateProfileSettings(ignoreTarget, { liveActivityIgnoredMonitorIds: next });
   };
 
   return (
@@ -209,6 +169,14 @@ export function LiveActivitySettingsDialog({
             </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_interval_desc')}</p>
             <p className="text-xs text-muted-foreground">{t('live_activity.poll_bandwidth_note')}</p>
+            {/* All mode only: the value typed above is floored while
+                aggregating, and the floor is edited somewhere else entirely.
+                Without this note the field silently reads as ignored. */}
+            {scopeProfiles && scopeProfiles.length > 0 && (
+              <p className="text-xs text-muted-foreground" data-testid="live-activity-all-mode-floor-note">
+                {t('live_activity.all_mode_floor_note')}
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -263,13 +231,23 @@ export function LiveActivitySettingsDialog({
           <Separator />
 
           <div className="space-y-2">
-            <Label>{t('live_activity.ignore_list_label')}</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label>{t('live_activity.ignore_list_label')}</Label>
+              {scopeProfiles && scopeProfiles.length > 0 && (
+                <ProfilePicker
+                  profiles={scopeProfiles.map((sp) => sp.profile)}
+                  value={ignoreTarget}
+                  onChange={setPickedProfileId}
+                  className="w-40 h-8"
+                />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">{t('live_activity.ignore_list_desc')}</p>
-            {monitors.length === 0 ? (
+            {ignoreListMonitors.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t('live_activity.ignore_list_empty')}</p>
             ) : (
               <div className="space-y-2 max-h-48 overflow-y-auto">
-                {monitors.map(({ Monitor }) => (
+                {ignoreListMonitors.map(({ Monitor }) => (
                   <div key={Monitor.Id} className="flex items-center justify-between gap-2">
                     <Label
                       htmlFor={`live-activity-ignore-${Monitor.Id}`}

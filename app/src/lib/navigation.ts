@@ -6,6 +6,7 @@
  */
 
 import { log, LogLevel } from './logger';
+import { type ProfileId } from '../api/types';
 
 export interface NavigationState {
   from?: string;
@@ -41,10 +42,14 @@ class NavigationService {
   }
 
   /**
-   * Navigate to event detail page
+   * Navigate to event detail page. When profileId is given, routes through
+   * the /all/ deep route so the page resolves its session from that owning
+   * profile instead of the (possibly absent) current one - used for All-mode
+   * notification taps (refs #337).
    */
-  public navigateToEvent(eventId: string | number, state?: NavigationState): void {
-    this.navigate(`/events/${eventId}`, false, state);
+  public navigateToEvent(eventId: string | number, state?: NavigationState, profileId?: string): void {
+    const path = profileId ? `/all/events/${profileId}/${eventId}` : `/events/${eventId}`;
+    this.navigate(path, false, state);
   }
 
   /**
@@ -113,5 +118,39 @@ export function viewNameForPath(pathname: string): string | null {
   if (/^\/events\/[^/]+$/.test(path)) return 'Event Detail';
   if (/^\/profiles\/[^/]+\/edit$/.test(path)) return 'Profile Form';
 
+  // All-mode deep routes: /all/monitors/:profileId/:id and /all/events/:profileId/:id
+  // (see App.tsx's routes) name the same view as their single-mode counterparts,
+  // so opening one from a notification or card still fires the entry banner (refs #337).
+  if (/^\/all\/monitors\/[^/]+\/[^/]+$/.test(path)) return 'Monitor Detail';
+  if (/^\/all\/events\/[^/]+\/[^/]+$/.test(path)) return 'Event Detail';
+
   return null;
+}
+
+/**
+ * Which settings bucket (if any) AppLayout's route-memory effect should save
+ * `pathname` into, so the app reopens on the last page visited.
+ *
+ * An aggregate saves to its own bucket rather than being silently dropped:
+ * `currentProfile` is null there (useCurrentProfile resolves it to null for
+ * any aggregate id), so a guard keyed off `currentProfile?.id` never fired and
+ * no page was ever remembered while aggregating (refs #337). Each aggregate
+ * remembers its own page: All Servers under the sentinel, a group under its
+ * own id. Returns null - meaning "don't save" - for the setup/profile routes,
+ * a notification-opened page, or when there is genuinely no profile selected
+ * yet.
+ *
+ * @param aggregateId - The active aggregate's bucket, or null in single mode.
+ * @param currentProfileId - The single-mode profile, undefined while
+ *   aggregating.
+ */
+export function resolveLastRouteSaveTarget(
+  pathname: string,
+  fromNotification: boolean,
+  aggregateId: ProfileId | null,
+  currentProfileId: ProfileId | undefined
+): ProfileId | null {
+  const excludedRoutes = ['/profiles/new', '/setup', '/profiles'];
+  if (excludedRoutes.includes(pathname) || fromNotification) return null;
+  return aggregateId ?? currentProfileId ?? null;
 }

@@ -224,6 +224,12 @@ export const NOTIFICATIONS_SERVICE = {
   // foreground the user is watching a disconnected badge, so retries stay
   // frequent enough to recover on their own (refs #274).
   foregroundMaxReconnectDelayMs: 15000,
+
+  // All mode only: events arriving within this window of each other collapse
+  // into one summary toast instead of one toast per event, so aggregating
+  // several busy servers doesn't flood the screen (refs #337). The DEFAULT for
+  // the editable `allModeBurstSeconds` setting, which is what the hook reads.
+  allModeBurstWindowMs: 3000,
 } as const;
 
 /**
@@ -997,6 +1003,52 @@ export const MONTAGE_GRID = {
 
   // h-8 header bar height with monitor name + buttons (px)
   cardHeaderHeightPx: 32,
+
+  // All-mode only cap on total tiles (== streams) rendered across every
+  // profile's monitors combined. Single mode has no cap (unchanged,
+  // unlimited) - this only guards the aggregate view, where N profiles each
+  // contributing every enabled monitor could otherwise open dozens of
+  // simultaneous MJPEG/WebRTC connections across independent servers at
+  // once (refs #337, Phase 4 Task 1). The DEFAULT for the editable
+  // `allModeMaxStreams` setting, which is what the page reads.
+  allModeMaxStreams: 16,
+
+  // What a montage tile asks ZM for while All-mode stream tuning is set to
+  // "reduced" (`allModeStreamTuning`). Both are ceilings, never floors: a
+  // server the user has already throttled below them keeps its own values, so
+  // reducing never turns into raising. Frames per second, and scale as the
+  // percentage ZMS crops the image to - a quarter-size tile is a sixteenth of
+  // the pixels the server has to encode and the client has to decode, which is
+  // where the saving on a wall of cameras actually comes from.
+  reducedMaxFps: 5,
+  reducedScale: 25,
+
+  // How long All Servers mode must be out of sight before montage tiles stop
+  // streaming (`allModePauseHidden`). Long enough that switching tabs to check
+  // something and coming back leaves the streams alone: a teardown and
+  // reconnect of every tile across every server costs more than the half
+  // minute of streaming it saves (ms).
+  pauseHiddenGraceMs: 30_000,
+
+  // Shortest gap between two activity events that both count towards the
+  // All-mode idle downgrade (`allModeIdleMinutes`). A pointer dragged across
+  // the montage fires hundreds of events a second and every one of them would
+  // otherwise rebuild the idle timer (ms).
+  idleActivityThrottleMs: 1_000,
+
+  // How far beyond the montage's scroll container a tile still counts as
+  // worth a connection while viewport gating is on (`allModeViewportGating`),
+  // as an IntersectionObserver rootMargin. One container height either way:
+  // the row about to be scrolled to is already streaming when it arrives, so
+  // gating costs no visible connect delay in ordinary scrolling.
+  viewportGatingRootMargin: '100%',
+
+  // How long a tile keeps its connection after leaving that margin. Scrolling
+  // from the top of a tall montage to the bottom passes every tile in
+  // between, and without this each one would quit and remint a connkey on the
+  // way past - more server work than the streaming it saves. Coming back into
+  // view is not debounced; only leaving is (ms).
+  viewportGatingLingerMs: 1_500,
 } as const;
 
 /**
@@ -1215,4 +1267,65 @@ export const LIVE_ACTIVITY = {
   // purpose: it exists so activity does not vanish without trace, not to
   // become a second, unbounded list competing with the grid for the page. A
   // few minutes covers "what did I just miss" and nothing longer.
+  //
+  // All mode only (refs #337, #341): the page aggregates every scope
+  // profile's alarm fanout instead of gating All mode out entirely.
+  // Single mode is unaffected by both guardrails below.
+  //
+  // Cap on total (profile, monitor) pairs watched across every profile
+  // combined, applied round-robin so one busy server cannot crowd out the
+  // rest (see capWatchedRoundRobin, lib/monitor/live-activity.ts). The alarm
+  // endpoint is per-monitor, so this bounds query fan-out the same way
+  // MONTAGE_GRID.allModeMaxStreams bounds stream fan-out. Both of the two
+  // values below are DEFAULTS for the editable settings of the same name,
+  // which is what useLiveActivityAllMode reads.
+  allModeMaxWatched: 24,
+  // Floor under the configured alarm poll interval. Live hints
+  // (applyLiveAlarmHints) carry the fast path when a profile's connection is
+  // Live; polling only confirms, so All mode does not need single mode's
+  // tighter floor while fanning its poll out across every scope profile.
+  allModePollFloorSeconds: 10,
+} as const;
+
+/**
+ * All Servers Performance Bounds
+ *
+ * Range each All-mode tuning knob may be edited within (Settings > All Servers
+ * performance, All mode only). The DEFAULTS are not here: each one stays with
+ * the subsystem it guards (MONTAGE_GRID.allModeMaxStreams,
+ * LIVE_ACTIVITY.allModeMaxWatched / allModePollFloorSeconds,
+ * NOTIFICATIONS_SERVICE.allModeBurstWindowMs), and DEFAULT_SETTINGS references
+ * those. Only the editable range lives here, because a range is a property of
+ * the setting rather than of the subsystem.
+ *
+ * The bounds exist so a stored value can never take a fan-out guardrail
+ * somewhere absurd: the minimums keep every aggregate surface able to show at
+ * least something, and the maximums keep a hand-edited storage blob from
+ * opening hundreds of simultaneous connections across servers (refs #337).
+ */
+export const ALL_MODE_PERFORMANCE = {
+  // Montage tiles (== live streams) across every profile combined. One tile is
+  // still a usable montage; 64 is past what any browser opens happily and is a
+  // ceiling rather than a recommendation.
+  minStreams: 1,
+  maxStreams: 64,
+  // (profile, monitor) pairs the Live Activity page watches. The alarm endpoint
+  // is one request per monitor per poll, so this bounds concurrent requests.
+  minWatched: 1,
+  maxWatched: 128,
+  // Floor under the Live Activity alarm poll interval in All mode. Same range
+  // as the poll interval it floors (LIVE_ACTIVITY.min/maxPollSeconds): a floor
+  // outside that range would either not floor anything or pin every poll to
+  // the ceiling regardless of what the user set.
+  minPollFloorSeconds: LIVE_ACTIVITY.minPollSeconds,
+  maxPollFloorSeconds: LIVE_ACTIVITY.maxPollSeconds,
+  // Window that collapses simultaneous events from several servers into one
+  // summary toast. Below a second there is nothing left to coalesce; above
+  // half a minute a toast arrives long after the event that caused it.
+  minBurstSeconds: 1,
+  maxBurstSeconds: 30,
+  // Idle timeout before All mode stands its connections down. 0 is a real
+  // value here (off), not a floor that disables the feature by accident.
+  minIdleMinutes: 0,
+  maxIdleMinutes: 120,
 } as const;

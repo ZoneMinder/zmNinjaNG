@@ -4,10 +4,24 @@ import type { Layout, Layouts } from 'react-grid-layout';
 import { LogLevel } from '../lib/log-level';
 import { Platform } from '../lib/platform';
 import type { BandwidthMode } from '../lib/zmninja-ng-constants';
-import { API_REQUEST, ASSISTANT, DEFAULT_EVENT_PLAYBACK_RATE, LIVE_ACTIVITY, STORAGE_KEYS } from '../lib/zmninja-ng-constants';
+import {
+  API_REQUEST,
+  ASSISTANT,
+  DEFAULT_EVENT_PLAYBACK_RATE,
+  LIVE_ACTIVITY,
+  MONTAGE_GRID,
+  NOTIFICATIONS_SERVICE,
+  STORAGE_KEYS,
+} from '../lib/zmninja-ng-constants';
 import type { AssistantBackend } from '../lib/assistant/types';
 import type { DateFormatPreset, TimeFormatPreset } from '../lib/format-date-time';
 import type { ThumbnailFallbackType, ThumbnailFallbackEntry } from '../lib/event/thumbnail-chain';
+import type { ProfileId } from '../api/types';
+import {
+  ALL_MODE_STREAM_TUNING_VALUES,
+  coerceAllModePerformance,
+  type AllModeStreamTuning,
+} from './settings-coercion';
 
 export type ViewMode = 'snapshot' | 'streaming';
 export type DisplayMode = 'normal' | 'compact';
@@ -18,8 +32,16 @@ export type EventsViewMode = 'list' | 'montage';
 export type ThemePreference = 'amber' | 'cream' | 'dark' | 'light' | 'slate' | 'system';
 export type StreamingMethod = 'auto' | 'mjpeg';
 export type WebRTCProtocol = 'webrtc' | 'mse' | 'hls';
+/** All mode only: whether every scope profile's live connection is on. */
+export type AllModeNotifications = 'live' | 'muted' | 'off';
+/** All mode's Streaming Mode: one of the two real modes imposed on every
+ *  server, or 'per-server' to leave each server's own choice alone. */
+export type AllModeViewMode = ViewMode | 'per-server';
+export const ALL_MODE_NOTIFICATIONS_VALUES: readonly AllModeNotifications[] = ['live', 'muted', 'off'] as const;
 // Declared by the modules that consume them, so those modules do not import
 // this store (refs #281). Re-exported for the existing callers.
+export type { AllModeStreamTuning };
+export { ALL_MODE_STREAM_TUNING_VALUES };
 export type { DateFormatPreset, TimeFormatPreset };
 export type { ThumbnailFallbackType, ThumbnailFallbackEntry };
 
@@ -120,6 +142,62 @@ export interface ProfileSettings {
   eventsViewMode: EventsViewMode; // List vs montage view for Events page
   monitorsFeedFit: MonitorsLayoutMode; // Layout mode for monitor list
   monitorsViewMode: MonitorsViewMode; // List or grid view
+  /** All mode only: section the Monitors grid by owning server instead of a
+   *  flat list. Stored under the active aggregate's own settings bucket. */
+  monitorsGroupByServer: boolean;
+  /** All mode only: profiles to include in the aggregated Events list.
+   *  null = every profile in scope (default). Stored under the active
+   *  aggregate's own settings bucket. */
+  eventsServerFilter: ProfileId[] | null;
+  /** Aggregating only: 'live' runs every scope profile's connection and
+   *  shows toasts/sound; 'muted' keeps every connection running but
+   *  suppresses toasts/sound (badge counts and history still update); 'off'
+   *  tears down every aggregate connection so nothing live runs. Stored under
+   *  the active aggregate's own settings bucket (refs #337). */
+  allModeNotifications: AllModeNotifications;
+  /** All mode only: which Streaming Mode aggregated tiles follow.
+   *  'per-server' (the default) leaves every tile on its OWNING profile's
+   *  viewMode, so switching into All mode never changes how anything streams;
+   *  'streaming'/'snapshot' impose one mode on every tile from every server.
+   *
+   *  A key of its own rather than reusing `viewMode` in the aggregate's
+   *  bucket: that would need "unset" to mean per-server, and the first write
+   *  of ANY key to a bucket materializes the whole DEFAULT_SETTINGS shape, so
+   *  unset is not a state any bucket can stay in. Stored under the active
+   *  aggregate's own settings bucket (refs #337). */
+  allModeViewMode: AllModeViewMode;
+  /** All mode only: how many montage tiles (== live streams) render across
+   *  every profile's monitors combined before the rest collapse into an
+   *  overflow notice. Single mode is uncapped and ignores this. Stored under
+   *  the active aggregate's own settings bucket (refs #337). */
+  allModeMaxStreams: number;
+  /** All mode only: how many (profile, monitor) pairs the Live Activity page
+   *  watches at once, drawn round-robin so one busy server cannot crowd out
+   *  the rest. Stored under the active aggregate's own settings bucket (refs #337). */
+  allModeMaxWatched: number;
+  /** All mode only: floor under the Live Activity alarm poll interval, in
+   *  seconds. It CLAMPS the bandwidth-derived interval rather than replacing
+   *  it, so a slower configured poll stays slower. Stored under the active
+   *  aggregate's own settings bucket (refs #337). */
+  allModePollFloorSeconds: number;
+  /** All mode only: how long, in seconds, events from different servers keep
+   *  collapsing into one summary toast instead of one toast each. Stored
+   *  under the active aggregate's own settings bucket (refs #337). */
+  allModeBurstSeconds: number;
+  /** All mode only: whether aggregated tiles stream at reduced frame rate and
+   *  scale. Stored under the active aggregate's own settings bucket (refs #337). */
+  allModeStreamTuning: AllModeStreamTuning;
+  /** All mode only: whether streams stop while the app is in the background or
+   *  the tab is hidden. Stored under the active aggregate's own settings bucket (refs #337). */
+  allModePauseHidden: boolean;
+  /** All mode only: minutes of no interaction before aggregated streams stand
+   *  down. 0 means never. Stored under the active aggregate's own settings bucket (refs #337). */
+  allModeIdleMinutes: number;
+  /** All mode only: whether montage tiles scrolled out of view stop streaming
+   *  until they come back. Applies to the tiles the stream budget already
+   *  allowed, never to which tiles exist. Stored under the ALL settings
+   *  bucket (refs #337). */
+  allModeViewportGating: boolean;
   monitorGridCols: number; // Grid columns for Monitors page grid view
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
@@ -268,6 +346,9 @@ interface SettingsState {
   // Update settings for a specific profile
   updateProfileSettings: (profileId: string, updates: Partial<ProfileSettings>) => void;
 
+  // Drop a profile's whole settings bucket (the profile itself is gone)
+  removeProfileSettings: (profileId: string) => void;
+
   // Merge a patch into a group's montage bucket
   updateMontageGroupLayout: (
     profileId: string,
@@ -314,6 +395,23 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   eventsViewMode: 'list',
   monitorsFeedFit: 'contain',
   monitorsViewMode: 'list' as const,
+  monitorsGroupByServer: false,
+  eventsServerFilter: null,
+  allModeNotifications: 'live',
+  allModeViewMode: 'per-server',
+  // Each All-mode guardrail starts at the value its consumer used to hardcode,
+  // so a profile that never opens the performance section behaves exactly as
+  // it did before the knobs existed (refs #337).
+  allModeMaxStreams: MONTAGE_GRID.allModeMaxStreams,
+  allModeMaxWatched: LIVE_ACTIVITY.allModeMaxWatched,
+  allModePollFloorSeconds: LIVE_ACTIVITY.allModePollFloorSeconds,
+  allModeBurstSeconds: NOTIFICATIONS_SERVICE.allModeBurstWindowMs / 1000,
+  // Connection optimizations ship opt-in: the defaults below leave All mode
+  // streaming exactly as it does today until a user turns one on.
+  allModeStreamTuning: 'off',
+  allModePauseHidden: false,
+  allModeIdleMinutes: 0,
+  allModeViewportGating: false,
   monitorGridCols: 2,
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
@@ -421,6 +519,14 @@ export function mergeProfileSettings(raw: Partial<ProfileSettings> | undefined):
   if (Platform.isNative && merged.assistantBackend === 'on-device') {
     merged.assistantBackend = 'ollama';
   }
+  // allModeMuteToasts (boolean) -> allModeNotifications migration (refs #337).
+  const legacyRaw = raw as (Partial<ProfileSettings> & { allModeMuteToasts?: boolean }) | undefined;
+  if (legacyRaw && 'allModeMuteToasts' in legacyRaw && !('allModeNotifications' in legacyRaw)) {
+    merged.allModeNotifications = legacyRaw.allModeMuteToasts ? 'muted' : 'live';
+  } else if (!ALL_MODE_NOTIFICATIONS_VALUES.includes(merged.allModeNotifications)) {
+    merged.allModeNotifications = 'live';
+  }
+  coerceAllModePerformance(merged, DEFAULT_SETTINGS);
   return merged;
 }
 
@@ -573,6 +679,23 @@ export const useSettingsStore = create<SettingsState>()(
             },
           },
         }));
+      },
+
+      /**
+       * Delete a profile's bucket outright, for when the profile it belongs to
+       * no longer exists (deleting a virtual profile, refs #337). Not a reset:
+       * writing defaults back would leave an orphaned bucket behind, which is
+       * exactly what this avoids. No coercion runs here - removal has no value
+       * to coerce, and getProfileSettings on a missing key already merges the
+       * defaults for any later reader.
+       */
+      removeProfileSettings: (profileId) => {
+        set((state) => {
+          if (!(profileId in state.profileSettings)) return state;
+          const profileSettings = { ...state.profileSettings };
+          delete profileSettings[profileId];
+          return { profileSettings };
+        });
       },
 
       updateMontageGroupLayout: (profileId, groupKey, patch) => {

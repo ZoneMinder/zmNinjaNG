@@ -6,3 +6,4 @@
 
 export { useMontageGrid } from './useMontageGrid';
 export { useContainerResize } from './useContainerResize';
+export { useMontageVisibilityItems } from './useMontageVisibilityItems';

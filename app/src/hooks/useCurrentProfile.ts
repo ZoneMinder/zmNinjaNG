@@ -18,16 +18,19 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, mergeProfileSettings } from '../stores/settings';
-import type { Profile } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
+import type { Profile, ProfileId } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
 export interface UseCurrentProfileReturn {
-  /** Current active profile (null if no profile selected) */
+  /** Current active profile (null if no profile selected, and null in All mode) */
   currentProfile: Profile | null;
   /** Settings for the current profile */
   settings: ProfileSettings;
   /** Helper to check if profile exists */
   hasProfile: boolean;
+  /** True while aggregating: All Servers or a group is the active selection */
+  isAllMode: boolean;
 }
 
 /**
@@ -47,6 +50,13 @@ export interface UseCurrentProfileReturn {
 export function useCurrentProfile(): UseCurrentProfileReturn {
   // Select currentProfileId as a stable primitive
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
+
+  // True whenever an aggregate is selected: the All Servers sentinel or a
+  // group. Consumers ask "am I aggregating", never which aggregate - the
+  // scope answers that (useProfileScope's aggregateId). currentProfile stays
+  // null and hasProfile stays false either way (no real profile matches an
+  // aggregate id), keeping single-mode-only surfaces unchanged. Refs #337.
+  const isAllMode = isAggregateProfileId(currentProfileId);
   
   // Use useShallow for the profiles array to prevent re-renders when
   // unrelated parts of the profile store change
@@ -78,5 +88,44 @@ export function useCurrentProfile(): UseCurrentProfileReturn {
     currentProfile,
     settings,
     hasProfile: currentProfile !== null,
+    isAllMode,
   };
+}
+
+export interface UseProfileByIdReturn {
+  /** The requested profile, or null when unknown/unset */
+  profile: Profile | null;
+  /** Settings for that profile */
+  settings: ProfileSettings;
+}
+
+/**
+ * Hook to get a specific profile and its settings by id, defaulting to the
+ * current profile when no id is given. Used by the stream-URL chain
+ * (useServerUrls, useFreshAccessToken, useMonitorStream) so an All-mode
+ * monitor tile owned by a non-current profile can resolve that profile's
+ * URLs and token instead of always reading the globally-selected one.
+ *
+ * @param profileId - Profile to resolve; defaults to the current profile.
+ */
+export function useProfileById(profileId?: ProfileId | null): UseProfileByIdReturn {
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const effectiveProfileId = profileId ?? currentProfileId;
+
+  const profiles = useProfileStore(useShallow((state) => state.profiles));
+  const profile = useMemo(
+    () => (profiles ?? []).find((p) => p.id === effectiveProfileId) ?? null,
+    [profiles, effectiveProfileId]
+  );
+
+  const rawProfileSettings = useSettingsStore(
+    useShallow((state) => state.profileSettings?.[effectiveProfileId ?? ''])
+  );
+
+  const settings = useMemo(
+    (): ProfileSettings => mergeProfileSettings(rawProfileSettings),
+    [rawProfileSettings]
+  );
+
+  return { profile, settings };
 }

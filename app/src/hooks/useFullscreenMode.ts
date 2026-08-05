@@ -7,18 +7,27 @@
  * fullscreen as well (refs #313).
  *
  * Controls stay visible in fullscreen; there is no auto-hide logic here.
+ *
+ * Takes a bucket id, not a `Profile`: while aggregating there is no `Profile`
+ * object (useCurrentProfile resolves `currentProfile` to null for any
+ * aggregate id), but the flag is still a view-level preference that belongs
+ * in the active aggregate's own bucket, same as every other aggregate
+ * view-level setting. Callers pass the raw currentProfileId - the real
+ * profile id in single mode, the aggregate's id otherwise - rather than
+ * `currentProfile?.id`, which is null exactly when this would otherwise be
+ * needed (refs #337).
  */
 
 import { useCallback } from 'react';
 import { useSettingsStore } from '../stores/settings';
-import type { Profile } from '../api/types';
+import type { ProfileId } from '../api/types';
 import type { ProfileSettings } from '../stores/settings';
 
 /** The profile settings that record a page's fullscreen state. */
 export type FullscreenSettingKey = 'montageIsFullscreen' | 'liveActivityIsFullscreen';
 
 interface UseFullscreenModeOptions {
-  currentProfile: Profile | null;
+  profileId: ProfileId | null;
   settings: ProfileSettings;
   settingKey: FullscreenSettingKey;
 }
@@ -29,7 +38,7 @@ interface UseFullscreenModeReturn {
 }
 
 export function useFullscreenMode({
-  currentProfile,
+  profileId,
   settings,
   settingKey,
 }: UseFullscreenModeOptions): UseFullscreenModeReturn {
@@ -38,13 +47,13 @@ export function useFullscreenMode({
   // The profile setting is the state. It was previously mirrored into local
   // state and resynced by an effect, which only ever restated what the store
   // already held: the sole writer below updates the store too, and it returns
-  // early without a profile, so the two could not diverge (refs #281).
+  // early without a bucket to write to, so the two could not diverge (refs #281).
   const handleToggleFullscreen = useCallback(
     (fullscreen: boolean) => {
-      if (!currentProfile) return;
-      updateSettings(currentProfile.id, { [settingKey]: fullscreen });
+      if (!profileId) return;
+      updateSettings(profileId, { [settingKey]: fullscreen });
     },
-    [currentProfile, updateSettings, settingKey]
+    [profileId, updateSettings, settingKey]
   );
 
   return {

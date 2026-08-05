@@ -16,6 +16,8 @@ import { useTranslation } from 'react-i18next';
 import { ScanEye } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { usePageViewMode } from '../../hooks/useViewPrefs';
+import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 
 interface AnalysisFramesToggleProps {
@@ -30,10 +32,18 @@ interface AnalysisFramesToggleProps {
 
 export function AnalysisFramesToggle({ className, alwaysStreaming = false }: AnalysisFramesToggleProps) {
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
+  // Write target: the real profile in single mode, the active aggregate's id
+  // while aggregating, matching the bucket `settings` above already reads
+  // (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  const unavailable = !alwaysStreaming && settings.viewMode === 'snapshot';
+  // Not settings.viewMode: under "Per server" the active aggregate's bucket
+  // imposes no Streaming Mode, and reading its own would disable a control
+  // that still governs every streaming server's tiles (refs #337).
+  const pageViewMode = usePageViewMode();
+  const unavailable = !alwaysStreaming && pageViewMode === 'snapshot';
   const isOn = settings.showAnalysisFrames;
   const label = t('video.analysis_frames');
   const title = unavailable ? t('video.analysis_needs_streaming') : t('video.analysis_frames_hint');
@@ -43,13 +53,13 @@ export function AnalysisFramesToggle({ className, alwaysStreaming = false }: Ana
       variant={isOn ? 'default' : 'outline'}
       size="icon"
       className={className}
-      disabled={unavailable || !currentProfile}
+      disabled={unavailable || !currentProfileId}
       aria-pressed={isOn}
       aria-label={label}
       title={title}
       onClick={() => {
-        if (!currentProfile) return;
-        updateSettings(currentProfile.id, { showAnalysisFrames: !isOn });
+        if (!currentProfileId) return;
+        updateSettings(currentProfileId, { showAnalysisFrames: !isOn });
       }}
       data-testid="analysis-frames-toggle"
     >

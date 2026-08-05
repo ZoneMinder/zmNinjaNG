@@ -4,11 +4,15 @@ import {
   registerSessionsGate,
   getSession,
   getCurrentSession,
+  tryGetCurrentSession,
   hasSession,
   dropSession,
   dropAllSessions,
   ALL_PROFILES_ID,
 } from '../sessions';
+import { PROBE_PROFILE_ID, mintVirtualProfileId } from '../../api/types';
+import { getServerMap } from '../../lib/zm/server-resolver';
+import { getServers } from '../../api/server';
 
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn((baseURL: string, _reLogin?: () => Promise<boolean>, profileId?: string) => ({
@@ -16,6 +20,16 @@ vi.mock('../../api/store-gates', () => ({
   })),
   resetAuthGates: vi.fn(),
 }));
+
+vi.mock('../../api/server', () => ({
+  getServers: vi.fn(async () => []),
+}));
+
+/** Flush the microtask queue so fire-and-forget server-map populates settle. */
+async function flush(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -101,6 +115,10 @@ describe('sessions', () => {
     expect(() => getSession(asProfileId('nope'))).toThrow();
   });
 
+  it('throws for a virtual profile id, which names no server either (refs #337)', () => {
+    expect(() => getSession(mintVirtualProfileId())).toThrow(/no session/);
+  });
+
   it('dropSession evicts so the next get rebuilds', () => {
     const s1 = getSession(aId);
     dropSession(aId);
@@ -140,5 +158,67 @@ describe('sessions', () => {
     currentProfileId = null;
 
     expect(() => getCurrentSession()).toThrow();
+  });
+
+  it('tryGetCurrentSession returns the session for the current profile', () => {
+    currentProfileId = bId;
+
+    const session = tryGetCurrentSession();
+
+    expect(session?.profileId).toBe(bId);
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing when there is no current profile', () => {
+    currentProfileId = null;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for the ALL_PROFILES_ID sentinel', () => {
+    currentProfileId = ALL_PROFILES_ID;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for a virtual profile (refs #337)', () => {
+    currentProfileId = mintVirtualProfileId();
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  it('tryGetCurrentSession returns null instead of throwing for the probe sentinel', () => {
+    currentProfileId = PROBE_PROFILE_ID;
+
+    expect(tryGetCurrentSession()).toBeNull();
+  });
+
+  describe('server map bootstrap on session creation (refs #337 I3)', () => {
+    it('fires one populate against the new session\'s client', async () => {
+      const session = getSession(aId);
+      await flush();
+
+      expect(getServers).toHaveBeenCalledTimes(1);
+      expect(getServers).toHaveBeenCalledWith(session.client);
+    });
+
+    it('does not re-fire on a second getSession for the same profile', async () => {
+      getSession(aId);
+      await flush();
+      vi.mocked(getServers).mockClear();
+
+      getSession(aId);
+      await flush();
+
+      expect(getServers).not.toHaveBeenCalled();
+    });
+
+    it('leaves the server map empty without throwing when the fetch fails', async () => {
+      vi.mocked(getServers).mockRejectedValueOnce(new Error('network down'));
+
+      expect(() => getSession(aId)).not.toThrow();
+      await flush();
+
+      expect(getServerMap(aId).size).toBe(0);
+    });
   });
 });

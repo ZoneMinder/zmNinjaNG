@@ -20,8 +20,11 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Button } from './ui/button';
-import { Check, ChevronDown, Server, Plus, Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
+import { isAggregateProfileId } from '../api/types';
+import { useAggregateLabel } from '../hooks/useAggregateLabel';
+import { countActiveMembers } from '../lib/profile/virtual-profile';
 
 import { useTranslation } from 'react-i18next';
 
@@ -32,7 +35,21 @@ import { useTranslation } from 'react-i18next';
 export function ProfileSwitcher() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const profiles = useProfileStore((state) => state.profiles);
+  // Disabled profiles are unselectable (switchProfile rejects them) so they
+  // are hidden from the switcher entirely rather than shown muted - this
+  // dropdown has no existing muted/disabled item styling to reuse, and a
+  // profile the user can't act on has no reason to occupy a row here.
+  // useShallow so an unrelated store update doesn't force a re-render off a
+  // freshly-allocated (but element-wise identical) filtered array. Refs #337.
+  const profiles = useProfileStore(useShallow((state) => state.profiles.filter((p) => !p.disabled)));
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  // Any aggregate hides the single-profile label; which aggregate decides what
+  // the trigger says (refs #337).
+  const isAggregate = isAggregateProfileId(currentProfileId);
+  const aggregateLabel = useAggregateLabel();
+  // Raw slice with the `?? []` inside the selector so useShallow dedupes
+  // repeated empty snapshots to one reference (see useProfileScope).
+  const virtualProfiles = useProfileStore(useShallow((state) => state.virtualProfiles ?? []));
   const currentProfile = useProfileStore(
     useShallow((state) => {
       const { profiles, currentProfileId } = state;
@@ -44,8 +61,10 @@ export function ProfileSwitcher() {
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitch = async (profileId: string) => {
+    const isAggregateTarget = isAggregateProfileId(profileId);
     const profile = profiles.find((p) => p.id === profileId);
-    if (!profile) return;
+    if (!isAggregateTarget && !profile) return;
+    const name = isAggregateTarget ? aggregateLabel(profileId) : profile!.name;
 
     // Abort any in-flight switch
     if (switchAbortRef.current) switchAbortRef.current.abort();
@@ -54,14 +73,14 @@ export function ProfileSwitcher() {
 
     toast.dismiss();
     setIsLoading(true);
-    const loadingToast = toast.loading(t('profiles.switching_to', { name: profile.name }));
+    const loadingToast = toast.loading(t('profiles.switching_to', { name }));
 
     try {
       await switchProfile(profileId);
       if (abort.signal.aborted) return;
 
       toast.dismiss(loadingToast);
-      toast.success(t('profiles.switched_to', { name: profile.name }));
+      toast.success(t('profiles.switched_to', { name }));
       setIsLoading(false);
       navigate('/monitors');
     } catch (error: unknown) {
@@ -98,7 +117,11 @@ export function ProfileSwitcher() {
             ) : (
               <Server className="h-4 w-4 shrink-0" />
             )}
-            <span className="truncate">{currentProfile?.name || t('profiles.select_profile')}</span>
+            <span className="truncate">
+              {isAggregate
+                ? aggregateLabel(currentProfileId)
+                : currentProfile?.name || t('profiles.select_profile')}
+            </span>
           </div>
           {!isLoading && <ChevronDown className="h-4 w-4 opacity-50" />}
         </Button>
@@ -131,6 +154,34 @@ export function ProfileSwitcher() {
             )}
           </DropdownMenuItem>
         ))}
+        {/* Groups sit after the real profiles, for consistency with the
+            Profiles page card order, and behind a gate: with one selectable
+            server a group has nothing to aggregate (refs #337). */}
+        {profiles.length >= 2 &&
+          virtualProfiles.map((group) => (
+            <DropdownMenuItem
+              key={group.id}
+              onClick={() => handleSwitch(group.id)}
+              // A group with nothing left to aggregate would switch into
+              // empty screens; the Profiles page card is where it gets fixed.
+              disabled={countActiveMembers(group, profiles) === 0}
+              className="flex items-center justify-between cursor-pointer"
+              data-testid={`profile-switcher-virtual-${group.id}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="font-medium truncate" title={group.name}>
+                  {group.name}
+                </span>
+              </div>
+              {currentProfileId === group.id && (
+                <Check
+                  className="h-4 w-4 text-primary shrink-0"
+                  data-testid={`profile-switcher-active-virtual-${group.id}`}
+                />
+              )}
+            </DropdownMenuItem>
+          ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleAddProfile} className="cursor-pointer" data-testid="profile-switcher-add-profile">
           <Plus className="h-4 w-4 mr-2" />

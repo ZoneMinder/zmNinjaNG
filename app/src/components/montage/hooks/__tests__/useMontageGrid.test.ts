@@ -4,8 +4,7 @@ import type { Layout } from 'react-grid-layout';
 import { COL_SUBDIVISION, isLegacyLayout, useMontageGrid } from '../useMontageGrid';
 import { useSettingsStore } from '../../../../stores/settings';
 import type { MonitorData } from '../../../../api/types';
-import type { Profile } from '../../../../api/types';
-import { asProfileId } from '../../../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../../../api/types';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -115,16 +114,6 @@ const makeMonitor = (id: string, orientation = 'ROTATE_0'): MonitorData => ({
   },
 });
 
-const makeProfile = (id: string): Profile => ({
-  id: asProfileId(id),
-  name: 'Test Profile',
-  portalUrl: 'http://localhost',
-  apiUrl: 'http://localhost/api',
-  cgiUrl: 'http://localhost/cgi-bin',
-  isDefault: true,
-  createdAt: 0,
-});
-
 // Proportional (current) format: each default tile is one column wide
 // (COL_SUBDIVISION units) and perRow == displayCols exactly.
 const buildNewFormatLayout = (displayCols: number, count: number): Layout[] => {
@@ -184,7 +173,6 @@ describe('isLegacyLayout', () => {
 
 describe('proportional columns (#220)', () => {
   const profileId = 'cols-profile';
-  const profile = makeProfile(profileId);
   // 12 monitors: enough to fill more than one row for every tested column count.
   const monitors = Array.from({ length: 12 }, (_, i) => makeMonitor(`${i + 1}`));
 
@@ -199,7 +187,7 @@ describe('proportional columns (#220)', () => {
     type HookProps = Parameters<typeof useMontageGrid>[0];
     const { result } = renderHook(
       (props: HookProps) => useMontageGrid(props),
-      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
+      { initialProps: { monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A' } }
     );
     act(() => { result.current.handleWidthChange(1200); });
     return result;
@@ -236,7 +224,7 @@ describe('proportional columns (#220)', () => {
     type HookProps = Parameters<typeof useMontageGrid>[0];
     const { result } = renderHook(
       (props: HookProps) => useMontageGrid(props),
-      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
+      { initialProps: { monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A' } }
     );
     act(() => { result.current.handleWidthChange(1200); });
 
@@ -259,7 +247,6 @@ describe('proportional columns (#220)', () => {
 // describing a layout the app never rendered. These run through the hook.
 describe('tile heights for rotated monitors', () => {
   const profileId = 'rotation-profile';
-  const profile = makeProfile(profileId);
 
   // gridWidth 1200 over 2 display columns: each tile is 600px of video width.
   // The shipped formula adds MONTAGE_GRID.cardHeaderHeightPx (32) and rounds up
@@ -278,7 +265,7 @@ describe('tile heights for rotated monitors', () => {
     type HookProps = Parameters<typeof useMontageGrid>[0];
     const { result } = renderHook(
       (props: HookProps) => useMontageGrid(props),
-      { initialProps: { monitors, currentProfile: profile, settings, isEditMode: false, groupKey: 'A' } }
+      { initialProps: { monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A' } }
     );
     act(() => { result.current.handleWidthChange(gridWidth); });
     return result.current.layout[0].h;
@@ -309,7 +296,6 @@ describe('tile heights for rotated monitors', () => {
 describe('group-switch re-init', () => {
   const profileId = 'test-profile';
   const monitors = [makeMonitor('10'), makeMonitor('20')];
-  const profile = makeProfile(profileId);
 
   // Working layouts for each group. Legacy-format positions are rebuilt to the
   // group's column count on restore; the assertions below only check gridCols
@@ -342,7 +328,7 @@ describe('group-switch re-init', () => {
     type HookProps = Parameters<typeof useMontageGrid>[0];
     const initialProps: HookProps = {
       monitors,
-      currentProfile: profile,
+      profileId: asProfileId(profileId),
       settings: settingsA,
       isEditMode: false,
       groupKey: 'A',
@@ -383,5 +369,111 @@ describe('group-switch re-init', () => {
     for (const item of result.current.layout) {
       expect(monitorIds.has(item.i)).toBe(true);
     }
+  });
+});
+
+// All mode has no real profile, but the montage layout is a view preference:
+// the ALL bucket owns it, keyed by the ALL_PROFILES_ID sentinel exactly like
+// the group-by-server toggle. Editing must persist there rather than being
+// inert (refs #337). Tiles are keyed by tileIdFor composites in All mode, so
+// two servers sharing a raw monitor id cannot collide in one layout.
+describe('All mode: editing persists into the ALL bucket', () => {
+  const monitors = [
+    { ...makeMonitor('10'), profileId: asProfileId('profile-a') },
+    { ...makeMonitor('10'), profileId: asProfileId('profile-b') },
+  ];
+
+  const renderAllMode = () => {
+    useSettingsStore.setState({ profileSettings: {} });
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    const { result } = renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      {
+        initialProps: {
+          monitors,
+          profileId: ALL_PROFILES_ID,
+          settings: useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID),
+          isEditMode: true,
+          groupKey: 'A',
+        },
+      }
+    );
+    act(() => { result.current.handleWidthChange(800); });
+    return result;
+  };
+
+  const storedLayout = () =>
+    useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID)
+      .montageByGroup['A']?.workingLayout;
+
+  it('keys All-mode tiles by profileId:monitorId so two servers do not collide', () => {
+    const result = renderAllMode();
+    expect(result.current.layout.map((item) => item.i)).toEqual([
+      'profile-a:10',
+      'profile-b:10',
+    ]);
+  });
+
+  it('persists a drag into the ALL bucket', () => {
+    const result = renderAllMode();
+    const before = result.current.layout;
+    const moved = [{ ...before[0], x: before[0].x + 1 }, before[1]];
+
+    act(() => { result.current.handleDragStop(moved, before[0], moved[0]); });
+
+    expect(storedLayout()).toEqual(moved);
+  });
+
+  it('applies and persists a resize into the ALL bucket', () => {
+    const result = renderAllMode();
+    const before = result.current.layout;
+    const widened = { ...before[0], w: before[0].w + 4 };
+
+    act(() => { result.current.handleResizeStop(before, before[0], widened); });
+
+    expect(result.current.layout[0].w).toBe(widened.w);
+    expect(storedLayout()?.[0].w).toBe(widened.w);
+  });
+
+  it('persists a column-count change into the ALL bucket', () => {
+    const result = renderAllMode();
+
+    act(() => { result.current.handleApplyGridLayout(3); });
+
+    expect(result.current.gridCols).toBe(3);
+    expect(
+      useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID)
+        .montageByGroup['A']?.gridCols
+    ).toBe(3);
+  });
+
+  it('persists a saved-layout load into the ALL bucket', () => {
+    const result = renderAllMode();
+    const saved: Layout[] = [
+      { i: 'profile-a:10', x: 0, y: 0, w: 2, h: 3 },
+      { i: 'profile-b:10', x: 2, y: 0, w: 2, h: 3 },
+    ];
+
+    act(() => { result.current.handleLoadSavedLayout(saved, 2); });
+
+    expect(storedLayout()?.map((item) => item.i)).toEqual([
+      'profile-a:10',
+      'profile-b:10',
+    ]);
+  });
+
+  it('persists a fill-width into the ALL bucket', () => {
+    const result = renderAllMode();
+    // Half-width tiles, so fill-width has something to scale up.
+    const narrow: Layout[] = [
+      { i: 'profile-a:10', x: 0, y: 0, w: 1, h: 3 },
+      { i: 'profile-b:10', x: 1, y: 0, w: 1, h: 3 },
+    ];
+    act(() => { result.current.handleLoadSavedLayout(narrow, 2); });
+
+    act(() => { result.current.handleFillWidth(); });
+
+    const maxRight = Math.max(...(storedLayout() ?? []).map((i) => i.x + i.w));
+    expect(maxRight).toBe(2 * COL_SUBDIVISION);
   });
 });

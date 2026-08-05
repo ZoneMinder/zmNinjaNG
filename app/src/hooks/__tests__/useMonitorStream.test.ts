@@ -13,7 +13,7 @@ import { useAuthStore } from '../../stores/auth';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import { httpGet } from '../../lib/http';
 import type { Profile } from '../../api/types';
-import { asProfileId } from '../../api/types';
+import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 
 // Mock dependencies
 vi.mock('../../lib/http', () => ({
@@ -44,6 +44,8 @@ vi.mock('../../api/monitors', () => ({
     if (options.scale) params.set('scale', options.scale.toString());
     if (options.maxfps) params.set('maxfps', options.maxfps.toString());
     if (options.cacheBuster) params.set('rand', options.cacheBuster.toString());
+    if (options.token) params.set('token', options.token);
+    if (options.minStreamingPort) params.set('minStreamingPort', options.minStreamingPort.toString());
     return `${cgiUrl}/nph-zms?${params.toString()}`;
   },
 }));
@@ -61,6 +63,8 @@ vi.mock('../../lib/zm/url-builder', () => ({
 vi.mock('../../lib/zm/zm-constants', () => ({
   ZMS_COMMANDS: {
     cmdQuit: 'quit',
+    cmdAnalyzeOn: 'analyzeOn',
+    cmdAnalyzeOff: 'analyzeOff',
   },
 }));
 
@@ -132,8 +136,10 @@ describe('useMonitorStream', () => {
 
     renderHook(() => useMonitorStream({ monitorId: '1' }));
 
+    // Keyed by profileId:monitorId (refs #337), even in single mode, so the
+    // key stays unique alongside any other profile sharing monitor id '1'.
     await waitFor(() => {
-      expect(regenerateConnKey).toHaveBeenCalledWith('1');
+      expect(regenerateConnKey).toHaveBeenCalledWith('profile-1:1');
     });
   });
 
@@ -355,7 +361,7 @@ describe('useMonitorStream', () => {
       expect.stringContaining('connkey=101'),
       expect.anything(),
     );
-    expect(useMonitorStore.getState().connKeys['1']).toBeUndefined();
+    expect(useMonitorStore.getState().connKeys['profile-1:1']).toBeUndefined();
   });
 
   it('empties streamUrl and imageSrc while disabled, and mints a fresh connkey on re-enable', async () => {
@@ -476,5 +482,257 @@ describe('useMonitorStream', () => {
     expect(result.current.streamUrl).toContain('maxfps=5');
     expect(result.current.streamUrl).not.toContain('mode=single');
     expect(result.current.streamUrl).not.toContain('rand=');
+  });
+});
+
+describe('useMonitorStream: explicit profileId (All mode)', () => {
+  const profileA: Profile = {
+    id: asProfileId('profile-a'),
+    name: 'Profile A',
+    apiUrl: 'https://a.example.com',
+    portalUrl: 'https://a.example.com',
+    cgiUrl: 'https://a.example.com/cgi-bin',
+    minStreamingPort: 30000,
+    isDefault: true,
+    createdAt: Date.now(),
+  };
+
+  const profileB: Profile = {
+    id: asProfileId('profile-b'),
+    name: 'Profile B',
+    apiUrl: 'https://b.example.com',
+    portalUrl: 'https://b.example.com',
+    cgiUrl: 'https://b.example.com/cgi-bin',
+    minStreamingPort: 40000,
+    isDefault: false,
+    createdAt: Date.now(),
+  };
+
+  beforeEach(() => {
+    useProfileStore.setState({
+      profiles: [profileA, profileB],
+      currentProfileId: profileA.id,
+      isInitialized: true,
+      isBootstrapping: false,
+      bootstrapStep: null,
+    });
+
+    useAuthStore.setState({
+      slices: {
+        [profileA.id]: {
+          accessToken: 'token-a',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+        [profileB.id]: {
+          accessToken: 'token-b',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+      },
+    });
+
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-a': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          streamMaxFps: 5,
+        },
+        'profile-b': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          streamMaxFps: 5,
+        },
+      },
+    });
+
+    useMonitorStore.setState({
+      connKeys: {},
+      regenerateConnKey: vi.fn((monitorId: string) => {
+        const key = Date.now() + parseInt(monitorId);
+        useMonitorStore.setState((state) => ({
+          connKeys: { ...state.connKeys, [monitorId]: key },
+        }));
+        return key;
+      }),
+    });
+
+    vi.clearAllMocks();
+  });
+
+  it('builds the stream URL from the explicit profileId, not the current profile', async () => {
+    const regenerateConnKey = vi.fn(() => 999);
+    useMonitorStore.setState({ regenerateConnKey });
+
+    const { result } = renderHook(() =>
+      useMonitorStream({ monitorId: '1', profileId: profileB.id })
+    );
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toBeTruthy();
+    });
+
+    expect(result.current.streamUrl).toContain('https://b.example.com/cgi-bin');
+    expect(result.current.streamUrl).toContain('token=token-b');
+    expect(result.current.streamUrl).toContain('minStreamingPort=40000');
+    expect(result.current.streamUrl).not.toContain('a.example.com');
+    expect(result.current.streamUrl).not.toContain('token=token-a');
+    expect(result.current.streamUrl).not.toContain('minStreamingPort=30000');
+  });
+
+  it('defaults to the current profile when profileId is omitted', async () => {
+    const regenerateConnKey = vi.fn(() => 999);
+    useMonitorStore.setState({ regenerateConnKey });
+
+    const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toBeTruthy();
+    });
+
+    expect(result.current.streamUrl).toContain('https://a.example.com/cgi-bin');
+    expect(result.current.streamUrl).toContain('token=token-a');
+    expect(result.current.streamUrl).toContain('minStreamingPort=30000');
+    expect(result.current.streamUrl).not.toContain('minStreamingPort=40000');
+  });
+});
+
+// Two-tier view preferences (refs #337): a tile streams under its owning
+// server's viewMode and analysis setting in single mode, but under the ALL
+// bucket's while aggregating, so one toolbar toggle governs every tile no
+// matter which server it came from.
+describe('useMonitorStream: view preferences resolve two-tier', () => {
+  const profileB: Profile = {
+    id: asProfileId('profile-b'),
+    name: 'Profile B',
+    apiUrl: 'https://b.example.com',
+    portalUrl: 'https://b.example.com',
+    cgiUrl: 'https://b.example.com/cgi-bin',
+    isDefault: false,
+    createdAt: Date.now(),
+  };
+
+  beforeEach(() => {
+    useProfileStore.setState({
+      profiles: [profileB],
+      currentProfileId: profileB.id,
+      isInitialized: true,
+      isBootstrapping: false,
+      bootstrapStep: null,
+    });
+
+    useAuthStore.setState({
+      slices: {
+        [profileB.id]: {
+          accessToken: 'token-b',
+          accessTokenExpires: Date.now() + 60 * 60 * 1000,
+          refreshToken: null,
+          refreshTokenExpires: null,
+          version: null,
+          apiVersion: null,
+          isAuthenticated: false,
+          requiresAuth: true,
+        },
+      },
+    });
+
+    // The owning server sits on streaming with analysis off; the ALL bucket
+    // imposes snapshot and turns analysis on.
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-b': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'streaming',
+          showAnalysisFrames: false,
+        },
+        [ALL_PROFILES_ID]: {
+          ...DEFAULT_SETTINGS,
+          allModeViewMode: 'snapshot',
+          showAnalysisFrames: true,
+        },
+      },
+    });
+
+    useMonitorStore.setState({
+      connKeys: {},
+      regenerateConnKey: vi.fn(() => 4242),
+    });
+
+    vi.clearAllMocks();
+  });
+
+  const renderTile = () =>
+    renderHook(() => useMonitorStream({ monitorId: '1', profileId: profileB.id }));
+
+  it('streams under the owning profile in single mode', async () => {
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=jpeg');
+  });
+
+  it('sends no analysis command in single mode when the owner has it off', async () => {
+    const { result } = renderTile();
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+
+    act(() => { result.current.reportStreamLoad(); });
+
+    expect(mockHttpGet).not.toHaveBeenCalledWith(
+      expect.stringContaining('command=analyzeOn'),
+      expect.anything(),
+    );
+  });
+
+  it('keeps streaming under the owning profile in All mode while the mode is per-server', async () => {
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-b': { ...DEFAULT_SETTINGS, viewMode: 'streaming', showAnalysisFrames: false },
+      },
+    });
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=jpeg');
+  });
+
+  it("uses the ALL bucket's snapshot viewMode in All mode", async () => {
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+    const { result } = renderTile();
+
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+    expect(result.current.streamUrl).toContain('mode=single');
+  });
+
+  it("applies the ALL bucket's analysis setting to an owned tile in All mode", async () => {
+    useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+    // Analysis commands only reach a live streaming process, so keep the ALL
+    // bucket on streaming for this one.
+    useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+      allModeViewMode: 'streaming',
+    });
+
+    const { result } = renderTile();
+    await waitFor(() => expect(result.current.streamUrl).toBeTruthy());
+
+    act(() => { result.current.reportStreamLoad(); });
+
+    expect(mockHttpGet).toHaveBeenCalledWith(
+      expect.stringContaining('command=analyzeOn'),
+      expect.anything(),
+    );
   });
 });

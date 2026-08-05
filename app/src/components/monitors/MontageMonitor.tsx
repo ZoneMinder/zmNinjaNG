@@ -15,7 +15,7 @@
 import { useState, useRef, memo, useEffect, type ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
-import type { Monitor, MonitorStatus, Profile } from '../../api/types';
+import type { Monitor, MonitorStatus, Profile, ProfileId } from '../../api/types';
 import { useAuthSlice } from '../../stores/auth';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
@@ -23,6 +23,7 @@ import { useSettingsStore } from '../../stores/settings';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { ProfileChip } from '../ui/profile-chip';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -47,9 +48,24 @@ const NO_MONITOR_EVENTS: NotificationEvent[] = [];
 interface MontageMonitorProps {
   monitor: Monitor;
   status: MonitorStatus | undefined;
+  /** The tile's owning profile: the current profile in single mode, the
+   *  monitor's OWN server in All mode (see useScopedMonitors). Drives
+   *  zmVersion, settings, go2rtcUrl and the LiveMonitorPlayer `profile`
+   *  prop, all keyed off its id. */
   currentProfile: Profile | null;
   accessToken: string | null;
   navigate: NavigateFunction;
+  /**
+   * All mode only: the same owning profile's id, threaded separately to
+   * LiveMonitorPlayer's cache-key scoping and to the events watermark so a
+   * monitor id shared by two servers cannot collide (refs #337, Phase 4
+   * Task 1). Undefined in single mode - degrades to the pre-existing
+   * unscoped cache key (monitorCacheKey), unchanged.
+   */
+  profileId?: ProfileId;
+  /** All mode only: the owning profile's display name, shown as a small
+   *  chip next to the monitor name (mirrors MonitorCard's profileChip). */
+  profileChip?: string;
   isFullscreen?: boolean;
   isEditing?: boolean;
   isPinned?: boolean;
@@ -87,6 +103,24 @@ interface MontageMonitorProps {
    * before any other page reused them (refs #313).
    */
   fromRoute?: string;
+  /**
+   * Ask ZM for a cheaper stream for this tile (All-mode "reduced" stream
+   * tuning, refs #337). Decided by the page - Montage sets it while
+   * aggregating, Live Activity does not - and forwarded untouched to the
+   * player, which is where it turns into stream parameters.
+   */
+  reduceStream?: boolean;
+  /**
+   * Stop this tile's stream (All-mode pause-while-hidden, refs #337). Decided
+   * by the page and forwarded to the player, which drops the connection.
+   */
+  paused?: boolean;
+  /**
+   * Force this tile's MJPEG view mode regardless of the Streaming Mode
+   * setting, forwarded to the player. Montage passes 'snapshot' once the
+   * All-mode idle downgrade fires (refs #337).
+   */
+  forceViewMode?: 'streaming' | 'snapshot';
 }
 
 function MontageMonitorComponent({
@@ -95,6 +129,8 @@ function MontageMonitorComponent({
   currentProfile,
   accessToken: _accessToken,
   navigate,
+  profileId,
+  profileChip,
   isFullscreen = false,
   isEditing = false,
   isPinned = false,
@@ -107,6 +143,9 @@ function MontageMonitorComponent({
   titleIcon,
   mediaAspectRatio,
   fromRoute = '/montage',
+  reduceStream = false,
+  paused = false,
+  forceViewMode,
 }: MontageMonitorProps) {
   const { t } = useTranslation();
   const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
@@ -131,19 +170,19 @@ function MontageMonitorComponent({
   const lastSeenRef = useRef(0);
   const seedKeyRef = useRef<string | null>(null);
 
-  const profileId = currentProfile?.id;
+  const ownerProfileId = currentProfile?.id;
   const monitorId = monitor.Id;
 
   const monitorEvents = useNotificationStore(
     useShallow((state) => {
-      const events = profileId ? state.profileEvents[profileId] : undefined;
+      const events = ownerProfileId ? state.profileEvents[ownerProfileId] : undefined;
       if (!events?.length) return NO_MONITOR_EVENTS;
       return events.filter((e) => String(e.MonitorId) === monitorId);
     })
   );
 
   useEffect(() => {
-    const seedKey = `${profileId ?? ''}:${monitorId}`;
+    const seedKey = `${ownerProfileId ?? ''}:${monitorId}`;
     const isNewKey = seedKeyRef.current !== seedKey;
     seedKeyRef.current = seedKey;
 
@@ -164,7 +203,7 @@ function MontageMonitorComponent({
       setIsAlarming(true);
       alarmTimerRef.current = setTimeout(() => setIsAlarming(false), MONITOR_UI.alarmPulseMs);
     }
-  }, [monitorEvents, profileId, monitorId]);
+  }, [monitorEvents, ownerProfileId, monitorId]);
 
   useEffect(() => {
     return () => {
@@ -230,6 +269,9 @@ function MontageMonitorComponent({
           )} title={titleOverride ?? monitor.Name}>
             {titleOverride ?? monitor.Name}
           </span>
+          {profileChip && (
+            <ProfileChip name={profileChip} testId="montage-profile-chip" />
+          )}
         </div>
 
         {/* Action buttons */}
@@ -243,7 +285,7 @@ function MontageMonitorComponent({
             )}
             onClick={(e) => {
               e.stopPropagation();
-              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute });
+              openMonitorEvents({ monitorId: monitor.Id, newEventCount, newestEventAt, from: fromRoute, profileId });
             }}
             title={t('common.events')}
             aria-label={t('monitors.view_events')}
@@ -340,11 +382,15 @@ function MontageMonitorComponent({
         <LiveMonitorPlayer
           monitor={monitor}
           profile={currentProfile}
+          profileId={profileId}
           externalMediaRef={mediaRef}
           objectFit={resolvedFit}
           muted={isMuted}
           className="w-full h-full"
           onProtocolChange={setProtocol}
+          reduceStream={reduceStream}
+          paused={paused}
+          forceViewMode={forceViewMode}
         />
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">

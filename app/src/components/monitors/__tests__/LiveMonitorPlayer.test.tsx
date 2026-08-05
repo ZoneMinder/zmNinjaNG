@@ -9,9 +9,10 @@
  * connkey change, so the feed only recovered on a full remount (route change).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { LiveMonitorPlayer } from '../LiveMonitorPlayer';
+import { MONTAGE_GRID, GO2RTC_FRAME_POLL_MS } from '../../../lib/zmninja-ng-constants';
 import type { Monitor, Profile } from '../../../api/types';
 
 let mockMjpegReturn: {
@@ -23,18 +24,32 @@ let mockMjpegReturn: {
   reportStreamLoad: () => void;
 };
 
+// Every request the player has made of the MJPEG hook, so a test can assert
+// what this tile asks ZM for and whether it is streaming at all.
+const streamCalls: Array<{ streamOptions?: { maxfps?: number; scale?: number }; enabled?: boolean }> = [];
+
 // A fresh object per call, the way the real hook does it: useMonitorStream
 // returns a bare object literal, so its result is a new reference on every
 // render. Returning the same object here hid a bug where a hook dependency on
 // that result re-ran an effect every render. imgRef is deliberately shared
 // across the copies, because the real hook's useRef object is stable.
 vi.mock('../../../hooks/useMonitorStream', () => ({
-  useMonitorStream: () => ({ ...mockMjpegReturn }),
+  useMonitorStream: (opts: {
+    streamOptions?: { maxfps?: number; scale?: number };
+    enabled?: boolean;
+  }) => {
+    streamCalls.push(opts);
+    return { ...mockMjpegReturn };
+  },
 }));
 
 const go2rtc = vi.hoisted(() => ({
   state: 'connecting' as string,
   optionsLog: [] as Array<{ monitorId: string; enabled?: boolean }>,
+  // What the hook reports as its <video>. Null unless a test hands over an
+  // element with decoded frames on it, which is how the player learns that
+  // go2rtc is carrying the picture.
+  video: null as { videoWidth: number; videoHeight: number; paused: boolean; play: () => Promise<void> } | null,
 }));
 
 vi.mock('../../../hooks/useGo2RTCStream', () => ({
@@ -44,7 +59,7 @@ vi.mock('../../../hooks/useGo2RTCStream', () => ({
       state: go2rtc.state,
       error: go2rtc.state === 'error' ? 'Go2RTC WebSocket connection failed' : null,
       activeProtocol: null,
-      getVideoElement: () => null,
+      getVideoElement: () => go2rtc.video,
       retry: vi.fn(),
       stop: vi.fn(),
     };
@@ -64,8 +79,12 @@ vi.mock('../../../lib/logger', () => ({
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
 }));
 
+// The owning profile's own stream preferences. Only the keys these tests vary
+// are set; every other read is optional-chained in the player.
+let mockSettings: { streamMaxFps?: number; streamScale?: number } | undefined;
+
 vi.mock('../../../stores/settings', () => ({
-  useSettingsStore: () => undefined,
+  useSettingsStore: () => mockSettings,
 }));
 
 const monitor = { Id: '1', Name: 'Front Door', Go2RTCEnabled: false } as unknown as Monitor;
@@ -241,5 +260,203 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
     render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
 
     expect(latestEnabled('cache-b')).toBe(false);
+  });
+
+  // refs #337: two independent ZM servers (two profiles) can assign the same
+  // monitor id. A failure recorded for profile A's monitor must not silently
+  // skip Go2RTC for profile B's unrelated monitor sharing that id.
+  it('a Go2RTC failure recorded for one profile does not affect another profile with the same monitorId', () => {
+    const rtcMonitor = { Id: 'cache-c', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+    const profileA = { ...go2rtcProfile, id: 'profile-a' } as Profile;
+    const profileB = { ...go2rtcProfile, id: 'profile-b' } as Profile;
+
+    // Profile A's tile fails Go2RTC and records the failure.
+    go2rtc.state = 'error';
+    const a = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileA} />);
+    a.unmount();
+
+    // Profile B's tile for the SAME monitor id must still try Go2RTC.
+    go2rtc.state = 'connecting';
+    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileB} />);
+
+    expect(latestEnabled('cache-c')).toBe(true);
+  });
+});
+
+// refs #337: All Servers mode can ask every tile for a cheaper stream
+// (Settings > All Servers performance > stream tuning). The player is the
+// place that turns that into what ZM is actually asked for.
+describe('LiveMonitorPlayer reduced stream tuning', () => {
+  beforeEach(() => {
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+    mockSettings = { streamMaxFps: 10, streamScale: 50 };
+    streamCalls.length = 0;
+  });
+
+  const latestOptions = () => streamCalls[streamCalls.length - 1]?.streamOptions;
+
+  it('asks for the owning profile\'s own frame rate and scale by default', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(latestOptions()).toEqual({ maxfps: 10, scale: 50 });
+  });
+
+  it('asks for less when the tile is told to reduce', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+
+    expect(latestOptions()).toEqual({
+      maxfps: MONTAGE_GRID.reducedMaxFps,
+      scale: MONTAGE_GRID.reducedScale,
+    });
+  });
+
+  it('keeps a profile already streaming below the ceiling where it is', () => {
+    mockSettings = { streamMaxFps: 2, streamScale: 10 };
+
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+
+    expect(latestOptions()).toEqual({ maxfps: 2, scale: 10 });
+  });
+});
+
+// refs #337: All Servers mode can stop streaming while the page is out of
+// sight (Settings > All Servers performance). Disabling the stream hooks is
+// what makes that a real stop: useStreamLifecycle CMD_QUITs the connkey on
+// the way down, so no nph-zms process is left running on the server.
+describe('LiveMonitorPlayer paused tiles', () => {
+  const go2rtcProfile = { ...profile, go2rtcUrl: 'https://t/go2rtc' } as Profile;
+  const rtcMonitor = { Id: 'paused-rtc', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+
+  beforeEach(() => {
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+    mockSettings = undefined;
+    streamCalls.length = 0;
+    go2rtc.state = 'connecting';
+    go2rtc.optionsLog = [];
+  });
+
+  const latestStreamEnabled = () => streamCalls[streamCalls.length - 1]?.enabled;
+  const latestGo2rtcEnabled = (monitorId: string) =>
+    [...go2rtc.optionsLog].reverse().find((o) => o.monitorId === monitorId)?.enabled;
+
+  it('streams while not paused', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(latestStreamEnabled()).toBe(true);
+  });
+
+  it('drops the MJPEG connection while paused', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} paused />);
+
+    expect(latestStreamEnabled()).toBe(false);
+  });
+
+  it('drops the go2rtc connection while paused', () => {
+    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+
+    expect(latestGo2rtcEnabled('paused-rtc')).toBe(false);
+  });
+
+  it('reconnects when the pause lifts', () => {
+    const { rerender } = render(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />,
+    );
+
+    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+
+    expect(latestGo2rtcEnabled('paused-rtc')).toBe(true);
+    expect(latestStreamEnabled()).toBe(true);
+  });
+});
+
+// A paused WebRTC tile holds no connection, so it has no frames either. Both
+// halves of that matter: the tile must not claim to be playing video it no
+// longer receives, and the resume must start from cold rather than dropping a
+// freeze watchdog on a stream that is still negotiating (refs #337).
+describe('LiveMonitorPlayer paused WebRTC frames', () => {
+  const go2rtcProfile = { ...profile, go2rtcUrl: 'https://t/go2rtc' } as Profile;
+  const rtcMonitor = { Id: 'paused-frames', Name: 'Cam', Go2RTCEnabled: true } as unknown as Monitor;
+
+  beforeEach(() => {
+    mockMjpegReturn = {
+      // No MJPEG stream at all, so the tile's rendered state is only ever
+      // about the go2rtc video.
+      streamUrl: '',
+      imageSrc: '',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+    };
+    mockSettings = undefined;
+    streamCalls.length = 0;
+    go2rtc.state = 'connected';
+    go2rtc.optionsLog = [];
+    go2rtc.video = { videoWidth: 640, videoHeight: 480, paused: false, play: () => Promise.resolve() };
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    go2rtc.video = null;
+    go2rtc.state = 'connecting';
+  });
+
+  /** The VideoOff placeholder: shown whenever the tile has no picture to show. */
+  const isShowingPlaceholder = () => screen.queryByTestId('video-player-loading') !== null;
+
+  const letFramesArrive = () => {
+    act(() => {
+      vi.advanceTimersByTime(GO2RTC_FRAME_POLL_MS * 2);
+    });
+  };
+
+  it('shows the placeholder while paused even though the go2rtc hook still reports frames', () => {
+    const { rerender } = render(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />,
+    );
+    letFramesArrive();
+    expect(isShowingPlaceholder()).toBe(false);
+
+    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+    // The real hook stops on the way into a pause, but it does so in its own
+    // effect, and its last reported state outlives the render that paused the
+    // tile. Nothing the hook says can put live video on a paused tile.
+    letFramesArrive();
+
+    expect(isShowingPlaceholder()).toBe(true);
+  });
+
+  it('comes back from a pause on the cold-start path, not mid-stream', () => {
+    const { rerender } = render(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />,
+    );
+    letFramesArrive();
+
+    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+    // The connection is gone: go2rtc reports idle and there is no video.
+    go2rtc.state = 'idle';
+    go2rtc.video = null;
+    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+
+    // Still on the placeholder, waiting for the first frame of the new
+    // connection. Carrying the old "has frames" across the pause would instead
+    // start the freeze watchdog against a stream that has not connected yet,
+    // and its retries would fire before the first frame could arrive.
+    expect(isShowingPlaceholder()).toBe(true);
   });
 });

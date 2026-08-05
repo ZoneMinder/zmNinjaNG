@@ -1,17 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MontageKebabMenu } from '../MontageKebabMenu';
-import type { Monitor } from '../../../api/types';
+import { MontageKebabMenu, type MontageVisibilityItem } from '../MontageKebabMenu';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-const monitors: Monitor[] = [
-  { Id: '1', Name: 'Front Door', Sequence: '1' } as Monitor,
-  { Id: '2', Name: 'Backyard', Sequence: '2' } as Monitor,
-  { Id: '3', Name: 'Garage', Sequence: '3' } as Monitor,
+// Single mode: bare monitor ids, no owning-server label.
+const items: MontageVisibilityItem[] = [
+  { id: '1', name: 'Front Door' },
+  { id: '2', name: 'Backyard' },
+  { id: '3', name: 'Garage' },
+];
+
+// All mode: composite profileId:monitorId ids, one label per owning server.
+// Both servers expose a monitor with the raw id "1" - the collision the
+// composite id exists to keep apart (refs #337).
+const allModeItems: MontageVisibilityItem[] = [
+  { id: 'profile-1:1', name: 'Front Door', profileChip: 'Home' },
+  { id: 'profile-2:1', name: 'Lobby Cam', profileChip: 'Office' },
 ];
 
 describe('MontageKebabMenu', () => {
@@ -24,7 +32,7 @@ describe('MontageKebabMenu', () => {
   it('renders the kebab trigger button', () => {
     render(
       <MontageKebabMenu
-        monitors={monitors}
+        items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
       />
@@ -36,7 +44,7 @@ describe('MontageKebabMenu', () => {
     const user = userEvent.setup();
     render(
       <MontageKebabMenu
-        monitors={monitors}
+        items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
       />
@@ -49,7 +57,7 @@ describe('MontageKebabMenu', () => {
     const user = userEvent.setup();
     render(
       <MontageKebabMenu
-        monitors={monitors}
+        items={items}
         hiddenMonitorIds={['2']}
         onToggleVisibility={onToggleVisibility}
       />
@@ -70,7 +78,7 @@ describe('MontageKebabMenu', () => {
     const user = userEvent.setup();
     render(
       <MontageKebabMenu
-        monitors={monitors}
+        items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
       />
@@ -88,7 +96,7 @@ describe('MontageKebabMenu', () => {
     const user = userEvent.setup();
     render(
       <MontageKebabMenu
-        monitors={[]}
+        items={[]}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
       />
@@ -97,16 +105,15 @@ describe('MontageKebabMenu', () => {
     expect(screen.queryByTestId('montage-kebab-visibility')).not.toBeInTheDocument();
   });
 
-  it('sorts monitors by Sequence ascending', async () => {
+  it('renders items in the order given, since the page owns the sort', async () => {
     const user = userEvent.setup();
-    const unordered: Monitor[] = [
-      { Id: '10', Name: 'Z-Last', Sequence: '3' } as Monitor,
-      { Id: '11', Name: 'A-First', Sequence: '1' } as Monitor,
-      { Id: '12', Name: 'B-Middle', Sequence: '2' } as Monitor,
-    ];
     render(
       <MontageKebabMenu
-        monitors={unordered}
+        items={[
+          { id: '11', name: 'A-First' },
+          { id: '12', name: 'B-Middle' },
+          { id: '10', name: 'Z-Last' },
+        ]}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
       />
@@ -114,11 +121,79 @@ describe('MontageKebabMenu', () => {
     await user.click(screen.getByTestId('montage-kebab-menu'));
     await user.hover(screen.getByTestId('montage-kebab-visibility'));
 
-    const items = await screen.findAllByTestId(/^montage-visibility-/);
-    expect(items.map((el) => el.getAttribute('data-testid'))).toEqual([
-      'montage-visibility-11',
-      'montage-visibility-12',
-      'montage-visibility-10',
-    ]);
+    const entries = await screen.findAllByTestId(/^montage-visibility-/);
+    expect(entries.map((el) => el.textContent)).toEqual(['A-First', 'B-Middle', 'Z-Last']);
+  });
+
+  // All mode: two servers can expose the same raw monitor id and the same
+  // monitor name, so the list has to say which server each entry belongs to
+  // and toggle by the composite id (refs #337).
+  it('All mode labels each entry with its owning server', async () => {
+    const user = userEvent.setup();
+    render(
+      <MontageKebabMenu
+        items={allModeItems}
+        hiddenMonitorIds={[]}
+        onToggleVisibility={onToggleVisibility}
+      />
+    );
+    await user.click(screen.getByTestId('montage-kebab-menu'));
+    await user.hover(screen.getByTestId('montage-kebab-visibility'));
+
+    expect(await screen.findByTestId('montage-visibility-chip-profile-1:1')).toHaveTextContent('Home');
+    expect(await screen.findByTestId('montage-visibility-chip-profile-2:1')).toHaveTextContent('Office');
+  });
+
+  it('All mode checks each entry by composite id, so a colliding raw id stays independent', async () => {
+    const user = userEvent.setup();
+    render(
+      <MontageKebabMenu
+        items={allModeItems}
+        hiddenMonitorIds={['profile-1:1']}
+        onToggleVisibility={onToggleVisibility}
+      />
+    );
+    await user.click(screen.getByTestId('montage-kebab-menu'));
+    await user.hover(screen.getByTestId('montage-kebab-visibility'));
+
+    expect(await screen.findByTestId('montage-visibility-profile-1:1')).toHaveAttribute(
+      'data-state',
+      'unchecked'
+    );
+    expect(await screen.findByTestId('montage-visibility-profile-2:1')).toHaveAttribute(
+      'data-state',
+      'checked'
+    );
+  });
+
+  it('All mode toggles with the composite id, not the raw monitor id', async () => {
+    const user = userEvent.setup();
+    render(
+      <MontageKebabMenu
+        items={allModeItems}
+        hiddenMonitorIds={[]}
+        onToggleVisibility={onToggleVisibility}
+      />
+    );
+    await user.click(screen.getByTestId('montage-kebab-menu'));
+    await user.hover(screen.getByTestId('montage-kebab-visibility'));
+    const entry = await screen.findByTestId('montage-visibility-profile-2:1');
+    await user.pointer({ target: entry, keys: '[MouseLeft]' });
+    expect(onToggleVisibility).toHaveBeenCalledWith('profile-2:1');
+  });
+
+  it('single mode renders no server label', async () => {
+    const user = userEvent.setup();
+    render(
+      <MontageKebabMenu
+        items={items}
+        hiddenMonitorIds={[]}
+        onToggleVisibility={onToggleVisibility}
+      />
+    );
+    await user.click(screen.getByTestId('montage-kebab-menu'));
+    await user.hover(screen.getByTestId('montage-kebab-visibility'));
+    await screen.findByTestId('montage-visibility-1');
+    expect(screen.queryAllByTestId(/^montage-visibility-chip-/)).toHaveLength(0);
   });
 });

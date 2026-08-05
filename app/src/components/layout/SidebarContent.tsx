@@ -8,7 +8,7 @@ import logoUrl from '../../../assets/logo.png';
 import { useProfileStore } from '../../stores/profile';
 import { useNotificationStore } from '../../stores/notifications';
 import { useSettingsStore } from '../../stores/settings';
-import { useShallow } from 'zustand/react/shallow';
+import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { Button } from '../ui/button';
 import { ModeToggle } from '../mode-toggle';
 import { ProfileSwitcher } from '../profile-switcher';
@@ -69,28 +69,28 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   const { isTvMode } = useTvMode();
   const { unreadCount: developerNoticeUnread } = useDeveloperNotices();
   const showDeveloperNotices = useDeveloperNoticeStore((s) => s.showNotices);
-  const currentProfile = useProfileStore(
-    useShallow((state) => {
-      const { profiles, currentProfileId } = state;
-      return profiles.find((p) => p.id === currentProfileId) || null;
-    })
-  );
-  const connectionState = useNotificationStore((state) => state.connectionState);
+  // View-level preferences below (insomnia, nav order, the montage toolbar)
+  // come from useCurrentProfile: it reads reactively and resolves to the
+  // active aggregate's bucket while aggregating, where currentProfile is
+  // null. Their write target is currentProfileId, the same key that bucket
+  // lives under, whichever aggregate it names (refs #337).
+  const { currentProfile, settings: profileSettings } = useCurrentProfile();
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const connectionState = useNotificationStore((state) => state.connections[currentProfile?.id ?? ''] ?? 'disconnected');
   const getProfileSettings = useNotificationStore((state) => state.getProfileSettings);
-  const getSettings = useSettingsStore((state) => state.getProfileSettings);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  // Get notification data for current profile
+  // Notification settings stay per-server: there is no aggregate connection
+  // to describe, so the status dot only reads a real profile's config.
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
-  const profileSettings = currentProfile ? getSettings(currentProfile.id) : null;
 
   const { t } = useTranslation();
   const { toast } = useToast();
 
   const handleInsomniaToggle = () => {
-    if (currentProfile && profileSettings) {
+    if (currentProfileId) {
       const newValue = !profileSettings.insomnia;
-      updateProfileSettings(currentProfile.id, { insomnia: newValue });
+      updateProfileSettings(currentProfileId, { insomnia: newValue });
       toast({
         description: t(newValue ? 'montage.insomnia_enabled' : 'montage.insomnia_disabled'),
       });
@@ -121,7 +121,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
       : []),
   ];
 
-  const savedOrder = profileSettings?.sidebarNavOrder;
+  const savedOrder = profileSettings.sidebarNavOrder;
   const navItems = useMemo(() => {
     if (!savedOrder || savedOrder.length === 0) return defaultNavItems;
     const orderMap = new Map(savedOrder.map((path, idx) => [path, idx]));
@@ -142,16 +142,16 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   const dragOriginY = useRef(0);
 
   const saveNavOrder = useCallback((reordered: typeof navItems) => {
-    if (!currentProfile) return;
-    updateProfileSettings(currentProfile.id, {
+    if (!currentProfileId) return;
+    updateProfileSettings(currentProfileId, {
       sidebarNavOrder: reordered.map((item) => item.path),
     });
-  }, [currentProfile, updateProfileSettings]);
+  }, [currentProfileId, updateProfileSettings]);
 
   const resetNavOrder = useCallback(() => {
-    if (!currentProfile) return;
-    updateProfileSettings(currentProfile.id, { sidebarNavOrder: [] });
-  }, [currentProfile, updateProfileSettings]);
+    if (!currentProfileId) return;
+    updateProfileSettings(currentProfileId, { sidebarNavOrder: [] });
+  }, [currentProfileId, updateProfileSettings]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent, index: number) => {
     e.preventDefault();
@@ -331,16 +331,16 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            if (currentProfile) {
-                              updateProfileSettings(currentProfile.id, {
-                                montageShowToolbar: !profileSettings?.montageShowToolbar,
+                            if (currentProfileId) {
+                              updateProfileSettings(currentProfileId, {
+                                montageShowToolbar: !profileSettings.montageShowToolbar,
                               });
                             }
                           }}
                           title={t('montage.toggle_toolbar')}
                           data-testid="sidebar-montage-toolbar-toggle"
                         >
-                          {profileSettings?.montageShowToolbar
+                          {profileSettings.montageShowToolbar
                             ? <Eye className="h-3.5 w-3.5" />
                             : <EyeOff className="h-3.5 w-3.5" />}
                         </Button>
@@ -417,13 +417,13 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
               <span className="text-xs font-medium text-muted-foreground">{t('monitor_detail.insomnia_label')}</span>
               <Button
                 onClick={handleInsomniaToggle}
-                variant={profileSettings?.insomnia ? "default" : "outline"}
+                variant={profileSettings.insomnia ? "default" : "outline"}
                 size="icon"
                 className={isMobileDrawer ? "h-7 w-7" : "h-8 w-8"}
-                title={profileSettings?.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
+                title={profileSettings.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
                 data-testid="sidebar-insomnia-toggle"
               >
-                {profileSettings?.insomnia ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {profileSettings.insomnia ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
               </Button>
             </div>
             <div className="flex items-center justify-between">
@@ -447,13 +447,13 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
             <LanguageSwitcher collapsed />
             <Button
               onClick={handleInsomniaToggle}
-              variant={profileSettings?.insomnia ? "default" : "outline"}
+              variant={profileSettings.insomnia ? "default" : "outline"}
               size="icon"
               className="h-8 w-8"
-              title={profileSettings?.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
+              title={profileSettings.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
               data-testid="sidebar-insomnia-toggle-collapsed"
             >
-              {profileSettings?.insomnia ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+              {profileSettings.insomnia ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </Button>
             <Button
               onClick={kioskIsLocked ? requestUnlock : handleLockToggle}

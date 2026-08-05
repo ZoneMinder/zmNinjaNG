@@ -1182,6 +1182,26 @@ only its optional ``killPrevious`` quit is streaming-gated, because the private
 ``mediaRef`` points at the ``<img>`` or ``<video>`` whose ``src`` is cleared on
 unmount, which is what actually releases the browser's connection.
 
+Three transitions end a key's life without an unmount, and each one quits it:
+``enabled`` going false, a profile switch (below), and ``viewMode`` leaving
+``'streaming'``. The last is easy to miss, because by the time any other
+teardown runs the hook already reads ``'snapshot'`` and every quit path is
+gated on ``'streaming'``, so the key it holds would never be closed at all: a
+tile dropped to snapshots left a running ``nph-zms`` process behind until ZM's
+own idle timeout. The Streaming Mode setting reaches that transition, and so
+does the All-mode idle downgrade. Both directions of the flip then mint a
+fresh key, because a snapshot URL carries a connkey too and reusing a quit one
+risks colliding with the state it left on the server. A flip arriving in the
+same commit as an ``enabled`` change belongs to the disable teardown, and one
+arriving with a monitor change has no correct move
+available: the key it holds was opened against the previous monitor's URL and
+port, while every prop now describes the new one. It stands down in both
+cases. The monitor-change path is a pre-existing gap rather than a delegation
+(the regeneration effect returns early on a live hook, so it does not mint for
+the new monitor either), and it is unreachable from the app today because
+every call site that swaps monitors remounts the player instead, keyed by
+monitor id (refs #201).
+
 ``useMonitorStream`` builds the retry behavior on top: ``reportStreamError``
 (wired to ``<img onError>``) schedules an exponential-backoff reconnect
 (``mjpegReconnectBaseDelayMs`` 1000 ms, doubling to ``mjpegReconnectMaxDelayMs``
@@ -1209,6 +1229,65 @@ not do this either, having no record of which server each stream used.
 **Used by:** ``hooks/useMonitorStream.ts``,
 ``components/monitors/MonitorHoverPreview.tsx``.
 
+useViewPrefs (``hooks/useViewPrefs.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Answers which settings bucket a rendered stream should obey. Preferences are
+two-tier: an aggregate keeps its own bucket, stored under the group's own id,
+separate from every individual profile's.
+
+Page-level controls get that for free, because ``useCurrentProfile`` already
+keys off ``currentProfileId`` and so resolves to the aggregate's own bucket
+while aggregating.
+The stream path does not. A montage tile owned by profile B passes
+``profileId: B`` down the URL chain (``useServerUrls``, ``useFreshAccessToken``,
+``useProfileById``) so its stream resolves against B's server, and reading its
+view preferences from the same place would leave the aggregate's analysis-frames
+toggle and the Settings page's aggregate Streaming Mode row governing nothing.
+
+.. code:: typescript
+
+   import { useViewPrefs } from '../hooks/useViewPrefs';
+
+   // Owning profile in single mode; the aggregate's bucket while aggregating.
+   const { viewMode, showAnalysisFrames } = useViewPrefs(profileId);
+
+The split is by what a setting describes. ``viewMode`` and
+``showAnalysisFrames`` describe the view, so the bucket the user is looking at
+owns them. Timeouts, multi-port and bandwidth describe the server, so they
+stay with the owning profile - ``useMonitorStream`` reads both, from
+``useProfileById`` and from here. Resolution keys off the app's mode, not the
+route, so the ``/all/monitors/:profileId/:id`` deep route follows the
+aggregate's bucket like every other all-mode surface.
+
+Streaming Mode is a tri-state while aggregating, and it gets its own setting in
+that bucket, ``allModeViewMode`` (``'per-server' | 'streaming' | 'snapshot'``),
+rather than reusing ``viewMode``. Its default, ``'per-server'``, sends each tile
+back to its owning profile, so entering All mode never changes how anything
+streams until the user asks. ``AllServersStreamingSection`` on the Settings page
+is what writes it.
+
+The obvious alternative - read the aggregate bucket's own ``viewMode`` and
+treat "never written" as per-server - does not work, and the reason is worth
+remembering: ``updateProfileSettings`` seeds a fresh bucket with the whole
+``DEFAULT_SETTINGS`` shape, so the first write of ANY key (while aggregating,
+``lastRoute`` on the very first navigation) materializes ``viewMode:
+'snapshot'`` alongside it. Absence is not a state a bucket stays in, and an
+e2e run caught exactly that: a montage that had merely been navigated to
+already read as Snapshot. An explicit value also keeps every default inside
+``mergeProfileSettings``, where the Settings contract wants it.
+
+Analysis frames stay two-state: off is a coherent default, so nothing needs
+distinguishing from absence.
+
+``usePageViewMode`` answers the same question for a page-level control, which
+has no owning monitor to ask. Under "Per server" the answer differs per tile,
+so it reports streaming when ANY in-scope server streams - the analysis-frames
+toolbar button would otherwise disable itself over a grid of live tiles.
+
+**Used by:** ``hooks/useMonitorStream.ts``,
+``components/monitors/AnalysisFramesToggle.tsx`` (``usePageViewMode``).
+
 useEventFilters (``hooks/useEventFilters.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1222,6 +1301,13 @@ with no Apply button in the persistence path.
 - The restore effect reads settings on mount and on profile change using the
   raw ``_set*`` functions, bypassing the save wrappers so restore does not
   immediately re-save what it just read.
+- Persistence keys off ``currentProfileId``, so while aggregating, filters
+  live in the aggregate's own bucket, following the same two-tier rule as
+  ``useViewPrefs`` above.
+- In All mode the persisted ``monitorIds`` are composite
+  ``profileId:monitorId`` tokens, the same form ``EventsFilterPopover``
+  builds and ``resolveOwnMonitorIds`` splits, since raw ZoneMinder ids
+  collide across servers. Single mode stores bare ids, unchanged.
 - ``ALL_TAGS_FILTER_ID`` (``'__all_tags__'``) means "any tag" and is mutually
   exclusive with individual tag selections.
 - ``onlyDetectedObjects`` adds ``notesRegexp: 'detected:'`` to the API filter,

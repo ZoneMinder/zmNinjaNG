@@ -75,6 +75,12 @@ export function useVisibilityResume(
         window.removeEventListener('blur', markAway);
         window.removeEventListener('focus', tryResume);
       }
+      // Drop any pending away-marker with the subscription that recorded it.
+      // A caller can be disabled mid-away and re-enabled later (a montage tile
+      // pausing while hidden, refs #337); keeping the marker would measure the
+      // next return from an away-time this subscription never watched, and a
+      // brief flick would resume as if the page had been gone for hours.
+      hiddenAtRef.current = null;
     };
   }, [enabled, minHiddenMs]);
 }

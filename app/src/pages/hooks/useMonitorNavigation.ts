@@ -8,17 +8,24 @@ import { useMemo, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession, getCurrentSession } from '../../services/sessions';
 import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useSwipeNavigation } from '../../hooks/useSwipeNavigation';
 import { MONITOR_NAVIGATION } from '../../lib/zmninja-ng-constants';
 import { queryKeys } from '../../lib/query/query-keys';
-import type { MonitorData } from '../../api/types';
+import type { MonitorData, ProfileId } from '../../api/types';
 
 interface UseMonitorNavigationOptions {
   currentMonitorId: string | undefined;
   cycleSeconds?: number;
+  /**
+   * Owning profile for an /all/ deep route; defaults to the current profile.
+   * Also selects the path template prev/next/cycle navigate to: when set,
+   * `/all/monitors/:profileId/:id` (stays in owning-profile context)
+   * instead of `/monitors/:id`.
+   */
+  profileId?: ProfileId;
 }
 
 interface UseMonitorNavigationReturn {
@@ -35,16 +42,22 @@ interface UseMonitorNavigationReturn {
 export function useMonitorNavigation({
   currentMonitorId,
   cycleSeconds = 0,
+  profileId,
 }: UseMonitorNavigationOptions): UseMonitorNavigationReturn {
   const navigate = useNavigate();
   const location = useLocation();
   const [isSliding, setIsSliding] = useState(false);
   const { currentProfile } = useCurrentProfile();
+  const effectiveProfileId = profileId ?? currentProfile?.id;
+  const monitorPath = (id: string) => (profileId ? `/all/monitors/${profileId}/${id}` : `/monitors/${id}`);
 
   // Fetch all monitors for navigation
   const { data: monitorsData } = useQuery({
-    queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+    queryKey: queryKeys.monitors(effectiveProfileId),
+    queryFn: () => {
+      const session = profileId ? getSession(profileId) : getCurrentSession();
+      return getMonitors(session.client, session.profileId);
+    },
   });
 
   // Get enabled monitors list and find current monitor index
@@ -69,14 +82,14 @@ export function useMonitorNavigation({
   const onSwipeLeft = () => {
     if (hasNext) {
       const nextMonitor = enabledMonitors[currentIndex + 1];
-      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { replace: true, state: location.state });
+      navigate(monitorPath(nextMonitor.Monitor.Id), { replace: true, state: location.state });
     }
   };
 
   const onSwipeRight = () => {
     if (hasPrev) {
       const prevMonitor = enabledMonitors[currentIndex - 1];
-      navigate(`/monitors/${prevMonitor.Monitor.Id}`, { replace: true, state: location.state });
+      navigate(monitorPath(prevMonitor.Monitor.Id), { replace: true, state: location.state });
     }
   };
 
@@ -104,11 +117,12 @@ export function useMonitorNavigation({
     const intervalId = window.setInterval(() => {
       const nextIndex = currentIndex + 1 < enabledMonitors.length ? currentIndex + 1 : 0;
       const nextMonitor = enabledMonitors[nextIndex];
-      navigate(`/monitors/${nextMonitor.Monitor.Id}`, { replace: true, state: location.state });
+      navigate(monitorPath(nextMonitor.Monitor.Id), { replace: true, state: location.state });
     }, cycleSeconds * 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [currentIndex, enabledMonitors, location.state, navigate, cycleSeconds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- monitorPath is derived from profileId, already a dep
+  }, [currentIndex, enabledMonitors, location.state, navigate, cycleSeconds, profileId]);
 
   return {
     enabledMonitors,

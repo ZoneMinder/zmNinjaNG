@@ -21,6 +21,7 @@ vi.mock('../../logger', () => ({
   LogLevel: { INFO: 'INFO', WARN: 'WARN', ERROR: 'ERROR', DEBUG: 'DEBUG' },
 }));
 
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../../api/types';
 import {
   findProfileByName,
   resolveProfileForNotification,
@@ -78,6 +79,49 @@ describe('notification-profile', () => {
       const result = resolveProfileForNotification('Deleted Server', 'profile-1');
       expect(result.targetProfileId).toBe('profile-1');
       expect(result.isCrossProfile).toBe(false);
+    });
+
+    describe('All mode (currentProfileId is the ALL_PROFILES_ID sentinel)', () => {
+      it('resolves a known profile directly with no cross-profile flag (no switch prompt)', () => {
+        const result = resolveProfileForNotification('Office Server', ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe('profile-2');
+        expect(result.isCrossProfile).toBe(false);
+      });
+
+      it('falls back to the sentinel when the notification profile is unknown', () => {
+        const result = resolveProfileForNotification('Deleted Server', ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe(ALL_PROFILES_ID);
+        expect(result.isCrossProfile).toBe(false);
+      });
+
+      it('falls back to the sentinel when the notification carries no profile field', () => {
+        const result = resolveProfileForNotification(undefined, ALL_PROFILES_ID);
+        expect(result.targetProfileId).toBe(ALL_PROFILES_ID);
+        expect(result.isCrossProfile).toBe(false);
+      });
+    });
+
+    describe('a virtual profile is current (refs #337)', () => {
+      const virtualId = mintVirtualProfileId();
+
+      it('resolves a known profile directly, with no switch prompt', () => {
+        // A virtual profile aggregates several servers, so "the notification
+        // belongs to a different profile than the active one" is not a
+        // question that has an answer - there is no single active server to
+        // compare against. Flagging it cross-profile would prompt the user to
+        // switch away from the group they are already looking at.
+        const result = resolveProfileForNotification('Office Server', virtualId);
+
+        expect(result.targetProfileId).toBe('profile-2');
+        expect(result.isCrossProfile).toBe(false);
+      });
+
+      it('falls back to the current aggregate id when the profile is unknown', () => {
+        const result = resolveProfileForNotification('Deleted Server', virtualId);
+
+        expect(result.targetProfileId).toBe(virtualId);
+        expect(result.isCrossProfile).toBe(false);
+      });
     });
   });
 

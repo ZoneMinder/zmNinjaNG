@@ -24,8 +24,10 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Check, Copy, Loader2, Send, Square } from 'lucide-react';
 import { getVersion } from '../../api/auth';
-import { getCurrentSession } from '../../services/sessions';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import type { ProfileId } from '../../api/types';
+import { getSession } from '../../services/sessions';
+import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../hooks/useProfileScope';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
@@ -54,6 +56,7 @@ import { ASSISTANT } from '../../lib/zmninja-ng-constants';
 import { AssistantIntro } from './AssistantIntro';
 import { useAssistantStore } from '../../stores/assistant';
 import { Button } from '../ui/button';
+import { ProfilePicker } from '../profile-picker';
 import { ErrorBanner } from '../ui/query-state';
 import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
@@ -285,9 +288,27 @@ function ActivityLine({ steps, live }: { steps: ToolActivity[]; live?: boolean }
 export function AskPanel() {
   const { t, i18n } = useTranslation();
   const queryClient = useQueryClient();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile: singleProfile, settings: singleSettings } = useCurrentProfile();
+  // All mode has no single "current profile" (useCurrentProfile returns null
+  // there), so the assistant pins itself to one profile from the scope
+  // instead - every ToolContext/objectLabels/system-prompt read below then
+  // reads that pinned profile's id, same pattern as Task 4's server-scoped
+  // page pickers (refs #337).
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
+  const [pinnedProfileId, setPinnedProfileId] = useState<ProfileId | undefined>(undefined);
+  const defaultPinnedId = isAllMode ? (pinnedProfileId ?? scope.profiles[0]?.id) : undefined;
+  const { profile: pinnedProfile, settings: pinnedSettings } = useProfileById(defaultPinnedId);
+  // Single mode: the page's own current profile/settings, byte-identical to
+  // before. All mode: the pinned profile (defaults to the first in scope).
+  const currentProfile = isAllMode ? pinnedProfile : singleProfile;
+  const settings = isAllMode ? pinnedSettings : singleSettings;
   const profileId = currentProfile?.id;
-  const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken();
+  // defaultPinnedId (undefined in single mode) so the token follows the
+  // pinned profile in All mode, same as every other All-mode call site -
+  // an unparented call here resolves to the no-current-profile sentinel and
+  // never refreshes, 401ing authenticated result-card thumbnails (refs #337).
+  const { token: accessToken, isFresh: accessTokenFresh } = useFreshAccessToken(defaultPinnedId);
 
   const { host } = useAssistantHost();
 
@@ -487,11 +508,19 @@ export function AskPanel() {
         sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
+      // getSession(profileId), not getCurrentSession(): an aggregate id
+      // names no server, so there is no session for it and
+      // getCurrentSession() throws (swallowed below, silently
+      // dropping the version from the system prompt every turn). profileId
+      // here is the resolved pinned/current profile, matching every other
+      // read in this block (refs #337).
       let zmVersion = '';
-      try {
-        zmVersion = (await getVersion(getCurrentSession().client)).version;
-      } catch (e) {
-        log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
+      if (profileId) {
+        try {
+          zmVersion = (await getVersion(getSession(profileId).client)).version;
+        } catch (e) {
+          log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
+        }
       }
 
       // The install's own label vocabulary, so the model can map "vehicles"
@@ -680,6 +709,25 @@ export function AskPanel() {
 
   return (
     <div className="flex h-full flex-col" data-testid="ask-panel">
+      {/* All mode only: persistent, so the pinned profile never scrolls out of
+          view with the thread - a stray answer about "the front door" is
+          meaningless without knowing which server it came from. */}
+      {isAllMode && (
+        <div
+          className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5"
+          data-testid="assistant-pinned-banner"
+        >
+          <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {t('assistant.pinned_to', { profile: currentProfile?.name ?? '' })}
+          </span>
+          <ProfilePicker
+            profiles={scope?.profiles ?? []}
+            value={defaultPinnedId}
+            onChange={setPinnedProfileId}
+            className="h-7 w-32 text-xs"
+          />
+        </div>
+      )}
       <div className="flex-1 space-y-2 overflow-y-auto p-3">
         {/* Empty-thread self-introduction (refs #246): a UI-only empty state,
             never part of the thread sent to the model. Swaps out for the real

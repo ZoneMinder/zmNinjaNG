@@ -8,7 +8,7 @@
  * - Touch-optimized download buttons
  */
 
-import { memo } from 'react';
+import { memo, useMemo, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download, Loader2 } from 'lucide-react';
@@ -22,13 +22,15 @@ import { Button } from '../ui/button';
 import { EventThumbnail } from './EventThumbnail';
 import { downloadEventVideo } from '../../services/download';
 import { type EventFilters } from '../../api/events';
-import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
+import { getPortalUrlForMonitor, getServerMapVersion, subscribeServerMap } from '../../lib/zm/server-resolver';
 import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
+import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
-import { calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
+import { buildMonitorMap, calculateThumbnailDimensions, getMonitorDimensions } from '../../lib/event/event-utils';
 import { ZM_INTEGRATION, RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
-import type { Event, EventData, Monitor, Tag } from '../../api/types';
+import type { Event, Monitor, ProfileId, Tag } from '../../api/types';
 import type { ThumbnailFallbackEntry } from '../../stores/settings';
 import { Platform } from '../../lib/platform';
 import { TagChipList } from './TagChip';
@@ -36,6 +38,8 @@ import { ReturnFlashArrow } from './ReturnFlashArrow';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
 import { cn } from '../../lib/utils';
+import type { ScopedEventItem } from './EventListView';
+import { scopedEventKey } from '../../lib/event/scoped-event-key';
 
 // Haptic feedback helper
 const triggerHaptic = async () => {
@@ -51,7 +55,12 @@ const triggerHaptic = async () => {
 
 interface EventMontageTileProps {
   event: Event;
-  monitors: Array<{ Monitor: Monitor }>;
+  /** All mode only: this event's owning profile - resolves this tile's own
+   *  portal URL/token instead of the page-level defaults, exactly like
+   *  EventListView's EventItem (refs #337 Task 2). */
+  profileId?: ProfileId;
+  profileChip?: string;
+  monitorMap: Map<string, Monitor>;
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
   thumbnailChain: ThumbnailFallbackEntry[];
   showHover: boolean;
@@ -68,7 +77,9 @@ interface EventMontageTileProps {
  */
 const EventMontageTile = memo(function EventMontageTile({
   event,
-  monitors,
+  profileId,
+  profileChip,
+  monitorMap,
   thumbnailFit,
   thumbnailChain,
   showHover,
@@ -84,7 +95,29 @@ const EventMontageTile = memo(function EventMontageTile({
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
 
-  const monitorData = monitors.find((m) => m.Monitor.Id === event.MonitorId)?.Monitor;
+  // Re-render THIS tile when the server map changes (e.g. multi-server
+  // bootstrap populating it after first render). Subscribing here, not in
+  // the parent, means the parent's monitorMap useMemo doesn't need a
+  // serverMapVersion dependency it never actually reads just to bust this
+  // memo()-wrapped tile's props (refs #337 fix round 1) - this tile
+  // re-renders on its own regardless of memo, and getPortalUrlForMonitor
+  // below reads the (now up to date) server map fresh on every call.
+  useSyncExternalStore(subscribeServerMap, getServerMapVersion);
+
+  // All mode: resolve this tile's OWN owning-profile client details instead
+  // of the page-level defaults (which reflect no/whatever profile is
+  // current - there isn't one in All mode). Single mode: profileId is
+  // undefined, both hooks fall back to the current profile, matching prior
+  // behavior exactly (same pattern as EventListView's EventItem, refs #337).
+  const { profile: ownerProfile, settings: ownerSettings } = useProfileById(profileId);
+  const { token: ownerToken, isFresh: ownerTokenFresh } = useFreshAccessToken(profileId);
+  const effectivePortalUrl = profileId ? (ownerProfile?.portalUrl || portalUrl) : portalUrl;
+  const effectiveAccessToken = profileId ? (ownerTokenFresh ? ownerToken ?? undefined : undefined) : accessToken;
+  const effectiveMinStreamingPort = profileId
+    ? resolveMinStreamingPort(ownerProfile?.minStreamingPort, ownerSettings.forceDisableMultiPort)
+    : minStreamingPort;
+
+  const monitorData = monitorMap.get(profileId ? `${profileId}:${event.MonitorId}` : event.MonitorId);
   const monitorName = monitorData?.Name || `Camera ${event.MonitorId}`;
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
 
@@ -97,12 +130,12 @@ const EventMontageTile = memo(function EventMontageTile({
     ZM_INTEGRATION.eventMontageImageWidth
   );
 
-  const eventPortalUrl = getPortalUrlForEvent(event.MonitorId, monitors, portalUrl);
+  const eventPortalUrl = getPortalUrlForMonitor(monitorData?.ServerId, effectivePortalUrl, profileId);
   const thumbnailUrls = buildThumbnailChain(eventPortalUrl, event.Id, thumbnailChain, {
-    token: accessToken,
+    token: effectiveAccessToken,
     width: thumbnailWidth,
     height: thumbnailHeight,
-    minStreamingPort,
+    minStreamingPort: effectiveMinStreamingPort,
     monitorId: event.MonitorId,
     hasAlarmFrame: eventHasAlarmFrame(event),
   });
@@ -132,7 +165,7 @@ const EventMontageTile = memo(function EventMontageTile({
       >
         <div className="relative bg-card" style={{ aspectRatio: aspectRatio.toString() }}>
           {showHover ? (
-          <EventThumbnailHoverPreview event={event} aspectRatio={aspectRatio}>
+          <EventThumbnailHoverPreview event={event} aspectRatio={aspectRatio} profileId={profileId}>
             <EventThumbnail
               urls={thumbnailUrls}
               cacheKey={event.Id}
@@ -164,7 +197,7 @@ const EventMontageTile = memo(function EventMontageTile({
               onClick={async (e) => {
                 e.stopPropagation();
                 await triggerHaptic();
-                downloadEventVideo(eventPortalUrl, event.Id, event.Name, accessToken, minStreamingPort, event.MonitorId);
+                downloadEventVideo(eventPortalUrl, event.Id, event.Name, effectiveAccessToken, effectiveMinStreamingPort, event.MonitorId);
                 // Background task drawer will show download progress
               }}
               title={t('eventMontage.download_video')}
@@ -181,6 +214,15 @@ const EventMontageTile = memo(function EventMontageTile({
           {event.Name}
         </div>
         <div className="text-xs text-muted-foreground truncate">{monitorName}</div>
+        {profileChip && (
+          <span
+            className="inline-block text-[10px] px-1.5 py-0 rounded bg-muted text-muted-foreground truncate max-w-[100px]"
+            title={profileChip}
+            data-testid="event-profile-chip"
+          >
+            {profileChip}
+          </span>
+        )}
         <div className="text-xs text-muted-foreground truncate">
           {fmtDateTimeShort(startTime)}
           {isWithinDays(startTime, RELATIVE_TIME_LIST_WINDOW_DAYS) && (
@@ -226,8 +268,11 @@ const EventMontageTile = memo(function EventMontageTile({
 });
 
 interface EventMontageViewProps {
-  events: EventData[];
-  monitors: Array<{ Monitor: Monitor }>;
+  events: ScopedEventItem[];
+  /** All mode only: monitors carry their owning profileId so a colliding
+   *  numeric id across two servers doesn't collapse into one map entry
+   *  (same contract as EventListView's monitors prop). */
+  monitors: Array<{ Monitor: Monitor; profileId?: ProfileId }>;
   gridCols: number;
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
   portalUrl: string;
@@ -236,6 +281,8 @@ interface EventMontageViewProps {
   totalCount?: number;
   isFetching?: boolean;
   onLoadMore: () => void;
+  /** Tags keyed by scopedEventKey: `${profileId}:${eventId}` for All-mode
+   *  rows (event ids collide across servers), bare event id in single mode. */
   eventTagMap?: Map<string, Tag[]>;
   eventFilters?: EventFilters;
   minStreamingPort?: number;
@@ -261,6 +308,13 @@ export const EventMontageView = ({
   const thumbnailChain = settings.thumbnailFallbackChain;
   const showHover = settings.hoverPreview.eventsGrid;
 
+  // id -> Monitor lookup, rebuilt only when the monitors array reference
+  // changes - same shape/reasoning as EventListView's monitorMap.
+  // EventMontageTile below refreshes its own per-server URL when the server
+  // map changes (it subscribes to it directly), so this memo doesn't need
+  // to bust on that too (refs #337 fix round 1).
+  const monitorMap = useMemo(() => buildMonitorMap(monitors), [monitors]);
+
   const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
   const remaining = totalCount !== undefined ? Math.min(batchSize, totalCount - events.length) : batchSize;
@@ -278,15 +332,17 @@ export const EventMontageView = ({
       <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}>
         {events.map((eventData) => (
           <EventMontageTile
-            key={eventData.Event.Id}
+            key={scopedEventKey(eventData.profileId, eventData.Event.Id)}
             event={eventData.Event}
-            monitors={monitors}
+            profileId={eventData.profileId}
+            profileChip={eventData.profileChip}
+            monitorMap={monitorMap}
             thumbnailFit={thumbnailFit}
             thumbnailChain={thumbnailChain}
             showHover={showHover}
             portalUrl={portalUrl}
             accessToken={accessToken}
-            tags={eventTagMap?.get(eventData.Event.Id)}
+            tags={eventTagMap?.get(scopedEventKey(eventData.profileId, eventData.Event.Id))}
             eventFilters={eventFilters}
             minStreamingPort={minStreamingPort}
           />

@@ -9,16 +9,15 @@
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { getPortalUrlForEvent } from '../../lib/zm/server-resolver';
 import { queryKeys } from '../../lib/query/query-keys';
-import { buildThumbnailChain } from '../../lib/event/thumbnail-chain';
+import { buildThumbnailChainForEvent } from '../../lib/event/thumbnail-chain';
 import { EventThumbnail } from '../events/EventThumbnail';
 import { HoverPreview } from '../ui/hover-preview';
 import { EventZmsHoverPlayer } from '../events/EventThumbnailHoverPreview';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileById } from '../../hooks/useCurrentProfile';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
-import type { MonitorsResponse } from '../../api/types';
+import { asProfileId, type MonitorsResponse } from '../../api/types';
 import { useDateTimeFormat } from '../../hooks/useDateTimeFormat';
 import { LAYOUT, type TimelineEvent } from './timeline-layout';
 import type { MonitorRow } from './timeline-renderer';
@@ -36,8 +35,11 @@ interface TimelineScrubberProps {
   viewStartMs: number;
   viewEndMs: number;
   onPlayheadChange: (timeMs: number | null) => void;
-  /** Called when a scrubber thumbnail is tapped. */
-  onEventTap: (eventId: string) => void;
+  /** Called when a scrubber thumbnail is tapped. All mode: profileId is the
+   *  owning profile straight off the tapped event, so colliding event ids
+   *  across two profiles resolve correctly (refs #337 Task 3) - never a
+   *  reverse by-id lookup. Undefined in single mode. */
+  onEventTap: (eventId: string, profileId?: string) => void;
   /** Called whenever scrubber state changes: parent can save for restore. */
   onStateChange?: (state: ScrubberState | null) => void;
   /** Restore scrubber to this state on mount. */
@@ -87,30 +89,39 @@ function ScrubberThumbnail({
 }: {
   event: TimelineEvent;
   monitorName: string;
-  onTap: (eventId: string) => void;
+  onTap: (eventId: string, profileId?: string) => void;
 }) {
-  const { currentProfile, settings } = useCurrentProfile();
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  // All mode: resolve THIS event's owning profile instead of the (absent or
+  // wrong) current profile, and use the real (bare) monitor id preserved
+  // under realMonitorId - event.monitorId itself is the composite
+  // `${profileId}:${monitorId}` key in All mode (see Timeline.tsx's
+  // canvasEvents mapping), not a real monitor id (refs #337 Task 2).
+  // Single mode: both fields are undefined, falling back to the current
+  // profile and the plain monitorId, matching prior behavior exactly.
+  const ownerProfileId = event.profileId ? asProfileId(event.profileId) : undefined;
+  const { profile: ownerProfile, settings } = useProfileById(ownerProfileId);
+  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(ownerProfileId);
   const { fmtTimeShort } = useDateTimeFormat();
   const queryClient = useQueryClient();
+  const realMonitorId = event.realMonitorId ?? event.monitorId;
 
-  const profilePortalUrl = currentProfile?.portalUrl ?? '';
-  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(currentProfile?.id)))?.monitors ?? [];
-  const portalUrl = getPortalUrlForEvent(event.monitorId, monitors, profilePortalUrl);
-  const thumbnailUrls = buildThumbnailChain(portalUrl, event.id, settings.thumbnailFallbackChain, {
+  const profilePortalUrl = ownerProfile?.portalUrl ?? '';
+  const monitors = (queryClient.getQueryData<MonitorsResponse>(queryKeys.monitors(ownerProfile?.id)))?.monitors ?? [];
+  const thumbnailUrls = buildThumbnailChainForEvent(realMonitorId, monitors, profilePortalUrl, event.id, settings.thumbnailFallbackChain, {
     token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
-    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
-    monitorId: event.monitorId,
+    minStreamingPort: resolveMinStreamingPort(ownerProfile?.minStreamingPort, settings.forceDisableMultiPort),
+    monitorId: realMonitorId,
     // A timeline row carries the ratio rather than the raw count, but zero
     // still means no alarm frame to ask for (refs #331).
     hasAlarmFrame: event.alarmRatio > 0,
+    profileId: ownerProfileId,
   });
 
   const button = (
     <button
       type="button"
       className="relative shrink-0 w-24 h-16 rounded overflow-hidden bg-black border border-border/50 hover:border-primary/50 transition-colors cursor-pointer"
-      onClick={() => onTap(event.id)}
+      onClick={() => onTap(event.id, event.profileId)}
       title={`${monitorName} · #${event.id}`}
       data-testid={`scrubber-thumb-${event.id}`}
     >
@@ -137,7 +148,7 @@ function ScrubberThumbnail({
       className="shrink-0"
       renderPreview={() => (
         <EventZmsHoverPlayer
-          descriptor={{ eventId: event.id, monitorId: event.monitorId }}
+          descriptor={{ eventId: event.id, monitorId: realMonitorId, profileId: event.profileId }}
         />
       )}
     >

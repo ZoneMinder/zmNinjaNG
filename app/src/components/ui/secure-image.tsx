@@ -9,15 +9,25 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Platform } from '../../lib/platform';
-import { getCurrentSession } from '../../services/sessions';
+import { getCurrentSession, getSession } from '../../services/sessions';
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
+import type { ProfileId } from '../../api/types';
 
 interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   /** The source URL of the image */
   src: string;
   /** Optional fallback URL if the primary source fails */
   fallbackSrc?: string;
+  /**
+   * Profile that owns this image, used for the native authenticated-fetch
+   * fallback below. Defaults to the current profile when omitted (single
+   * mode). An All-mode thumbnail owned by a non-current profile must pass
+   * its id so the fallback fetch authenticates against the right server
+   * (refs #337); an unknown/sentinel id falls through to the existing
+   * fallbackSrc/onError handling rather than throwing.
+   */
+  profileId?: ProfileId | null;
 }
 
 /**
@@ -30,7 +40,7 @@ interface SecureImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
  * @param props.className - CSS class names
  * @param props.alt - Alt text
  */
-export function SecureImage({ src, fallbackSrc, className, alt, ...props }: SecureImageProps) {
+export function SecureImage({ src, fallbackSrc, profileId, className, alt, ...props }: SecureImageProps) {
   const [imageSrc, setImageSrc] = useState<string>(src);
   const isNative = Platform.isNative;
   const mountedRef = useRef(true);
@@ -82,7 +92,12 @@ export function SecureImage({ src, fallbackSrc, className, alt, ...props }: Secu
     // (though in this specific case, Native seems to be the one failing)
     if (isNative && src.startsWith('http') && imageSrc === src) {
       try {
-        const client = getCurrentSession().client;
+        // A bad/sentinel profileId (e.g. All mode with no owning profile
+        // resolved) throws here, same as getCurrentSession() would with no
+        // current profile; the surrounding try/catch below already handles
+        // that by falling through to fallbackSrc/onError, so no separate
+        // guard is needed.
+        const client = (profileId ? getSession(profileId) : getCurrentSession()).client;
         const response = await client.get<string>(src, { responseType: 'base64' });
         if (mountedRef.current && response.data) {
           const contentType =

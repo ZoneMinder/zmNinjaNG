@@ -73,6 +73,16 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Compact/density-mode CSS overrides scope to the compact-mode container,
   never bare element or utility selectors; global overrides bled into
   unrelated views three times (86e7c984, 7e69c0d7, 17613d3e).
+- `react-grid-layout` clones every child with `ref: this.elementRef`, which
+  REPLACES a ref put on that element. Anything needing a tile's DOM node
+  (IntersectionObserver, measurement) puts its ref one level in, and any
+  test mock of the grid clones with a ref too, or it calls refs the real
+  grid swallows (c8d0d833).
+- A ref-callback cache keyed by id must outlive a detach. Deleting the
+  entry when React calls the ref with null hands the next render a
+  different callback, which React treats as a new ref: detach, delete,
+  re-attach, forever. StrictMode's own attach/detach/attach on mount
+  starts it (c8d0d833).
 
 ## Auth and tokens
 
@@ -146,3 +156,31 @@ contract. Remaining code-path facts:
 - The linux-arm64 job runs under qemu and needs Node 18 with a normalized
   manual-trigger input; do not bump that job's Node version without
   re-verifying under emulation (76fb8c0d, 57015c35).
+
+## All-profiles facts (refs #337)
+
+- ZoneMinder's alarm-status endpoint is single-monitor only (no batch
+  form): live alarm views fan one query per monitor, so aggregate
+  surfaces must cap and stagger the watched set (see the Aggregation
+  contract and `LIVE_ACTIVITY.allModeMaxWatched`).
+- Monitor and event ids collide across servers as a matter of course;
+  any aggregate-keyed state needs `monitorCacheKey` composites. Six
+  separate defects came from bare ids before this was standard.
+- ES notification payloads carry a profile NAME only when the
+  registration set one; ZM direct-mode payloads never carry one. All-mode
+  tap handling must tolerate profile-less payloads (falls back to the
+  ES-connected profile).
+- Multi-server ZM installs route streams at Servers-table hosts that can
+  differ from the profile's own URLs; per-profile server maps populate at
+  bootstrap and fall back to profile base URLs when empty. This is also
+  why native TLS trust is deliberately global once any profile enables
+  self-signed (maintainer decision recorded in the all-profiles spec).
+- i18next reserves `{{count}}` for pluralization; interpolating a
+  non-plural number under that name works only by fallback and breaks
+  silently if a locale later adds `_other` forms. A blanket sed over
+  locale files once broke 15 pluralized strings - edit locale keys
+  individually.
+- The shared live ZM demo server degrades under repeated same-day
+  parallel e2e runs (filter-popover timeouts, drifting counts). Five
+  events-filter scenarios are bisect-proven pre-existing failures
+  tracked in #342; treat new failures against that baseline, not zero.

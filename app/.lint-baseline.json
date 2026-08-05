@@ -1,14 +1,14 @@
 {
   "@typescript-eslint/no-empty-object-type": 3,
-  "@typescript-eslint/no-explicit-any": 100,
+  "@typescript-eslint/no-explicit-any": 99,
   "@typescript-eslint/no-this-alias": 1,
   "no-restricted-syntax": 4,
-  "react-hooks/exhaustive-deps": 38,
+  "react-hooks/exhaustive-deps": 32,
   "react-hooks/globals": 1,
-  "react-hooks/preserve-manual-memoization": 12,
+  "react-hooks/preserve-manual-memoization": 10,
   "react-hooks/refs": 22,
-  "react-hooks/set-state-in-effect": 14,
-  "react-hooks/static-components": 9,
+  "react-hooks/set-state-in-effect": 11,
+  "react-hooks/static-components": 10,
   "react-refresh/only-export-components": 8,
   "unused-eslint-disable-directive": 1
 }

@@ -635,24 +635,27 @@ when its dependencies change:
    }, [form]);
 
 The second use of ``useMemo`` is to skip work rather than to stabilize
-a reference. The montage kebab menu sorts its monitor list by sequence
-number, then by name:
+a reference. The Montage page sorts the list behind the kebab menu's
+show-monitors entries, by owning server, then sequence number, then name:
 
 .. code:: tsx
 
-   // app/src/components/montage/MontageKebabMenu.tsx
-   const sortedMonitors = useMemo(() => {
-     return [...monitors].sort((a, b) => {
-       const sa = Number(a.Sequence ?? 0);
-       const sb = Number(b.Sequence ?? 0);
-       if (sa !== sb) return sa - sb;
-       return (a.Name ?? '').localeCompare(b.Name ?? '');
-     });
-   }, [monitors]);
+   // app/src/pages/Montage.tsx
+   const visibilityItems = useMemo((): MontageVisibilityItem[] => {
+     // ...profileRank/rank/sequence helpers omitted
+     return [...scopedMonitors]
+       .sort(
+         (a, b) =>
+           rank(a) - rank(b) ||
+           sequence(a) - sequence(b) ||
+           (a.item.Monitor.Name ?? '').localeCompare(b.item.Monitor.Name ?? '')
+       )
+       .map((s) => ({ /* id, name, profileChip */ }));
+   }, [scopedMonitors, isAllMode]);
 
-Note the ``[...monitors]``. ``Array.prototype.sort`` sorts in place and
-returns the same array, so sorting ``monitors`` directly would reorder
-the caller's array. The parent still holds that array, React Query still
+Note the ``[...scopedMonitors]``. ``Array.prototype.sort`` sorts in place
+and returns the same array, so sorting ``scopedMonitors`` directly would
+reorder the hook's array. The hook still holds that array, React Query still
 has it in cache, and neither reference changed, so nothing re-renders to
 show the new order and the cache is now silently corrupted. Copy first,
 then sort. The same applies to ``reverse`` and ``splice``.

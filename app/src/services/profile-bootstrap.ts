@@ -245,7 +245,7 @@ export async function bootstrapServerMap(profile: Profile): Promise<void> {
     }
 
     const serverMap = buildServerMap(servers);
-    setServerMap(serverMap);
+    setServerMap(serverMap, profile.id);
 
     log.profileService('Multi-server map initialized', LogLevel.INFO, {
       serverCount: servers.length,
@@ -306,7 +306,12 @@ export async function performBootstrap(
   context: BootstrapContext
 ): Promise<void> {
   const { clearServerMap } = await import('../lib/zm/server-resolver');
-  clearServerMap();
+  // Clears only THIS profile's entry - refs #337. Clearing the whole map
+  // here (the old behavior) wiped every other profile's routes on every
+  // single bootstrap, which is exactly the cross-profile bleed this fix
+  // removes: bootstrapping B would erase A's map moments before an All mode
+  // reader resolved one of A's ServerId monitors.
+  clearServerMap(profile.id);
   // SSL trust must be configured before any API calls
   await bootstrapSSLTrust(profile);
   await bootstrapAuth(profile, context);

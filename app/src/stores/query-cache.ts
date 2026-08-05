@@ -11,6 +11,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import { log, LogLevel } from '../lib/logger';
 import { MAX_QUERY_RETRIES } from '../lib/zmninja-ng-constants';
+import type { ProfileId } from '../api/types';
 
 // Global query client instance
 let queryClient: QueryClient | null = null;
@@ -53,4 +54,16 @@ export function clearQueryCache() {
   } else {
     log.queryCache('No query client to clear', LogLevel.WARN);
   }
+}
+
+/**
+ * Remove one profile's cached queries.
+ *
+ * Used when a profile is deleted: every profile-scoped key carries the
+ * ProfileId (queryKeys.ts), so `includes` catches it regardless of position
+ * or query shape.
+ */
+export function removeProfileQueries(profileId: ProfileId): void {
+  if (!queryClient) return;
+  queryClient.removeQueries({ predicate: (q) => q.queryKey.includes(profileId) });
 }

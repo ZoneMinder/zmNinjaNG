@@ -439,22 +439,16 @@ describe('Events API', () => {
       expect(call).toContain('Tags.Id%3A1');
     });
 
-    it('ignores an empty tagIds array (normal query)', async () => {
-      mockGet.mockResolvedValue({
-        data: {
-          events: [buildEventData(10)],
-          pagination: {
-            pageCount: 1, page: 1, current: 1, count: 1,
-            prevPage: false, nextPage: false, limit: 100,
-          },
-        },
-      });
+    it('an empty tagIds array matches nothing instead of falling through unfiltered', async () => {
+      // All mode resolves a selected tag NAME into each server's own tag ids,
+      // and a server that has no such tag resolves to an empty list. Answering
+      // an unfiltered query there would show every event on exactly the server
+      // that lacks the tag (refs #337). Same contract eventIds already has.
+      const result = await getEvents(mockClient, pid, { tagIds: [], limit: 100 });
 
-      await getEvents(mockClient, pid, { tagIds: [], limit: 100 });
-
-      const call = mockGet.mock.calls[0][0] as string;
-      expect(call).not.toContain('Tags.Id');
-      expect(call).toBe('/events/index.json');
+      expect(mockGet).not.toHaveBeenCalled();
+      expect(result.events).toEqual([]);
+      expect(result.pagination.totalCount).toBe(0);
     });
   });
 

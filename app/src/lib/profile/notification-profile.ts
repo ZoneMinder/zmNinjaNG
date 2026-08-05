@@ -6,6 +6,7 @@
  */
 
 import type { Profile } from '../../api/types';
+import { isAggregateProfileId } from '../../api/types';
 import { useProfileStore } from '../../stores/profile';
 import { log, LogLevel } from '../logger';
 
@@ -43,6 +44,15 @@ export function resolveProfileForNotification(
       notificationProfile: dataProfile,
     });
     return { targetProfileId: currentProfileId, isCrossProfile: false };
+  }
+
+  // An aggregate - All Servers or a virtual profile - has no single "current"
+  // session to compare against, so "belongs to a different profile than the
+  // active one" has no answer. Any known profile navigates straight to its own
+  // /all/ deep route; flagging it cross-profile would prompt the user to
+  // switch away from the aggregate they are already looking at (refs #337).
+  if (isAggregateProfileId(currentProfileId)) {
+    return { targetProfileId: matchedProfile.id, isCrossProfile: false };
   }
 
   const isCrossProfile = matchedProfile.id !== currentProfileId;

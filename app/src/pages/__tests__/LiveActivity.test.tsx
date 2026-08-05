@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import LiveActivity from '../LiveActivity';
 import { getMonitors, getAlarmStatus } from '../../api/monitors';
 import enTranslation from '../../locales/en/translation.json';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { DEFAULT_SETTINGS } from '../../stores/settings';
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
@@ -14,6 +16,18 @@ vi.mock('../../api/monitors', () => ({
 
 vi.mock('../../services/sessions', () => ({
   getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
+// useProfileScope/useScopedMonitors pull in the real stores/profile.ts the
+// same way stores/notifications does (see the comment below) - useLiveActivityAllMode
+// calls both unconditionally (React hooks rules), so every single-mode test
+// needs a safe default even though isAllMode is false. All-mode tests below
+// override both per test via vi.resetModules()+vi.doMock with real scope data.
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => null,
+}));
+vi.mock('../../hooks/useScopedMonitors', () => ({
+  useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
 }));
 
 // Mutable so a test can set a page preference or the server version before it
@@ -30,6 +44,17 @@ const env = vi.hoisted(() => ({
     monitorGridCols: 2,
   },
   zmVersion: '1.36.33' as string | null,
+  // The raw store value LiveActivity.tsx now reads directly (currentProfileId)
+  // for view-level writes that must still work in All mode: 'p1' by default,
+  // set to the ALL_PROFILES_ID sentinel by All-mode tests before rendering.
+  currentProfileId: 'p1' as string | null,
+}));
+
+// Its own tests cover the toggle (including how it resolves the page's
+// Streaming Mode in All mode); stubbing keeps that resolution's hooks out of
+// this file's mock surface, which several tests rebuild with doMock.
+vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
+  AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
 }));
 
 vi.mock('../../hooks/useCurrentProfile', () => ({
@@ -37,6 +62,16 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
     currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
     settings: env.settings,
   }),
+}));
+
+// LiveActivity.tsx reads currentProfileId via useProfileStore directly (not
+// through useCurrentProfile, which resolves to null in All mode) - same
+// rabbit hole as useProfileScope/useScopedMonitors above: the real
+// stores/profile.ts pulls in registerSessionsGate against the bare
+// services/sessions mock.
+vi.mock('../../stores/profile', () => ({
+  useProfileStore: (selector: (s: { currentProfileId: string | null }) => unknown) =>
+    selector({ currentProfileId: env.currentProfileId }),
 }));
 
 vi.mock('../../stores/auth', () => ({
@@ -102,16 +137,19 @@ vi.mock('../../components/monitors/MontageMonitor', () => ({
     monitor,
     titleOverride,
     titleIcon,
+    profileChip,
   }: {
     monitor: { Name: string };
     titleOverride?: string;
     titleIcon?: ReactNode;
+    profileChip?: string;
   }) => {
     tileRenders.count += 1;
     return (
       <div data-testid="live-activity-tile-mock">
         {titleIcon}
         {titleOverride ?? monitor.Name}
+        {profileChip && <span data-testid="montage-profile-chip">{profileChip}</span>}
       </div>
     );
   },
@@ -145,6 +183,7 @@ describe('LiveActivity', () => {
     env.settings.liveActivityIgnoredMonitorIds = [];
     env.settings.liveActivityIsFullscreen = false;
     env.zmVersion = '1.36.33';
+    env.currentProfileId = 'p1';
     mockMonitors.mockResolvedValue(MONITORS as never);
   });
 
@@ -735,4 +774,411 @@ describe('LiveActivity', () => {
     expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
   }, 10000);
 
+  // All mode aggregates every scope profile's alarm fanout instead of being
+  // gated out (refs #337, #341): useScopedAlarmStates fans out per (profile,
+  // monitor) pair via each pair's OWNING session, and the damping engine
+  // keys by monitorCacheKey so two profiles sharing a raw monitor id never
+  // collide.
+  describe('All mode', () => {
+    // Spread over the real defaults: the All-mode watch cap and poll floor are
+    // ALL-bucket settings read off this object now (useLiveActivityAllMode),
+    // so a hand-listed subset would leave them undefined and quietly cap the
+    // watched set at nothing.
+    const ALL_SETTINGS = {
+      ...DEFAULT_SETTINGS,
+      liveActivityPollSeconds: 5,
+      liveActivityDwellSeconds: 30,
+      liveActivityMaxTiles: 12,
+      liveActivityIgnoredMonitorIds: [],
+      liveActivityIsFullscreen: false,
+      bandwidthMode: 'normal',
+      monitorGridCols: 2,
+    };
+
+    function mockAllMode() {
+      env.currentProfileId = ALL_PROFILES_ID;
+      vi.doMock('../../hooks/useCurrentProfile', () => ({
+        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
+      }));
+      vi.doMock('../../hooks/useProfileScope', () => ({
+        useProfileScope: () => ({
+          mode: 'all',
+          profile: null,
+          profiles: [
+            { id: 'p1', name: 'One' },
+            { id: 'p2', name: 'Two' },
+          ],
+          settings: ALL_SETTINGS,
+        }),
+      }));
+      vi.doMock('../../services/sessions', () => ({
+        getCurrentSession: vi.fn(() => ({ client: {} })),
+        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
+      }));
+    }
+
+    function scopedMonitor(profileId: string, profileName: string, id: string, name: string) {
+      return { profileId, profileName, item: { Monitor: { Id: id, Name: name }, Monitor_Status: undefined } };
+    }
+
+    it('aggregates monitors across every scope profile and keeps colliding ids distinct', async () => {
+      vi.resetModules();
+      mockAllMode();
+      // Both profiles happen to number their monitor "3" - the composite key
+      // (monitorCacheKey) is what keeps these from colliding into one tile.
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({
+          monitors: [scopedMonitor('p1', 'One', '3', 'Front Door'), scopedMonitor('p2', 'Two', '3', 'Garage')],
+          errors: [],
+          isLoading: false,
+          refetchProfile: vi.fn(),
+        }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 2 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      // No gate notice: the whole point of this task is that All mode
+      // renders like single mode, not a "switch profile" wall.
+      expect(screen.queryByTestId('live-activity-all-mode-notice')).not.toBeInTheDocument();
+
+      await waitFor(() => {
+        expect(screen.getByText('Front Door')).toBeInTheDocument();
+      });
+      expect(screen.getByText('Garage')).toBeInTheDocument();
+      const chips = screen.getAllByTestId('montage-profile-chip');
+      expect(chips.map((c) => c.textContent).sort()).toEqual(['One', 'Two']);
+    });
+
+    it("respects each profile's own ignore list independently", async () => {
+      vi.resetModules();
+      env.currentProfileId = ALL_PROFILES_ID;
+      vi.doMock('../../hooks/useCurrentProfile', () => ({
+        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
+      }));
+      vi.doMock('../../hooks/useProfileScope', () => ({
+        useProfileScope: () => ({
+          mode: 'all',
+          profile: null,
+          profiles: [
+            { id: 'p1', name: 'One' },
+            { id: 'p2', name: 'Two' },
+          ],
+          settings: ALL_SETTINGS,
+        }),
+      }));
+      vi.doMock('../../services/sessions', () => ({
+        getCurrentSession: vi.fn(() => ({ client: {} })),
+        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
+      }));
+      // p1 ignores monitor "4" on ITS OWN settings bucket; p2 does not.
+      // scope.settings (the ALL bucket, ALL_SETTINGS above) never carries an
+      // ignore list that would apply cross-server.
+      const { useSettingsStore } = await import('../../stores/settings');
+      useSettingsStore.getState().updateProfileSettings('p1', { liveActivityIgnoredMonitorIds: ['4'] });
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({
+          monitors: [
+            scopedMonitor('p1', 'One', '4', 'p1-cam4'),
+            scopedMonitor('p2', 'Two', '4', 'p2-cam4'),
+          ],
+          errors: [],
+          isLoading: false,
+          refetchProfile: vi.fn(),
+        }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 2 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('p2-cam4')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('p1-cam4')).not.toBeInTheDocument();
+
+      act(() => {
+        useSettingsStore.getState().updateProfileSettings('p1', { liveActivityIgnoredMonitorIds: [] });
+      });
+    });
+
+    it('caps the total watched set round-robin and shows the overflow notice', async () => {
+      vi.resetModules();
+      mockAllMode();
+      // 3 profiles contributing 10 monitors each (30 total), well past the
+      // 24-pair cap: proves the cap is enforced AND that no single profile's
+      // monitors are fully excluded by a naive profile-order truncation.
+      const monitors = ['p1', 'p2', 'p3'].flatMap((pid, pi) =>
+        Array.from({ length: 10 }, (_, i) => scopedMonitor(pid, `Profile ${pi}`, String(i), `${pid}-${i}`))
+      );
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors, errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('live-activity-watch-cap-notice')).toBeInTheDocument();
+      });
+      // Cap is 24 of 30 requested: 6 dropped.
+      expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('6');
+      expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.length).toBe(24);
+      // Round-robin, not profile-order truncation: every profile still has
+      // at least one polled monitor.
+      const polledProfiles = new Set(
+        vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => (c[0] as unknown as { profileId: string }).profileId)
+      );
+      expect(polledProfiles).toEqual(new Set(['p1', 'p2', 'p3']));
+    });
+
+    it('keeps a resident (currently alarming) tile watched across a cap re-slice', async () => {
+      // Regression for the round-robin cap evicting an on-screen tile with
+      // no dwell window: a monitor-list change re-slices the watched set,
+      // and without the residency exemption a monitor still alarming right
+      // now can lose its slot and vanish - the #313 failure mode reached
+      // through the cap instead of the poll.
+      vi.resetModules();
+      mockAllMode();
+
+      // p1 alone fills the cap exactly (24 = 24): nothing dropped yet, and
+      // monitor "23" (the last one drawn) is the one that alarms.
+      let monitors = Array.from({ length: 24 }, (_, i) => scopedMonitor('p1', 'One', String(i), `p1-${i}`));
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors, errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) =>
+        (id === '23' ? { status: 2 } : { status: 0 }) as never
+      );
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('p1-23')).toBeInTheDocument();
+      });
+
+      // p2 joins with 4 more monitors: total 28 > the 24 cap, so a re-slice
+      // is now due. A plain (unexempted) round-robin over this new grouping
+      // drops p1's monitors "19"-"22" to make room for p2 - "23" falls
+      // outside that too, UNLESS it is exempted for being resident.
+      monitors = [
+        ...monitors,
+        ...Array.from({ length: 4 }, (_, i) => scopedMonitor('p2', 'Two', String(i), `p2-${i}`)),
+      ];
+
+      // No explicit rerender(): the page's own cooling-tick effect
+      // (LiveActivity.tsx) re-renders once a second while a tile is
+      // resident, which is what picks up the mutated useScopedMonitors()
+      // return value above. Waits for a p2 poll to prove the re-slice
+      // actually happened (p2 was entirely absent from round one, and a
+      // pre-existing query's own 10s refetch interval wouldn't otherwise
+      // produce a fresh call inside this test's short window).
+      await waitFor(
+        () => {
+          const p2Polled = vi
+            .mocked(reimportedGetAlarmStatus)
+            .mock.calls.some((c) => (c[0] as unknown as { profileId: string }).profileId === 'p2');
+          expect(p2Polled).toBe(true);
+        },
+        { timeout: 5000 }
+      );
+
+      // The resident, still-alarming tile must never have left the screen.
+      expect(screen.getByText('p1-23')).toBeInTheDocument();
+
+      // The cap is still a real ceiling, not blown open by the exemption:
+      // 28 requested, 24 watched (1 resident + 23 round-robin), 4 dropped.
+      // A raw poll-count diff can't prove this within the test's short
+      // window (a query already fetched once in round one produces no new
+      // call regardless of whether it stayed watched, until its own 10s
+      // refetch interval elapses), so the overflow notice - which reads
+      // straight off watchOverflowCount - is the reliable signal instead.
+      await waitFor(() => {
+        expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('4');
+      });
+    }, 10000);
+
+    it("promotes only the owning profile's tile on a live hint, not another profile's same-id monitor", async () => {
+      vi.resetModules();
+      env.currentProfileId = ALL_PROFILES_ID;
+      vi.doMock('../../hooks/useCurrentProfile', () => ({
+        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
+      }));
+      vi.doMock('../../hooks/useProfileScope', () => ({
+        useProfileScope: () => ({
+          mode: 'all',
+          profile: null,
+          profiles: [
+            { id: 'p1', name: 'One' },
+            { id: 'p2', name: 'Two' },
+          ],
+          settings: ALL_SETTINGS,
+        }),
+      }));
+      vi.doMock('../../services/sessions', () => ({
+        getCurrentSession: vi.fn(() => ({ client: {} })),
+        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
+      }));
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({
+          monitors: [scopedMonitor('p1', 'One', '3', 'p1-cam3'), scopedMonitor('p2', 'Two', '3', 'p2-cam3')],
+          errors: [],
+          isLoading: false,
+          refetchProfile: vi.fn(),
+        }),
+      }));
+      // A real-store event for p1's monitor "3" only; p2's own "3" never
+      // fired a notification.
+      vi.doMock('../../stores/notifications', () => ({
+        resolvePollIntervalMs: () => 1000,
+        useNotificationStore: (
+          selector: (s: {
+            profileEvents: Record<string, { MonitorId: number; Cause: string; receivedAt: number }[]>;
+          }) => unknown
+        ) =>
+          selector({
+            profileEvents: { p1: [{ MonitorId: 3, Cause: 'Motion: All', receivedAt: Date.now() }] },
+          }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      // Both idle by poll; the hint alone must promote p1's tile.
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => {
+        expect(screen.getByText('p1-cam3')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('p2-cam3')).not.toBeInTheDocument();
+    });
+
+    // Menu buttons in All mode (refs #337 round 2): the settings dialog used
+    // to render only `{currentProfile && (...)}`, and useFullscreenMode wrote
+    // through `currentProfile.id` - both silently no-op in All mode
+    // (currentProfile is null there). currentProfileId (the raw store value,
+    // the ALL_PROFILES_ID sentinel here) is what unlocks them.
+    it('opens the settings dialog in All mode, with the ignore-list profile picker', async () => {
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({
+          monitors: [scopedMonitor('p1', 'One', '3', 'p1-cam3')],
+          errors: [],
+          isLoading: false,
+          refetchProfile: vi.fn(),
+        }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      const settingsButton = await screen.findByTestId('live-activity-settings-btn');
+      fireEvent.click(settingsButton);
+
+      expect(screen.getByTestId('live-activity-settings-dialog')).toBeInTheDocument();
+      // The ignore-list section's ProfilePicker only ever appears when
+      // scopeProfiles was actually threaded through - a gate regression
+      // would render the dialog with no way to pick a profile at all.
+      expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
+    });
+
+    it('toggles fullscreen in All mode and persists it to the ALL bucket', async () => {
+      // useCurrentProfile's `settings` is a static mock snapshot in this test
+      // file (see ALL_SETTINGS/env above), so the click's effect on-screen
+      // isn't observable here the way a real store-connected read would be -
+      // single mode's own fullscreen tests follow the same pattern (pre-set
+      // the mocked setting rather than round-tripping through a click). What
+      // this proves is the fix itself: before it, handleToggleFullscreen's
+      // `if (!currentProfile) return` made this click a complete no-op, so
+      // the real store below would never have been written at all.
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const { useSettingsStore } = await import('../../stores/settings');
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      const fullscreenButton = await screen.findByTestId('live-activity-fullscreen-btn');
+      fireEvent.click(fullscreenButton);
+
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).liveActivityIsFullscreen
+      ).toBe(true);
+
+      act(() => {
+        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
+          liveActivityIsFullscreen: false,
+        });
+      });
+    });
+
+    it('changes the grid column count in All mode, persisting to the ALL bucket', async () => {
+      // Isolates handleGridChange from the real dropdown UI (GridColumnsMenu
+      // is a Radix DropdownMenu - the same jsdom portal friction Select has):
+      // captures the onGridChange callback useEventMontageGrid was given and
+      // calls it directly, exactly as a real column click would.
+      vi.resetModules();
+      mockAllMode();
+      vi.doMock('../../hooks/useScopedMonitors', () => ({
+        useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
+      }));
+      const captured: { onGridChange?: (cols: number) => void } = {};
+      vi.doMock('../../hooks/useEventMontageGrid', () => ({
+        useEventMontageGrid: (opts: { onGridChange?: (cols: number) => void }) => {
+          captured.onGridChange = opts.onGridChange;
+          return {
+            gridCols: 2,
+            isCustomGridDialogOpen: false,
+            setIsCustomGridDialogOpen: vi.fn(),
+            customCols: '2',
+            setCustomCols: vi.fn(),
+            handleApplyGridLayout: vi.fn(),
+            handleCustomGridSubmit: vi.fn(),
+          };
+        },
+      }));
+
+      const { default: LiveActivityAllMode } = await import('../LiveActivity');
+      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const { useSettingsStore } = await import('../../stores/settings');
+
+      render(<LiveActivityAllMode />, { wrapper });
+
+      await waitFor(() => expect(captured.onGridChange).toBeDefined());
+      act(() => {
+        captured.onGridChange!(4);
+      });
+
+      expect(
+        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).monitorGridCols
+      ).toBe(4);
+
+      act(() => {
+        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { monitorGridCols: 2 });
+      });
+    });
+  });
 });

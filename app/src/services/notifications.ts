@@ -76,6 +76,13 @@ export class ZMNotificationService {
       return;
     }
 
+    // Belt and braces: a manual/hook-triggered connect() can land while a
+    // backoff timer from a previous drop is still armed - state sits at
+    // 'disconnected'/'error' between attempts, so the guard above doesn't
+    // catch it. Clear it so this call can never result in two concurrent
+    // connection attempts producing two sockets (refs #337 round 3).
+    this._clearTimers();
+
     this.config = config;
     this.providers = { ...DEFAULT_PROVIDERS, ...providers };
     this.reconnectAttempts = 0;
@@ -707,19 +714,33 @@ export class ZMNotificationService {
   }
 }
 
-// Singleton instance
-let notificationService: ZMNotificationService | null = null;
+// Per-profile registry: every profile can hold its own live connection
+// (refs #337), so this is a Map instead of a single singleton. The service
+// itself has no zustand imports and no profile-id awareness - the registry
+// key is the only place "which profile" lives.
+const notificationServices = new Map<string, ZMNotificationService>();
 
-export function getNotificationService(): ZMNotificationService {
-  if (!notificationService) {
-    notificationService = new ZMNotificationService();
+export function getNotificationService(profileId: string): ZMNotificationService {
+  let service = notificationServices.get(profileId);
+  if (!service) {
+    service = new ZMNotificationService();
+    notificationServices.set(profileId, service);
   }
-  return notificationService;
+  return service;
 }
 
-export function resetNotificationService(): void {
-  if (notificationService) {
-    notificationService.disconnect();
-    notificationService = null;
+export function resetNotificationService(profileId: string): void {
+  const service = notificationServices.get(profileId);
+  if (service) {
+    service.disconnect();
+    notificationServices.delete(profileId);
   }
+}
+
+/** Tear down every profile's connection. Used on full logout (refs #337). */
+export function resetAllNotificationServices(): void {
+  for (const service of notificationServices.values()) {
+    service.disconnect();
+  }
+  notificationServices.clear();
 }

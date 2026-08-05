@@ -247,10 +247,21 @@ describe('Sessions contract', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('the ALL_PROFILES_ID and PROBE_PROFILE_ID sentinels live only beside the brand', () => {
+  it('the profile-id sentinels and the virtual prefix live only beside the brand', () => {
+    // The virtual prefix joins the two sentinels here: it is the shape
+    // isVirtualProfileId/isAggregateProfileId test for, so a second copy of
+    // the literal is a second definition of what "aggregate" means. Callers
+    // import the helpers instead, and mint ids with mintVirtualProfileId().
+    //
+    // The prefix match is open-ended, unlike the two sentinels: those are
+    // whole ids, but this is a prefix, so '__virtual_legacy' hand-written
+    // anywhere is the same second definition and has to be caught too.
+    // Refs #337.
     const offenders = srcFiles().filter(
       (f) =>
-        (read(f).includes("'__all_profiles__'") || read(f).includes("'__probe__'")) &&
+        (read(f).includes("'__all_profiles__'") ||
+          read(f).includes("'__probe__'") ||
+          /['"`]__virtual_/.test(read(f))) &&
         !f.endsWith('api/types.ts'),
     );
     expect(offenders).toEqual([]);
@@ -278,5 +289,74 @@ describe('developer docs reference valid rule IDs', () => {
         expect(valid.has(m[1].toUpperCase()), `${file}: unknown rule id "${m[1]}"`).toBe(true);
       }
     }
+  });
+});
+
+/**
+ * Localization contract, mechanical half: a translated string may say anything
+ * it likes, but it has to interpolate the same values `en` does.
+ *
+ * A dropped or renamed `{{param}}` is invisible to the existing key gate,
+ * which only checks that keys exist. The string still renders - it just
+ * renders without the monitor name, the count, or the server it was about, in
+ * one language only, which nobody reviewing an English diff would notice.
+ */
+describe('Localization contract', () => {
+  const localesDir = path.join(appSrc, 'locales');
+
+  /** Every leaf string, keyed by its dotted path. */
+  function flatten(node: unknown, prefix = '', acc = new Map<string, string>()): Map<string, string> {
+    if (typeof node === 'string') {
+      acc.set(prefix, node);
+    } else if (node && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node)) {
+        flatten(value, prefix ? `${prefix}.${key}` : key, acc);
+      }
+    }
+    return acc;
+  }
+
+  /** Names only: `{{count}}` and `{{count, number}}` are the same parameter. */
+  function placeholders(text: string): Set<string> {
+    return new Set([...text.matchAll(/\{\{\s*([^}\s,]+)/g)].map((m) => m[1]));
+  }
+
+  function load(locale: string): Map<string, string> {
+    return flatten(JSON.parse(read(path.join(localesDir, locale, 'translation.json'))));
+  }
+
+  it('every locale interpolates the same values as en, key for key', () => {
+    const en = load('en');
+    // 1380 today. A floor with real slack in it would let a partial parse
+    // through and report parity over a handful of keys.
+    expect(en.size).toBeGreaterThan(1000);
+
+    const others = fs
+      .readdirSync(localesDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name !== 'en' && e.name !== '__tests__')
+      .map((e) => e.name);
+    expect(others.length).toBeGreaterThanOrEqual(4);
+
+    const mismatches: string[] = [];
+    for (const locale of others) {
+      for (const [key, text] of load(locale)) {
+        const enText = en.get(key);
+        // Keys en does not have are the key gate's business, not this one.
+        if (enText === undefined) continue;
+        const expected = placeholders(enText);
+        const actual = placeholders(text);
+        const missing = [...expected].filter((p) => !actual.has(p));
+        const extra = [...actual].filter((p) => !expected.has(p));
+        if (missing.length || extra.length) {
+          const parts = [
+            missing.length ? `missing ${missing.map((p) => `{{${p}}}`).join(', ')}` : '',
+            extra.length ? `unexpected ${extra.map((p) => `{{${p}}}`).join(', ')}` : '',
+          ].filter(Boolean);
+          mismatches.push(`${locale}: ${key} - ${parts.join(', ')}`);
+        }
+      }
+    }
+
+    expect(mismatches, `Placeholder drift against en:\n${mismatches.join('\n')}`).toEqual([]);
   });
 });

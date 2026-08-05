@@ -7,9 +7,11 @@
 
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useProfileStore } from '../stores/profile';
+import { useShallow } from 'zustand/react/shallow';
+import { useProfileStore, ProfileGuardError } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useAggregateLabel } from '../hooks/useAggregateLabel';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -33,10 +35,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Power, PowerOff } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
-import type { Profile } from '../api/types';
+import type { Profile, VirtualProfile } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
+import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
+import { countActiveMembers } from '../lib/profile/virtual-profile';
+import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { discoverUrls } from '../services/discovery';
@@ -49,16 +55,30 @@ export default function Profiles() {
   const { t } = useTranslation();
 
   const profiles = useProfileStore((state) => state.profiles);
+  // A new group is only meaningful with 2+ SELECTABLE profiles - a disabled
+  // one can never join an aggregate (refs #337).
+  const enabledProfileCount = profiles.filter((p) => !p.disabled).length;
   const { currentProfile } = useCurrentProfile();
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const aggregateLabel = useAggregateLabel();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const deleteProfile = useProfileStore((state) => state.deleteProfile);
   const deleteAllProfiles = useProfileStore((state) => state.deleteAllProfiles);
   const switchProfile = useProfileStore((state) => state.switchProfile);
+  const setProfileDisabled = useProfileStore((state) => state.setProfileDisabled);
+  // Raw slice with the `?? []` inside the selector so useShallow dedupes
+  // repeated empty snapshots to one reference (see useProfileScope).
+  const virtualProfiles = useProfileStore(useShallow((state) => state.virtualProfiles ?? []));
+  const deleteVirtualProfile = useProfileStore((state) => state.deleteVirtualProfile);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleteAllDialogOpen, setIsDeleteAllDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  // The group dialog is mounted only while open (never `open={false}`), so
+  // opening it is what seeds its fields; `{ group: null }` is create mode.
+  const [groupDialog, setGroupDialog] = useState<{ group: VirtualProfile | null } | null>(null);
+  const [groupPendingDelete, setGroupPendingDelete] = useState<VirtualProfile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [switchingProfileId, setSwitchingProfileId] = useState<string | null>(null);
 
@@ -273,11 +293,40 @@ export default function Profiles() {
     }
   };
 
+  const handleToggleDisabled = (profile: Profile) => {
+    try {
+      setProfileDisabled(profile.id, !profile.disabled);
+    } catch (error) {
+      sonnerToast.error(
+        error instanceof ProfileGuardError && error.code === 'CANNOT_DISABLE_CURRENT'
+          ? t('profiles.cannot_disable_active')
+          : t('common.error')
+      );
+    }
+  };
+
+  const handleDeleteGroup = () => {
+    if (!groupPendingDelete) return;
+    try {
+      // Only the grouping goes: the member profiles are untouched, which is
+      // what the confirmation copy promises.
+      deleteVirtualProfile(groupPendingDelete.id);
+      setGroupPendingDelete(null);
+      sonnerToast.success(t('profiles.delete_group_success'));
+    } catch {
+      sonnerToast.error(t('profiles.delete_group_error'));
+    }
+  };
+
   const switchAbortRef = useRef<AbortController | null>(null);
 
   const handleSwitchProfile = async (profileId: string) => {
+    const isAggregateTarget = isAggregateProfileId(profileId);
     const profile = profiles.find((p) => p.id === profileId);
-    if (!profile) return;
+    // No aggregate id has a profile record behind it; every other id must
+    // resolve to one.
+    if (!isAggregateTarget && !profile) return;
+    const name = isAggregateTarget ? aggregateLabel(profileId) : profile!.name;
 
     // Abort any in-flight switch attempt
     if (switchAbortRef.current) {
@@ -289,7 +338,7 @@ export default function Profiles() {
     // Clear previous state
     sonnerToast.dismiss();
     setSwitchingProfileId(profileId);
-    const loadingToast = sonnerToast.loading(t('profiles.switching_to', { name: profile.name }));
+    const loadingToast = sonnerToast.loading(t('profiles.switching_to', { name }));
 
     try {
       await switchProfile(profileId);
@@ -298,7 +347,7 @@ export default function Profiles() {
       if (abort.signal.aborted) return;
 
       sonnerToast.dismiss(loadingToast);
-      sonnerToast.success(t('profiles.switched_to', { name: profile.name }));
+      sonnerToast.success(t('profiles.switched_to', { name }));
       setSwitchingProfileId(null);
       navigate('/monitors');
     } catch {
@@ -360,7 +409,7 @@ export default function Profiles() {
                 {profiles.map((profile) => (
                   <div
                     key={profile.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className={`flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors ${profile.disabled ? 'opacity-60' : ''}`}
                     data-testid="profile-card"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -372,6 +421,11 @@ export default function Profiles() {
                           <span className="font-medium" data-testid="profile-name">{profile.name}</span>
                           {profile.isDefault && (
                             <Badge variant="secondary" className="text-xs">{t('profiles.default')}</Badge>
+                          )}
+                          {profile.disabled && (
+                            <Badge variant="outline" className="text-xs" data-testid="profile-disabled-badge">
+                              {t('profiles.disabled')}
+                            </Badge>
                           )}
                           {profile.username && profile.password ? (
                             <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">
@@ -402,7 +456,7 @@ export default function Profiles() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {profile.id !== currentProfile?.id && (
+                      {!profile.disabled && profile.id !== currentProfile?.id && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -419,6 +473,16 @@ export default function Profiles() {
                           )}
                         </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleToggleDisabled(profile)}
+                        title={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
+                        aria-label={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
+                        data-testid={`profile-disable-toggle-${profile.id}`}
+                      >
+                        {profile.disabled ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -446,6 +510,32 @@ export default function Profiles() {
                   </div>
                 ))}
               </div>
+              {/* Groups render whatever the enabled count is, so a group made
+                  while two servers were enabled stays editable and deletable
+                  after one is disabled. Only creating a new one is gated. */}
+              {virtualProfiles.map((group) => (
+                <VirtualProfileCard
+                  key={group.id}
+                  group={group}
+                  isActive={currentProfileId === group.id}
+                  isSwitching={switchingProfileId === group.id}
+                  activeMemberCount={countActiveMembers(group, profiles)}
+                  onSwitch={() => handleSwitchProfile(group.id)}
+                  onEdit={() => setGroupDialog({ group })}
+                  onDelete={() => setGroupPendingDelete(group)}
+                />
+              ))}
+              {enabledProfileCount >= 2 && (
+                <Button
+                  variant="outline"
+                  className="mt-3 w-full"
+                  onClick={() => setGroupDialog({ group: null })}
+                  data-testid="profile-new-group-button"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t('profiles.new_group')}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -602,6 +692,38 @@ export default function Profiles() {
               onClick={handleDeleteProfile}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="profile-delete-confirm"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {groupDialog && (
+        <VirtualProfileDialog group={groupDialog.group} onClose={() => setGroupDialog(null)} />
+      )}
+
+      {/* Delete Group Confirmation. The copy has to say the member servers
+          survive: without it "Delete Backyard?" reads as deleting them. */}
+      <AlertDialog
+        open={groupPendingDelete !== null}
+        onOpenChange={(open) => !open && setGroupPendingDelete(null)}
+      >
+        <AlertDialogContent data-testid="profile-virtual-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('profiles.delete_group_confirm_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('profiles.delete_group_confirm_desc', { name: groupPendingDelete?.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="profile-virtual-delete-cancel">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteGroup}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="profile-virtual-delete-confirm"
             >
               {t('common.delete')}
             </AlertDialogAction>

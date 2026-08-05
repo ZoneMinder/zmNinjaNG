@@ -1,8 +1,13 @@
 import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getEvents } from '../../../api/events';
-import { getCurrentSession } from '../../../services/sessions';
+import { getSession } from '../../../services/sessions';
+import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
+import { ErrorBanner } from '../../ui/query-state';
+import { resolveQueryError } from '../../../lib/query/query-error';
+import type { EventData } from '../../../api/types';
+import type { ProfileError } from '../../../api/scoped-types';
 import { formatForServer, formatLocalDateTime } from '../../../lib/time';
 import {
     subHours,
@@ -21,8 +26,9 @@ import { useTranslation } from 'react-i18next';
 import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { Button } from '../../ui/button';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
-import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../../hooks/useProfileScope';
 import { queryKeys } from '../../../lib/query/query-keys';
+import { eventInstant } from '../../../lib/event/event-instant';
 
 type TimeRange = '24h' | '48h' | '1w' | '2w' | '1m';
 
@@ -44,7 +50,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
     const { fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
-    const { currentProfile } = useCurrentProfile();
+    const scope = useProfileScope();
+    const profiles = scope?.profiles ?? [];
     const [start, setStart] = useState(() => subHours(new Date(), 24));
     const [selectedRange, setSelectedRange] = useState<TimeRange>('24h');
     const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -83,13 +90,40 @@ export const TimelineWidget = memo(function TimelineWidget() {
         };
     }, []);
 
-    const { data: events } = useQuery({
-        queryKey: queryKeys.eventsTimelineWidget(currentProfile?.id, start.getTime()),
-        queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, {
-            startDateTime: formatForServer(start),
-            limit: 1000,
-        }),
-        refetchInterval: bandwidth.timelineHeatmapInterval,
+    // One query per profile in scope - single mode's array of one shares the
+    // exact key+session the old single query used (byte-identical). All
+    // mode merges raw events across profiles for the bucket counts below;
+    // this is a chart of counts, not per-row datums, so no profile identity
+    // needs to survive the merge (no chip - unlike EventsWidget's list).
+    // Partial-failure tolerant: one profile's error never blanks the chart
+    // once another profile has data (mirrors useScopedEvents' anyHasData) -
+    // but zero data AND at least one error still needs the error branch
+    // below (zero-data suppression, same rule Montage.tsx applies).
+    const { events: mergedEvents, errors } = useQueries({
+        queries: profiles.map((p, i) => ({
+            queryKey: queryKeys.eventsTimelineWidget(p.id, start.getTime()),
+            queryFn: () => getEvents(getSession(p.id).client, p.id, {
+                startDateTime: formatForServer(start),
+                limit: 1000,
+            }),
+            refetchInterval: staggeredRefetchInterval(i, profiles.length, bandwidth.timelineHeatmapInterval),
+        })),
+        combine: (results) => {
+            // Tag each event with its OWNING profile's timezone so the hour/day
+            // buckets below use the real chronological instant (eventInstant),
+            // not a naive local Date parse of the server wall-clock string -
+            // required once All mode can merge events from more than one
+            // profile/timezone (refs #337).
+            const events: { item: EventData; timezone: string }[] = [];
+            const errors: ProfileError[] = [];
+            profiles.forEach((p, i) => {
+                const q = results[i];
+                if (!q) return;
+                if (q.data) events.push(...q.data.events.map((item) => ({ item, timezone: p.timezone ?? 'UTC' })));
+                if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
+            });
+            return { events, errors };
+        },
     });
 
     // Quick range handlers - update nowRef when range changes
@@ -120,8 +154,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfHour(interval);
                 const intervalEnd = endOfHour(interval);
-                const count = events?.events.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                const count = mergedEvents.filter(e => {
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -157,8 +191,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfHour(interval);
                 const intervalEnd = endOfHour(interval);
-                const count = events?.events.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                const count = mergedEvents.filter(e => {
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -195,8 +229,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
-                const count = events?.events.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                const count = mergedEvents.filter(e => {
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -221,8 +255,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
-                const count = events?.events.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                const count = mergedEvents.filter(e => {
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -256,8 +290,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
             const chartData = intervals.map(interval => {
                 const intervalStart = startOfDay(interval);
                 const intervalEnd = endOfDay(interval);
-                const count = events?.events.filter(e => {
-                    const eventTime = new Date(e.Event.StartDateTime);
+                const count = mergedEvents.filter(e => {
+                    const eventTime = new Date(eventInstant(e.item, e.timezone));
                     return eventTime >= intervalStart && eventTime <= intervalEnd;
                 }).length || 0;
 
@@ -288,8 +322,8 @@ export const TimelineWidget = memo(function TimelineWidget() {
 
             return { data: chartData, tickFormatter, tickInterval };
         }
-    // Use events?.events (the array) for more stable dependency - only recalc when events actually change
-    }, [start, now, events?.events, containerSize.width, fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort]);
+    // Use mergedEvents (the array) for more stable dependency - only recalc when events actually change
+    }, [start, now, mergedEvents, containerSize.width, fmtDate, fmtWeekday, fmtTimeShort, fmtDateTimeShort]);
 
     // Memoize tooltip styles to prevent re-renders
     const tooltipContentStyle = useMemo(() => {
@@ -363,6 +397,9 @@ export const TimelineWidget = memo(function TimelineWidget() {
                     {t('events.past_month')}
                 </Button>
             </div>
+            {mergedEvents.length === 0 && errors.length > 0 ? (
+                <ErrorBanner message={resolveQueryError(errors[0].error, t)} className="m-2" />
+            ) : (
             <div className="flex-1 min-h-0">
                 <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data}>
@@ -399,6 +436,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </BarChart>
             </ResponsiveContainer>
             </div>
+            )}
         </div>
     );
 });

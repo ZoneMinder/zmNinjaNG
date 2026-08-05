@@ -32,20 +32,20 @@ Actions live next to the data they touch:
    import { create } from 'zustand';
 
    interface DeleteSelectionState {
-     selectedIds: string[];
-     toggle: (eventId: string) => void;
+     selectedKeys: string[];
+     toggle: (key: string) => void;
      clear: () => void;
    }
 
    export const useDeleteSelectionStore = create<DeleteSelectionState>((set) => ({
-     selectedIds: [],
-     toggle: (eventId) =>
+     selectedKeys: [],
+     toggle: (key) =>
        set((s) => ({
-         selectedIds: s.selectedIds.includes(eventId)
-           ? s.selectedIds.filter((id) => id !== eventId)
-           : [...s.selectedIds, eventId],
+         selectedKeys: s.selectedKeys.includes(key)
+           ? s.selectedKeys.filter((k) => k !== key)
+           : [...s.selectedKeys, key],
        })),
-     clear: () => set({ selectedIds: [] }),
+     clear: () => set({ selectedKeys: [] }),
    }));
 
 That is the whole store. ``useDeleteSelectionStore`` is both a React hook
@@ -61,12 +61,12 @@ arrays rather than mutating the existing ones:
 
 .. code:: tsx
 
-   set({ selectedIds: [] })                                        // object form
-   set((state) => ({ selectedIds: [...state.selectedIds, id] }))   // function form
+   set({ selectedKeys: [] })                                        // object form
+   set((state) => ({ selectedKeys: [...state.selectedKeys, key] }))   // function form
 
    // Wrong: subscribers compare old and new by reference, see the same
    // array, and skip the re-render. The UI never updates.
-   set((state) => { state.selectedIds.push(id); return state; })
+   set((state) => { state.selectedKeys.push(key); return state; })
 
 This is the Stores contract (``AGENTS.project.md``): never mutate an object
 you obtained from the store, including one you read through ``getState()``.

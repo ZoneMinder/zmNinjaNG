@@ -71,7 +71,26 @@ vi.mock('../../../lib/monitor/monitor-rotation', () => ({
 }));
 
 vi.mock('../LiveMonitorPlayer', () => ({
-  LiveMonitorPlayer: () => <div data-testid="video-player">Mock LiveMonitorPlayer</div>,
+  // The reduce flag is reflected back so a test can assert the tile forwards
+  // what the page decided about stream tuning.
+  LiveMonitorPlayer: ({
+    reduceStream,
+    paused,
+    forceViewMode,
+  }: {
+    reduceStream?: boolean;
+    paused?: boolean;
+    forceViewMode?: string;
+  }) => (
+    <div
+      data-testid="video-player"
+      data-reduce-stream={String(reduceStream ?? false)}
+      data-paused={String(paused ?? false)}
+      data-force-view-mode={forceViewMode ?? 'none'}
+    >
+      Mock LiveMonitorPlayer
+    </div>
+  ),
 }));
 
 vi.mock('../../../hooks/useServerUrls', () => ({
@@ -173,6 +192,68 @@ describe('MontageMonitor', () => {
     await waitFor(() => {
       expect(screen.getByText('Front Door')).toBeInTheDocument();
     });
+  });
+
+  it('streams at full quality unless the page asks for reduced tuning', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'false');
+  });
+
+  it('passes the reduced-tuning decision down to the player', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        reduceStream
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-reduce-stream', 'true');
+  });
+
+  it('downgrades the player to snapshots when the page says the user is idle', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        forceViewMode="snapshot"
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute(
+      'data-force-view-mode',
+      'snapshot'
+    );
+  });
+
+  it('stops the player when the page pauses its tiles', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        paused
+      />
+    );
+
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-paused', 'true');
   });
 
   it('sizes the video area from the ratio it is given, header on top', () => {
@@ -397,5 +478,65 @@ describe('MontageMonitor', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/timeline?monitorId=1', {
       state: { from: '/montage' },
     });
+  });
+
+  // All mode (refs #337, Phase 4 Task 1): the tile shows which server a
+  // monitor belongs to once more than one profile's tiles share one grid.
+  it('shows a profile chip when profileChip is given', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        profileChip="Office"
+      />
+    );
+
+    expect(screen.getByTestId('montage-profile-chip')).toHaveTextContent('Office');
+  });
+
+  it('renders no profile chip in single mode (profileChip absent)', () => {
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    expect(screen.queryByTestId('montage-profile-chip')).not.toBeInTheDocument();
+  });
+
+  // The Events button must scope the watermark to the tile's OWNING profile,
+  // not whatever useCurrentProfile() (the globally-selected profile) returns -
+  // in All mode those differ (refs #337, Phase 4 Task 1).
+  it('scopes the events watermark to the profileId prop, not the current profile', async () => {
+    const user = userEvent.setup();
+    useMonitorSeenStore.getState().seed('profile-2', '1', '2026-07-10 08:49:37');
+
+    render(
+      <MontageMonitor
+        monitor={mockMonitor}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+        profileId={asProfileId('profile-2')}
+        newEventCount={2}
+        newestEventAt="2026-07-10 09:15:00"
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-events-btn'));
+
+    const [url] = mockRouterNavigate.mock.calls[0];
+    const params = new URLSearchParams(url.split('?')[1]);
+    // profile-1 (the mocked useCurrentProfile) was never seeded, so a watermark
+    // resolved from it would produce no startDateTime at all.
+    expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
   });
 });

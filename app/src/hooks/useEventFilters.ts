@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { useCurrentProfile } from './useCurrentProfile';
+import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, type ProfileSettings } from '../stores/settings';
 import type { EventFilters } from '../api/events';
 import { log, LogLevel } from '../lib/logger';
@@ -163,7 +164,17 @@ function resolveInitialFilters(
 export function useEventFilters(): UseEventFiltersReturn {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { settings } = useCurrentProfile();
+  // Filters persist against currentProfileId, not the current profile: while
+  // aggregating there is no current profile, only the active aggregate's id,
+  // and that id is the bucket `settings` already resolves to. Keying the
+  // writes off currentProfile instead left every aggregate selection
+  // unpersisted and the restore below dead (refs #337). Aggregate monitor
+  // selections are composite `${profileId}:${monitorId}` tokens, so what
+  // round-trips through that bucket is the same token EventsFilterPopover
+  // produces and resolveOwnMonitorIds resolves; single mode stores bare ids
+  // as before.
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
   // Local filter state. The `_set*` setters below are raw React setters: they
   // update state only and do NOT persist to the settings store. Reserve them
@@ -187,7 +198,7 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Wrapped setters that also save to settings store immediately.
   // No effects needed: saves happen synchronously on user action.
   const profileIdRef = useRef<string | null>(null);
-  profileIdRef.current = currentProfile?.id ?? null;
+  profileIdRef.current = currentProfileId;
 
   const setSelectedMonitorIds = useCallback((ids: string[]) => {
     _setMonitorIds(ids);
@@ -233,7 +244,11 @@ export function useEventFilters(): UseEventFiltersReturn {
   // Does NOT trigger auto-save because it uses the raw _set* functions.
   const prevSettingsRef = useRef<string>('');
   useEffect(() => {
-    if (!currentProfile) return;
+    // Symmetry with the write path, not a covered branch: initial state
+    // already hydrates synchronously from the same bucket, and the profile
+    // switcher remounts this page, so this guard is near-unreachable. Kept
+    // so both paths key off the same id (refs #337 review).
+    if (!currentProfileId) return;
 
     // Deep-link URL params take priority
     if (hasUrlFilters(searchParams)) {
@@ -253,7 +268,7 @@ export function useEventFilters(): UseEventFiltersReturn {
     _setArchivedOnly(saved.archivedOnly ?? false);
     _setOnlyDetected(saved.onlyDetectedObjects);
     _setActiveQuickRange(saved.activeQuickRange ?? null);
-  }, [currentProfile?.id, settings.eventsPageFilters, searchParams]);
+  }, [currentProfileId, settings.eventsPageFilters, searchParams]);
 
   // ----- Handle deep-link URL params -----
   const isFirstRender = useRef(true);
@@ -335,6 +350,16 @@ export function useEventFilters(): UseEventFiltersReturn {
     } else {
       newParams.delete('archived');
     }
+    // In All mode these tokens are tag NAMES, not ids: tag ids are per-server
+    // and collide, so the aggregate selection is keyed by name and
+    // resolveOwnTagIds maps it back per profile (useScopedEventTags). The name
+    // therefore lands in ?tagIds= too, and a URL copied from All mode into
+    // single mode asks ZoneMinder for Tags.Id:<name>, which matches nothing.
+    //
+    // Left as is deliberately: the filter still reads correctly in the mode it
+    // was made in, the failure is an empty list rather than wrong events, and
+    // the fix is a mode marker in the URL plus a resolver on the way back in -
+    // new plumbing for a cross-mode link nobody shares (refs #337).
     if (selectedTagIds.length > 0) {
       newParams.set('tagIds', selectedTagIds.join(','));
     } else {

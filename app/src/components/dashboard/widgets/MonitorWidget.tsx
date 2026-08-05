@@ -16,12 +16,13 @@ import { useMemo, memo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getMonitor, getMonitors } from '../../../api/monitors';
-import { getCurrentSession } from '../../../services/sessions';
+import { getSession } from '../../../services/sessions';
 import { queryKeys } from '../../../lib/query/query-keys';
 import type { MonitorFeedFit } from '../../../stores/settings';
+import type { ProfileId } from '../../../api/types';
 import { LiveMonitorPlayer } from '../../monitors/LiveMonitorPlayer';
 import { MonitorHoverPreview } from '../../monitors/MonitorHoverPreview';
-import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { useProfileById } from '../../../hooks/useCurrentProfile';
 import { AlertTriangle } from 'lucide-react';
 import { Skeleton } from '../../ui/skeleton';
 import { useTranslation } from 'react-i18next';
@@ -33,6 +34,12 @@ interface MonitorWidgetProps {
     /** Array of monitor IDs to display */
     monitorIds: string[];
     objectFit?: MonitorFeedFit;
+    /** Pins this widget to one profile's session - a monitorId only means
+     *  something on one server. Set in All mode (widget.settings.profileId,
+     *  chosen via the edit dialog, or the first profile in scope);
+     *  undefined in single mode (resolves to the current profile, exactly
+     *  as before). */
+    profileId?: ProfileId;
 }
 
 /**
@@ -40,15 +47,15 @@ interface MonitorWidgetProps {
  * Renders a single monitor stream with error handling
  * Respects streaming vs snapshot settings from user preferences
  */
-function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit: MonitorFeedFit }) {
+function SingleMonitor({ monitorId, objectFit, profileId }: { monitorId: string; objectFit: MonitorFeedFit; profileId?: ProfileId }) {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const { currentProfile, settings } = useCurrentProfile();
+    const { profile: currentProfile, settings } = useProfileById(profileId);
     const [protocol, setProtocol] = useState('MJPEG');
     const { data: monitor, isLoading, error } = useQuery({
         queryKey: queryKeys.monitor(currentProfile?.id, monitorId),
-        queryFn: () => getMonitor(getCurrentSession().client, monitorId),
-        enabled: !!monitorId,
+        queryFn: () => getMonitor(getSession(currentProfile!.id).client, monitorId),
+        enabled: !!monitorId && !!currentProfile,
     });
 
     if (isLoading) {
@@ -68,20 +75,23 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
         return null;
     }
 
+    const monitorPath = profileId ? `/all/monitors/${profileId}/${monitor.Monitor.Id}` : `/monitors/${monitor.Monitor.Id}`;
+
     return (
         <div
             className="w-full h-full bg-black relative group overflow-hidden cursor-pointer"
             role="button"
             tabIndex={0}
             aria-label={monitor.Monitor.Name}
-            onClick={() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } })}
-            onKeyDown={activateOnEnterOrSpace(() => navigate(`/monitors/${monitor.Monitor.Id}`, { state: { from: '/dashboard' } }))}
+            onClick={() => navigate(monitorPath, { state: { from: '/dashboard' } })}
+            onKeyDown={activateOnEnterOrSpace(() => navigate(monitorPath, { state: { from: '/dashboard' } }))}
         >
             {settings.hoverPreview.dashboard ? (
-                <MonitorHoverPreview monitor={monitor.Monitor}>
+                <MonitorHoverPreview monitor={monitor.Monitor} profileId={profileId}>
                     <LiveMonitorPlayer
                         monitor={monitor.Monitor}
                         profile={currentProfile}
+                        profileId={profileId}
                         className="w-full h-full"
                         objectFit={objectFit}
                         onProtocolChange={setProtocol}
@@ -91,6 +101,7 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
                 <LiveMonitorPlayer
                     monitor={monitor.Monitor}
                     profile={currentProfile}
+                    profileId={profileId}
                     className="w-full h-full"
                     objectFit={objectFit}
                     onProtocolChange={setProtocol}
@@ -101,6 +112,15 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
                     {protocol}
                 </span>
             )}
+            {profileId && currentProfile && (
+                <span
+                    className="absolute top-1 left-1 z-10 text-[9px] px-1 py-0.5 rounded bg-black/50 text-white/90 font-medium truncate max-w-[100px] pointer-events-none"
+                    title={currentProfile.name}
+                    data-testid="widget-profile-chip"
+                >
+                    {currentProfile.name}
+                </span>
+            )}
             <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                 <p className="text-white text-xs font-medium truncate">{monitor.Monitor.Name}</p>
             </div>
@@ -108,14 +128,15 @@ function SingleMonitor({ monitorId, objectFit }: { monitorId: string; objectFit:
     );
 }
 
-export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit = 'contain' }: MonitorWidgetProps) {
+export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit = 'contain', profileId }: MonitorWidgetProps) {
     const { t } = useTranslation();
-    const { currentProfile } = useCurrentProfile();
+    const { profile: currentProfile } = useProfileById(profileId);
 
     // Fetch all monitors to check which ones are deleted
     const { data: monitorsData } = useQuery({
         queryKey: queryKeys.monitors(currentProfile?.id),
-        queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+        queryFn: () => getMonitors(getSession(currentProfile!.id).client, currentProfile!.id),
+        enabled: !!currentProfile,
     });
 
     // Filter out deleted monitors
@@ -145,7 +166,7 @@ export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit
     }
 
     if (activeMonitorIds.length === 1) {
-        return <SingleMonitor monitorId={activeMonitorIds[0]} objectFit={objectFit} />;
+        return <SingleMonitor monitorId={activeMonitorIds[0]} objectFit={objectFit} profileId={profileId} />;
     }
 
     // Calculate optimal grid layout for multiple monitors
@@ -164,7 +185,7 @@ export const MonitorWidget = memo(function MonitorWidget({ monitorIds, objectFit
                         height: `${100 / rows}%`,
                     }}
                 >
-                    <SingleMonitor monitorId={id} objectFit={objectFit} />
+                    <SingleMonitor monitorId={id} objectFit={objectFit} profileId={profileId} />
                 </div>
             ))}
         </div>

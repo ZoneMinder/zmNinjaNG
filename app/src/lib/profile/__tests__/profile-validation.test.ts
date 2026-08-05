@@ -55,6 +55,23 @@ describe('Profile Validation', () => {
     it('should handle empty profiles array', () => {
       expect(isProfileNameAvailable('Any Name', [])).toBe(true);
     });
+
+    it('should handle whitespace differences', () => {
+      // The comparison does not trim, so a padded name reads as a different
+      // name. Pinned because the shared check now spans both namespaces
+      // (refs #337) and a silent trim here would change real-profile
+      // behaviour too.
+      expect(isProfileNameAvailable('  Home Server  ', profiles)).toBe(true);
+    });
+
+    it('rejects a name a virtual profile already holds (refs #337)', () => {
+      const virtualProfiles = [
+        { id: asProfileId('v1'), name: 'Upstairs', memberProfileIds: [asProfileId('1')] },
+      ];
+
+      expect(isProfileNameAvailable('upstairs', [...profiles, ...virtualProfiles])).toBe(false);
+      expect(isProfileNameAvailable('Basement', [...profiles, ...virtualProfiles])).toBe(true);
+    });
   });
 
   describe('validateProfileNameFormat', () => {

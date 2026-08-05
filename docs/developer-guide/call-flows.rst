@@ -69,6 +69,8 @@ If you already know the symptom, jump straight to its flow:
     is missing from settings.
 20. A Live Activity poll tick: a tile will not leave, or a monitor never
     appears.
+21. Switching into a virtual profile group: monitors from every server in it
+    show up tagged with their origin, or one down server blanks the whole list.
 
 Flow 1: Cold start to an authenticated session
 ----------------------------------------------
@@ -785,10 +787,12 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L120>`__
    · → :doc:`11-application-lifecycle`
 
-#. **Store builds the config and listeners.** ``connect`` disconnects any other
-   profile, builds the server config, registers state/event listeners, and awaits
-   the service connect.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L254>`__
+#. **Store builds the config and listeners.** ``connect`` gets its own service
+   instance per profile id, builds the server config, registers state/event
+   listeners, and awaits the service connect - it no longer disconnects any
+   other profile, since an aggregate needs more than one profile connected
+   at once (refs #337; see Flow 23).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Inject store-derived providers.** ``_buildServiceProviders`` hands the
@@ -2619,6 +2623,432 @@ thrash ``nph-zms`` on the server, not just the display.
    would mint and quit a fresh ``nph-zms`` process on almost every poll.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L246>`__
    · → :doc:`12-shared-services-and-components`
+
+Flow 21: Switching into a virtual profile group
+-----------------------------------------------
+
+Aggregating is not a special-cased branch bolted onto the data layer: an
+aggregate scope is an id with no backing ``Profile`` record, and every hook
+that already fanned out over "the current profile" now fans out over a list of
+one or of many the exact same way. The counterintuitive part is where that
+list comes from - the same per-profile React Query key ``useMonitors`` uses in
+single mode, so entering all mode never refetches a profile whose monitors are
+already cached.
+
+A virtual profile (a virtual profile group in the UI, ``VirtualProfile`` in
+``api/types.ts``) is stored on the profile store and gets an id shaped
+``__virtual_<uuid>``, which is what ``isVirtualProfileId`` tests and what
+``isAggregateProfileId`` recognizes. It is the only aggregate a user can
+select. Its ``'all'`` scope arm carries ``aggregateId`` and ``aggregateName``
+so surfaces that name the aggregate can say which one, and its profile list is
+the group's members filtered down to the ones still present and enabled.
+Nothing downstream asks which aggregate it is aggregating, which is why
+generalizing the original built-in aggregate to groups touched no consumer in
+this flow.
+
+.. note::
+
+   ``ALL_PROFILES_ID`` is the retired built-in "All Servers" aggregate. Groups
+   replaced it: no surface offers it, ``switchProfile`` rejects it, and
+   ``handleProfileRehydration`` (Flow 1) resets a stored one to ``null`` and
+   deletes the settings and dashboard buckets it owned. The sentinel itself
+   survives in ``api/types.ts`` so the guards that keep an aggregate id out of
+   session, token and notification paths still recognize a stored one, and so
+   a frame rendered before that migration runs shows an aggregate rather than
+   an empty screen. Nothing new should reference it. Refs #337.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Page as Profiles page
+       participant Store as Profile store
+       participant Scope as useProfileScope
+       participant Mon as Monitors page
+       participant Hook as useScopedMonitors
+       participant A as Server A
+       participant B as Server B
+
+       User->>Page: tap the group's card
+       Page->>Store: switchProfile(__virtual_<uuid>)
+       Store-->>Page: currentProfileId = the group id (no session, no login)
+       Page->>Mon: navigate('/monitors')
+       Mon->>Scope: useProfileScope()
+       Scope-->>Mon: {mode:'all', profile:null, profiles:[A,B]}
+       Mon->>Hook: useScopedMonitors()
+       Hook->>A: getMonitors (queryKeys.monitors(A))
+       Hook->>B: getMonitors (queryKeys.monitors(B))
+       A-->>Hook: monitors
+       B-->>Hook: error
+       Hook-->>Mon: {monitors: Scoped<MonitorData>[], errors: [B]}
+       Mon->>Mon: render A's cards + chip, render a strip for B
+
+#. **An aggregate id is not a profile.** A group id is a minted string with no
+   ``Profile`` record behind it. ``currentProfileId`` can point at it the same
+   way it points at any real profile id, which is what lets the rest of the
+   store and every hook treat "these servers" as one more value rather than a
+   mode flag threaded through every consumer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/types.ts#L596>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Making a group needs a real second profile.** ``Profiles`` offers the new
+   group action only when two or more profiles are enabled; with one there is
+   nothing to aggregate, which is the ≥2 rule the user guide documents. The
+   cards of groups that already exist stay, since editing and deleting them is
+   the only way out of that state.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L364>`__
+   · → :doc:`04-pages-and-views`
+
+#. **Switching to an aggregate is the cheap branch of switchProfile.**
+   ``Profiles``'s ``handleSwitchProfile`` calls the same ``switchProfile(id)``
+   action for a group card as for every real card. The store special-cases
+   ``isAggregateProfileId(id)`` before it reaches any of the six per-profile
+   bootstrap steps Flow 1 walks: it quits every active stream and sets
+   ``currentProfileId``, nothing else, because an id with no server has no
+   session to build. A group id that no longer resolves to a stored group is
+   rejected instead, the same way an unknown profile id is.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L280>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **One branch point resolves the scope for everyone.** ``useProfileScope``
+   reads ``currentProfileId`` and, when it is an aggregate, returns
+   ``{mode:'all', profile:null, profiles}`` - the group's member list instead
+   of a one-element array. Every consumer below fans out over ``scope.profiles``
+   identically in both modes, so this hook is the only place in the app that
+   branches on the mode at all.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useProfileScope.ts#L66>`__
+   · → :doc:`05-component-architecture`
+
+#. **useCurrentProfile keeps ``currentProfile`` null in All mode.** Its
+   ``isAllMode`` flag is exposed alongside a ``currentProfile`` that stays
+   null, since no single profile is "the" current one while aggregating - the
+   fact the absence noted below traces back to.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useCurrentProfile.ts#L57>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **One ``useQueries`` call, one query per profile, the same cache key.**
+   ``useScopedMonitors`` maps ``scope.profiles`` into a ``getMonitors`` query
+   per profile keyed by ``queryKeys.monitors(p.id)`` - the identical key
+   ``useMonitors`` uses in single mode. A profile already cached from single
+   mode is not refetched just because All mode also asked for it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L69>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **``combine`` tags every item with its owner and isolates failures.** The
+   ``combine`` option wraps each monitor as ``{profileId, profileName, item}``
+   and, separately, pushes any profile whose query errored into its own
+   ``errors`` array - one unreachable server cannot fail the whole hook or
+   blank the profiles that did answer.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L82>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The grid keys each card by profile and monitor, not monitor alone.**
+   ``Monitors``'s ``renderItems`` keeps ``profileId``/``profileChip`` on every
+   All-mode item and keys each ``MonitorCard`` ``${profileId}-${Monitor.Id}``,
+   because two servers can and do reuse the same ZoneMinder monitor id. Each
+   card then renders a ``monitor-profile-chip`` naming the server it came
+   from.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L92>`__
+   · → :doc:`05-component-architecture`
+
+#. **A failed profile gets its own strip, and only if it has nothing to
+   show.** ``visibleErrors`` filters down to profiles that produced zero
+   monitors; a profile with cached data and a background refetch error falls
+   through to the normal view instead (the offline banner covers that case).
+   Each remaining entry renders a ``profile-error-strip-<id>`` with a retry
+   button that refetches exactly that profile's query key, not the whole
+   scope.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L207>`__
+   · → :doc:`07-api-and-data-fetching`
+
+The Monitors page, the Events and Timeline pages, and the profile switcher
+branch on ``isAllMode``; Flow 22 covers how Events aggregates the same way
+Monitors does here. Montage and Dashboard now resolve the same scope and
+aggregate identically - Montage additionally caps the number of simultaneous
+All-mode streams it opens, so a large combined camera count can't try to open a
+live stream to every camera on every server at once. That cap reads
+``settings.allModeMaxStreams`` from the aggregate's own bucket, edited in
+Settings' aggregate performance section and defaulting to
+``MONTAGE_GRID.allModeMaxStreams``; Live Activity's watch cap and poll floor
+come from the same bucket the same way. Screens that are inherently single-server instead -
+Logs, Server, Notification settings, the server-scoped part of Settings, and
+the assistant panel - resolve a locally-picked profile via
+``ProfilePicker``/``useProfileById``, defaulting to the first profile in
+scope, rather than aggregating. Live Activity aggregates too, through
+``useLiveActivityAllMode`` (refs #337, #341), keying every tile by
+``monitorCacheKey`` so two servers sharing a raw monitor id never collide.
+
+Flow 16 covers the other two ways a profile list changes shape, editing and
+deleting; this flow is the third, and the only one where "the current
+profile" can mean more than one server at a time.
+
+Flow 22: Merged events and direct tap-through while aggregating
+-------------------------------------------------------------------
+
+Events aggregation reuses Flow 21's shape - one ``useQueries`` fan-out over
+``scope.profiles``, one ``Scoped<T>`` wrapper, one error strip per empty
+profile - but adds two things Monitors doesn't need: a true cross-server sort
+order, and a way into a specific event or monitor that skips the profile
+switch entirely. The counterintuitive part is that a monitor card, an event
+row, and a push notification all resolve that same owning profile and land on
+the same ``/all/...`` deep route, so the destination page never has to ask
+"whose session am I in" - the URL already says so.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant User as User
+       participant Card as MonitorCard (All mode)
+       participant Hook as useOpenMonitorEvents
+       participant Push as pushNotifications service
+       participant Nav as navigationService
+       participant Events as Events page
+       participant Scoped as useScopedEvents
+       participant A as Server A
+       participant B as Server B
+
+       User->>Card: tap a card owned by profile B
+       Card->>Hook: openMonitorEvents({monitorId, profileId: B})
+       Hook->>Events: navigate(/events?profileId=B)
+       Events->>Scoped: useScopedEvents({filters})
+       Scoped->>A: getEvents (queryKeys.eventsList(A, ...))
+       Scoped->>B: getEvents (queryKeys.eventsList(B, ...))
+       A-->>Scoped: events
+       B-->>Scoped: events
+       Scoped-->>Events: events sorted by eventInstant, chip per row
+       Events->>Events: eventsServerFilter narrows to B (deep-link param)
+
+       Push->>Push: notification arrives for profile B while in All mode
+       Push->>Nav: navigateToEvent(eventId, state, profileId=B)
+       Nav->>Events: navigate(/all/events/B/eventId), no switchProfile call
+
+#. **The merge sorts by real instant, not server-local time.** ``eventInstant``
+   converts each event's ``StartDateTime`` to an epoch using its OWNING
+   profile's timezone, so a 9pm event on an America/New_York server and a 2am
+   event on a UTC server interleave in true chronological order instead of by
+   the raw string, which Flow 21's monitor cards have no equivalent of - there
+   is nothing to sort there.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/event/event-instant.ts#L22>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **One query per profile, the SAME cache key single mode uses.**
+   ``useScopedEvents`` maps ``scope.profiles`` into a ``getEvents`` query keyed
+   by ``queryKeys.eventsList(p.id, ...)`` - identical to the single-profile
+   Events query, so switching between single and All mode for a profile
+   already visited never refetches it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L87>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **Each row carries its own chip, keyed like Monitors' cards.**
+   ``EventCard`` renders an ``event-profile-chip`` whenever ``profileChip`` is
+   set - only in All mode, wired the same way ``monitor-profile-chip`` is in
+   Flow 21.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx#L253>`__
+   · → :doc:`05-component-architecture`
+
+#. **A monitor card's "Events" button navigates with the owning profile
+   attached, not the current one.** ``useOpenMonitorEvents`` reads
+   ``profileId`` off the card it was called from (undefined in single mode) and
+   appends it as a ``profileId`` query param on the ``/events`` navigation,
+   rather than assuming the globally-selected profile owns the monitor that
+   was clicked.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts#L65>`__
+   · → :doc:`05-component-architecture`
+
+#. **The Events page turns that param into a standing filter, once.** An
+   effect reads ``?profileId=`` and writes it into
+   ``settings.eventsServerFilter`` for the All-mode settings bucket, keyed off
+   the deep-linked id so a card click narrows the merged list down to just
+   that server instead of leaving a colliding numeric event id ambiguous
+   across two profiles.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L278>`__
+   · → :doc:`04-pages-and-views`
+
+#. **A monitor detail click never calls switchProfile at all.**
+   ``MonitorCard``'s ``goToDetail`` navigates straight to
+   ``/all/monitors/:profileId/:monitorId`` when the card carries a
+   ``profileId``, instead of Flow 21's switch-then-navigate; ``MonitorDetail``
+   resolves its session from the route param, so the profile switcher
+   still names the group the whole time - the outcome the deep-link e2e scenario
+   asserts.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
+   · → :doc:`05-component-architecture`
+
+#. **A push notification resolves to a real profile even while an aggregate
+   has none current.** ``resolveProfileForNotification`` special-cases an
+   aggregate id via ``isAggregateProfileId``: when the notification's own
+   profile is known, it returns that profile as the target with
+   ``isCrossProfile: false`` - no switch-confirmation dialog, because there is
+   no "wrong" profile to switch away from while aggregating.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L52>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The tap lands on the same ``/all/`` deep route a card click would.**
+   ``navigateToEvent`` builds ``/all/events/:profileId/:eventId`` whenever a
+   ``profileId`` is passed, so the notification handler and ``MonitorCard``
+   converge on one routing convention rather than each inventing its own way
+   to carry "which server".
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts#L49>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **Tags fan out per profile and are keyed by owner, not by event id.**
+   ``useScopedEventTagMapping`` asks each profile only for the event ids that
+   profile owns and merges the answers under ``scopedEventKey`` -
+   ``${profileId}:${eventId}`` in All mode, the bare id in single mode, which
+   is exactly what a row carries. A single map keyed by bare event id would
+   hand one server's tags to the other server's row, the event-side twin of
+   the ``monitorCacheKey`` collision.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L134>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The tag FILTER aggregates by name, because tag ids are per-server.**
+   ``useScopedTags`` offers one entry per distinct tag name with the name
+   standing in for ``Id``, and ``resolveOwnTagIds`` maps a selection back into
+   each profile's real ids before its query runs - the same composite-token
+   shape the All-mode monitor filter persists in the ALL settings bucket. A
+   profile that has no tag by that name resolves to an empty list, which
+   ``getEvents`` treats as "matches nothing" rather than falling through to an
+   unfiltered query.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L52>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **A profile that owns none of the selected monitors contributes nothing.**
+   ``resolveOwnMonitorIds`` can only answer "no monitor filter" for a profile
+   none of the composite tokens name, and ZoneMinder reads that as "every
+   monitor" - so filtering to one server's camera used to put the OTHER
+   server's whole event list on screen. ``ownFilterIds`` pairs that case with
+   the impossible ``eventIds: []`` filter instead, the same shape
+   ``favoritesOnly`` uses for a profile with no favorites of its own, and the
+   shape the tag filter above uses for a server without the selected tag.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L161>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The command palette and the keyboard shortcuts fan out the same way.**
+   Both read ``useScopedMonitors`` (with ``poll: false``, since they mount for
+   the whole session and share the monitors query key with the Monitors page),
+   label each row with its owning profile, and navigate to
+   ``/all/monitors/:profileId/:id``. Group entries are absent in All mode:
+   groups are per-server and nothing aggregates them.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx#L70>`__
+   · → :doc:`05-component-architecture`
+
+Timeline aggregates the same way through its own ``isAllMode`` branch, reusing
+``useScopedEvents``'s sibling query rather than a second hook. The Events
+montage (grid) view was the one piece Task 4 left ungated-but-broken, since
+its tiles resolved thumbnails through the page-level (absent) current
+profile. It now works in All mode: each tile resolves against its event's
+OWN profile, so ``events-view-toggle`` stays enabled and the grid renders
+with no gate notice.
+
+Flow 21 covers how a profile enters All mode in the first place; this flow
+picks up once it's there.
+
+Flow 23: Live notifications across every server in an aggregate
+---------------------------------------------------------------------
+
+Flow 7 covers one profile's websocket. Aggregating does not multiplex
+that single connection - it mounts one independent connector per profile in
+scope, each running Flow 7's own connect/reconnect/backoff machinery
+unchanged, so one server's flaky network never stalls another's toasts. The
+counterintuitive part is that no aggregation code decides which profile an
+event belongs to: each connector closes over its own profile id at mount, so
+the same numeric monitor or event id from two different servers can never
+land in the wrong bucket.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant Handler as NotificationHandler
+       participant ConnA as Connector (profile A)
+       participant ConnB as Connector (profile B)
+       participant Store as Notification store
+       participant Toasts as All-mode toasts hook
+
+       Handler->>ConnA: mount, bound to profile A
+       Handler->>ConnB: mount, bound to profile B
+       ConnA->>Store: connect(profileA)
+       ConnB->>Store: connect(profileB)
+       Store-->>ConnA: alarm event, closure-bound to A
+       Store-->>ConnB: alarm event, closure-bound to B
+       Store->>Toasts: profileEvents changed
+       Toasts-->>Handler: coalesced toast, A's own settings
+
+#. **The handler fans out one connector per scope profile.** ``NotificationHandler``
+   renders a ``ProfileNotificationConnector`` for every profile in
+   ``scope.profiles`` when ``scope.mode`` is ``'all'`` and
+   ``allModeNotifications`` is not ``'off'``, gated to desktop/web only -
+   mobile keeps Flow 3's single anchor-profile connection since FCM already
+   delivers every profile's events server-side regardless of which one is
+   foregrounded.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L307>`__
+   · → :doc:`16-platform-surfaces`
+
+#. **Mount is the fan-out, unmount is the teardown.** ``ProfileNotificationConnector``
+   reuses ``useNotificationAutoConnect`` unmodified, permanently bound to its
+   own profile; React mounting or unmounting it as profiles enter or leave
+   scope (switch, disable, delete, or ``allModeNotifications`` flipping off)
+   is the only fan-out and teardown mechanism, with an explicit cleanup that
+   disconnects the socket and stops the poller on unmount.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/ProfileNotificationConnector.tsx#L27>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Each profile gets its own service instance.** The store's ``connect``
+   resolves a service through ``getNotificationService(profileId)`` and no
+   longer disconnects any other profile before connecting - Flow 7's old
+   single-connection assumption doesn't hold once two connectors can be
+   connecting at once.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Listeners bind their profile id at registration, not at read time.**
+   ``_initialize`` wires each connector's own event/state callbacks, so an
+   alarm from server B's websocket can only ever reach the handler closed
+   over profile B's id.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L527>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The write carries no ambiguity either.** ``addEvent(profileId, event)``
+   stores the alarm under ``profileEvents[profileId]``; two servers reporting
+   monitor id ``3`` write to two different buckets, never one overwriting the
+   other.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L398>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Toast display is a separate seam from the store write.**
+   ``useNotificationAllModeToasts`` watches every scope profile's events and
+   reads each one's own ``showToasts``/``playSound`` out of that profile's
+   settings - there is no "current profile" to fall back on while
+   aggregating.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L43>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Events landing close together coalesce.** ``flushBurst`` collapses every
+   event collected within the burst window into one summary toast naming the
+   event and server counts, and plays at most one sound per window, so
+   several busy servers can't flood the screen with individual toasts.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L63>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **``allModeNotifications`` is the kill switch upstream of all of it.**
+   ``'off'`` means the handler never mounts a single connector, so no All-mode
+   sockets or pollers exist at all; ``'muted'`` still mounts every connector
+   (badge and history keep updating) but the toasts hook's own check
+   suppresses toast and sound display.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts#L23>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Notification Settings reads the same state the connectors write.**
+   ``NotificationOverview`` renders each profile's live connection status and
+   stored settings straight from the store's ``connections`` map and
+   ``profileSettings``, with no separate aggregation hook of its own.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/NotificationOverview.tsx#L56>`__
+   · → :doc:`05-component-architecture`
+
+Flow 21 covers the scope these connectors fan out over; Flow 7 is the
+single-profile mechanics each one repeats N times over.
 
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact

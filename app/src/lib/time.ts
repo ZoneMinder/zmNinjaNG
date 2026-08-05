@@ -6,26 +6,25 @@ import { useProfileStore } from '../stores/profile';
 import { log, LogLevel } from './logger';
 
 /**
- * Format a date for the ZM API using the server's timezone.
- * ZM API expects 'YYYY-MM-DD HH:mm:ss' (space, not T).
+ * Format a date for the ZM API in an EXPLICIT timezone. ZM API expects
+ * 'YYYY-MM-DD HH:mm:ss' (space, not T).
+ *
+ * Used directly by All-mode aggregation fan-outs (useScopedEvents,
+ * useScopedTimelineEvents), which convert one shared Date bound per
+ * profile using THAT profile's own timezone rather than the globally
+ * selected current profile (refs #337) - formatForServer below is now a
+ * thin wrapper over this for the single-current-profile case.
  *
  * @param date The local Date object (e.g. from a date picker or 'new Date()')
- * @returns String formatted in server's timezone
+ * @param timeZone IANA timezone to format into
+ * @returns String formatted in the given timezone
  */
-export function formatForServer(date: Date): string {
-    // Access primitives directly to avoid deprecated currentProfile() getter
-    const { profiles, currentProfileId } = useProfileStore.getState();
-    const currentProfile = profiles.find(p => p.id === currentProfileId);
-    const timeZone = currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-
+export function formatForServerInTz(date: Date, timeZone: string): string {
     // Format: 'yyyy-MM-dd HH:mm:ss' in the TARGET timezone
     // This effectively shifts the time.
     // e.g. If local is 10:00 EST and Server is PST, this returns "07:00:00" string
     // which is what ZM expects if we are querying against its DB time.
     try {
-        // Note: We need to check if date-fns-tz is available or if we need to implement a lightweight version
-        // If date-fns-tz is not installed, we might fallback to a simpler approach or install it
-        // For now assuming we might need to add it or use basic Intl
         return new Intl.DateTimeFormat('en-CA', {
             timeZone,
             year: 'numeric',
@@ -41,6 +40,38 @@ export function formatForServer(date: Date): string {
         const pad = (num: number) => num.toString().padStart(2, '0');
         return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
     }
+}
+
+/**
+ * Resolve a profile's timezone for date-filter conversion, falling back to
+ * the BROWSER's own zone when the profile has none set - the historical
+ * `formatForServer` fallback. Shared by `formatForServer` and the All-mode
+ * aggregation hooks (useScopedEvents, useScopedTimelineEvents) so a
+ * timezone-less profile converts date-range filters identically in both
+ * single and All mode (refs #337 fix round 1: All mode previously fell back
+ * to 'UTC' here, silently shifting the query window for such a profile).
+ *
+ * Not used for the eventInstant/sort ordering fallback - that one
+ * deliberately matches `getSession`'s own 'UTC' convention instead (a
+ * different, already-correct concern: a stable sort key, not a
+ * user-facing query window).
+ */
+export function resolveProfileTimezone(timezone: string | null | undefined): string {
+    return timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+/**
+ * Format a date for the ZM API using the CURRENT profile's timezone.
+ * Single-mode call sites (queries scoped to one active profile).
+ *
+ * @param date The local Date object (e.g. from a date picker or 'new Date()')
+ * @returns String formatted in server's timezone
+ */
+export function formatForServer(date: Date): string {
+    // Access primitives directly to avoid deprecated currentProfile() getter
+    const { profiles, currentProfileId } = useProfileStore.getState();
+    const currentProfile = profiles.find(p => p.id === currentProfileId);
+    return formatForServerInTz(date, resolveProfileTimezone(currentProfile?.timezone));
 }
 
 /**

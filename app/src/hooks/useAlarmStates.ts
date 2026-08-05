@@ -13,11 +13,14 @@
 
 import { useQueries } from '@tanstack/react-query';
 import { getAlarmStatus } from '../api/monitors';
-import { getCurrentSession } from '../services/sessions';
+import { getCurrentSession, getSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
+import { staggeredRefetchInterval } from '../lib/query/stagger-interval';
+import { monitorCacheKey } from '../stores/monitors';
 import { parseAlarmState, type MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { useCurrentProfile } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
+import type { ProfileId } from '../api/types';
 
 interface UseAlarmStatesOptions {
   /** Poll only while the page is visible. */
@@ -97,6 +100,91 @@ export function useAlarmStates(
           // monitor that has never succeeded has no `data` and parses to
           // `unknown`, which keeps the map total.
           states[monitorIds[i]] = parseAlarmState(result.data);
+          if (result.error && !error) error = result.error as Error;
+        });
+      }
+
+      return { states, isLoading, error };
+    },
+  });
+}
+
+/**
+ * A (profile, monitor) pair whose alarm status is fetched under that
+ * profile's own session, regardless of which profile is globally selected.
+ * Mirrors ScopedMonitorRef in useMonitorNewEvents.ts.
+ */
+export interface ScopedAlarmRef {
+  profileId: ProfileId;
+  monitorId: string;
+}
+
+interface UseScopedAlarmStatesReturn {
+  /**
+   * Keyed by monitorCacheKey(profileId, monitorId), so two profiles sharing
+   * a raw monitor id never collide. Same total-map semantics as
+   * useAlarmStates above: every requested pair gets an entry, a failed poll
+   * holds the pair's last known state, and disabled means an empty map.
+   * Identity-stable for the same reason useAlarmStates' map is (see its
+   * combine comment).
+   */
+  states: Record<string, MonitorAlarmState>;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+/**
+ * All-mode counterpart to useAlarmStates: fans the same per-monitor alarm
+ * poll out across every (profile, monitor) pair the caller supplies, using
+ * each pair's OWNING profile - never the globally-selected current profile -
+ * for the session client and the query key (refs #337, #341).
+ *
+ * Single mode keeps using useAlarmStates unchanged rather than this hook
+ * with a single-profile pair list: useAlarmStates' query key carries the
+ * real current-profile id and so shares its cache entry with every other
+ * single-profile alarm consumer, and its combine map is keyed by the bare
+ * monitor id the rest of the single-mode page (recentCauses, dismissedRef,
+ * tile testids) already assumes. Reusing this hook for single mode would
+ * mean choosing between dropping that shared cache entry (an undefined
+ * profileId in the query key) or keying the single-mode map by
+ * monitorCacheKey too, which is a composite key none of that existing,
+ * tested code expects. Two hooks sharing the same combine shape stays
+ * simpler and lower-risk than forcing one.
+ */
+export function useScopedAlarmStates(
+  pairs: ScopedAlarmRef[],
+  { enabled, pollIntervalMs }: UseAlarmStatesOptions
+): UseScopedAlarmStatesReturn {
+  return useQueries({
+    queries: pairs.map(({ profileId, monitorId }, i) => ({
+      queryKey: queryKeys.monitorAlarmStatus(profileId, monitorId),
+      queryFn: () => getAlarmStatus(getSession(profileId).client, monitorId),
+      enabled,
+      // Desynchronizes the per-(profile, monitor) refetch bursts, same
+      // rationale as useScopedMonitors/useScopedMonitorNewEvents.
+      refetchInterval: staggeredRefetchInterval(i, pairs.length, pollIntervalMs),
+      refetchIntervalInBackground: false,
+      refetchOnWindowFocus: true,
+    })),
+    // See useAlarmStates' combine comment above: this is what keeps `states`
+    // identity-stable across an unchanged poll, which the Live Activity
+    // page's dwell effect depends on to avoid a render loop.
+    combine: (results) => {
+      const states: Record<string, MonitorAlarmState> = {};
+      let isLoading = false;
+      let error: Error | null = null;
+
+      if (enabled) {
+        results.forEach((result, i) => {
+          if (result.isLoading) isLoading = true;
+          // Defensive: `results` and `pairs` are built from the same
+          // `queries` map in this same render pass, so they are the same
+          // length in practice, but a mismatch degrades to "skip this
+          // result" rather than throwing on `pairs[i].profileId`.
+          const pair = pairs[i];
+          if (!pair) return;
+          const key = monitorCacheKey(pair.profileId, pair.monitorId);
+          states[key] = parseAlarmState(result.data);
           if (result.error && !error) error = result.error as Error;
         });
       }

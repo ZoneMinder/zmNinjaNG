@@ -85,9 +85,15 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
                 className="h-14 w-24 shrink-0 overflow-hidden rounded bg-card border border-border/40"
                 data-testid="assistant-card-monitor-live"
               >
+                {/* profileId alongside profile, as the player's own doc
+                    comment asks of anyone passing one: `profile` only
+                    reaches go2rtc/WebRTC, and the MJPEG chain reads
+                    profileId. Inert while this is the current profile, which
+                    is the only profile the assistant answers about today. */}
                 <LiveMonitorPlayer
                   monitor={liveMonitor}
                   profile={currentProfile}
+                  profileId={currentProfile?.id}
                   className="h-full w-full"
                   objectFit="cover"
                   muted

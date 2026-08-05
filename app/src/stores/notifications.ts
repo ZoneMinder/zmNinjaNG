@@ -3,8 +3,9 @@ import { persist } from 'zustand/middleware';
 import {
   getNotificationService,
   resetNotificationService,
+  resetAllNotificationServices,
 } from '../services/notifications';
-import { getEventPoller, type EventPollerDeps } from '../services/eventPoller';
+import { getEventPoller, stopAllEventPollers, type EventPollerDeps } from '../services/eventPoller';
 import {
   type ZMEventServerConfig,
   type ZMNotificationProviders,
@@ -24,7 +25,7 @@ import { getSession } from '../services/sessions';
 import { useProfileStore } from './profile';
 import { useAuthStore, getAuthSlice } from './auth';
 import { useSettingsStore } from './settings';
-import { asProfileId } from '../api/types';
+import { asProfileId, ALL_PROFILES_ID, isVirtualProfileId } from '../api/types';
 import { setPushServiceStoreGates } from '../services/pushNotifications';
 import { getBandwidthSettings, NOTIFICATIONS_SERVICE, STORAGE_KEYS, type BandwidthMode } from '../lib/zmninja-ng-constants';
 
@@ -43,16 +44,23 @@ interface NotificationState {
   // Settings per profile ID
   profileSettings: Record<string, NotificationSettings>;
 
-  // Connection state (runtime only, not persisted)
-  connectionState: ConnectionState;
-  isConnected: boolean;
-  currentProfileId: string | null; // Track which profile is connected
+  // Per-profile connection state (runtime only, not persisted). Every
+  // enabled profile can hold its own live ES connection in All mode
+  // (refs #337), so this is keyed by profile id instead of one flag.
+  connections: Record<string, ConnectionState>;
+  // Anchor profile for mobile push/badge bookkeeping (FCM token
+  // registration is device-wide, not per-connection - see
+  // registerPushToken/deregisterPushToken and _registerWithServer in
+  // services/pushNotifications.ts). NOT a substitute for `connections`:
+  // never read this to decide whether a *specific* profile is connected.
+  currentProfileId: string | null;
 
   // Events per profile ID
   profileEvents: Record<string, NotificationEvent[]>;
 
-  // Internal runtime state (not persisted)
-  _cleanupFunctions: (() => void)[];
+  // Internal runtime state (not persisted), keyed by profile id so
+  // disconnecting one profile's listeners never touches another's.
+  _cleanupFunctions: Record<string, (() => void)[]>;
 
   // Actions - Settings
   getProfileSettings: (profileId: string) => NotificationSettings;
@@ -62,9 +70,13 @@ interface NotificationState {
 
   // Actions - Connection
   connect: (profileId: string, username: string, password: string, portalUrl: string) => Promise<void>;
-  disconnect: () => void;
+  disconnect: (profileId: string) => void;
+  /** Disconnect every profile that currently holds a connection, and stop
+   *  every direct-mode poller (which isn't tracked in `connections`). Used
+   *  on full logout (refs #337 I5). */
+  disconnectAll: () => void;
   /** @param force - reconnect even while the service still reports connected */
-  reconnect: (force?: boolean) => Promise<void>;
+  reconnect: (profileId: string, force?: boolean) => Promise<void>;
 
   // Actions - Events
   addEvent: (profileId: string, event: ZMAlarmEvent, source?: NotificationSource) => void;
@@ -79,12 +91,36 @@ interface NotificationState {
   deregisterPushToken: (token: string, platform: 'ios' | 'android') => Promise<void>;
 
   // Internal
-  _initialize: () => void;
-  _cleanup: () => void;
-  _syncMonitorFilters: () => Promise<void>;
-  _updateBadge: (count?: number) => Promise<void>;
+  _initialize: (profileId: string) => void;
+  _cleanup: (profileId: string) => void;
+  _syncMonitorFilters: (profileId: string) => Promise<void>;
+  _updateBadge: (profileId: string, count?: number) => Promise<void>;
   _clearNativeBadge: () => void;
   _registerPushTokenIfAvailable: () => Promise<void>;
+}
+
+/** Whether a profile's badge/filter sync should run: it's the mobile push
+ *  anchor profile, or it holds a live ES connection. Preserves the exact
+ *  pre-#337 behaviour (native direct mode syncs via the anchor; ES mode
+ *  syncs via the connection) while adding independent per-profile ES sync
+ *  for All-mode fan-out. */
+function _isProfileActive(state: Pick<NotificationState, 'currentProfileId' | 'connections'>, profileId: string): boolean {
+  return state.currentProfileId === profileId || state.connections[profileId] === 'connected';
+}
+
+/** Whether the app's current scope still owns `profileId`'s connection: it IS
+ *  that profile, or it is a virtual profile listing it as a member. Anything
+ *  else means no connector is left behind the socket. The All Servers clause
+ *  is legacy: the sentinel is retired and migrated away on rehydrate, so it
+ *  can only be current for the frames before that runs - dropping the clause
+ *  would tear down live connections in those frames. Refs #337. */
+function _aggregateOwnsConnection(appCurrentProfileId: string, profileId: string): boolean {
+  if (appCurrentProfileId === profileId || appCurrentProfileId === ALL_PROFILES_ID) return true;
+  if (!isVirtualProfileId(appCurrentProfileId)) return false;
+  const group = (useProfileStore.getState().virtualProfiles ?? []).find(
+    (v) => v.id === appCurrentProfileId
+  );
+  return !!group?.memberProfileIds.includes(asProfileId(profileId));
 }
 
 /**
@@ -139,11 +175,10 @@ export const useNotificationStore = create<NotificationState>()(
     (set, get) => ({
       // Initial state
       profileSettings: {},
-      connectionState: 'disconnected',
-      isConnected: false,
+      connections: {},
       currentProfileId: null,
       profileEvents: {},
-      _cleanupFunctions: [],
+      _cleanupFunctions: {},
 
       // ========== Settings Actions ==========
 
@@ -165,14 +200,15 @@ export const useNotificationStore = create<NotificationState>()(
           },
         }));
 
-        // If enabled state changed to false, disconnect if this is the current profile
-        if ('enabled' in updates && !updates.enabled && get().currentProfileId === profileId) {
-          get().disconnect();
+        // If enabled state changed to false, disconnect this profile.
+        // disconnect() is a no-op for a profile with no active connection.
+        if ('enabled' in updates && !updates.enabled) {
+          get().disconnect(profileId);
         }
 
-        // If monitor filters changed and connected for this profile, update server
-        if ('monitorFilters' in updates && get().isConnected && get().currentProfileId === profileId) {
-          get()._syncMonitorFilters();
+        // If monitor filters changed and this profile is ES-connected, update server
+        if ('monitorFilters' in updates && get().connections[profileId] === 'connected') {
+          get()._syncMonitorFilters(profileId);
         }
       },
 
@@ -205,9 +241,9 @@ export const useNotificationStore = create<NotificationState>()(
           };
         });
 
-        // Update server if connected for this profile
-        if (get().isConnected && get().currentProfileId === profileId) {
-          get()._syncMonitorFilters();
+        // Update server if this profile is ES-connected
+        if (get().connections[profileId] === 'connected') {
+          get()._syncMonitorFilters(profileId);
         }
       },
 
@@ -229,9 +265,9 @@ export const useNotificationStore = create<NotificationState>()(
           };
         });
 
-        // Update server if connected for this profile
-        if (get().isConnected && get().currentProfileId === profileId) {
-          get()._syncMonitorFilters();
+        // Update server if this profile is ES-connected
+        if (get().connections[profileId] === 'connected') {
+          get()._syncMonitorFilters(profileId);
         }
       },
 
@@ -250,13 +286,6 @@ export const useNotificationStore = create<NotificationState>()(
           return;
         }
 
-        // Disconnect if already connected to a different profile
-        if (get().isConnected && get().currentProfileId !== profileId) {
-          log.notifications('Disconnecting from previous profile', LogLevel.INFO, { previousProfile: get().currentProfileId,
-            newProfile: profileId });
-          get().disconnect();
-        }
-
         log.notifications('Connecting to notification server', LogLevel.INFO, { profileId,
           host: settings.host,
           port: settings.port,
@@ -271,19 +300,57 @@ export const useNotificationStore = create<NotificationState>()(
           appVersion: getAppVersion(),
         };
 
-        const service = getNotificationService();
+        // Every enabled profile gets its own service instance (refs #337),
+        // so connecting profile A never touches profile B's connection.
+        const service = getNotificationService(profileId);
 
-        // Setup listeners before connecting
-        get()._initialize();
+        // Setup this profile's listeners before connecting
+        get()._initialize(profileId);
 
         try {
           await service.connect(config, _buildServiceProviders(profileId, portalUrl));
 
-          // Mark which profile is connected
-          set({ currentProfileId: profileId });
+          const appCurrentProfileId = useProfileStore.getState().currentProfileId;
+
+          // The user switched away while this connect() was in flight: the
+          // switch-teardown effect already ran and found this profile not yet
+          // connected (it wasn't - the handshake was still in progress), so
+          // nothing will ever disconnect it. Do it here instead of leaking a
+          // fully connected, anchor-less websocket (refs #337 round 2 minor
+          // #2).
+          //
+          // The question is whether anything in the NEW scope still owns this
+          // connection. A real profile owns only its own. All Servers spans
+          // every enabled profile, so it owns them all. A virtual profile
+          // owns exactly its members - for a non-member (or a group id with
+          // no group behind it) nothing owns the socket, and exempting every
+          // aggregate id unconditionally would leave it streaming events for
+          // the rest of the session. null is not a switch-away at all (no
+          // app-level current profile yet), so there is nothing to tear down.
+          if (appCurrentProfileId && !_aggregateOwnsConnection(appCurrentProfileId, profileId)) {
+            log.notifications('Profile switched away while connecting - disconnecting the now-ownerless socket', LogLevel.INFO, {
+              profileId,
+              appCurrentProfileId,
+            });
+            get().disconnect(profileId);
+            return;
+          }
+
+          // Anchor push/badge bookkeeping only when this IS the app's real
+          // current profile (single mode). Under an aggregate the app's
+          // currentProfileId is a sentinel or group id, which never
+          // equals any real profileId, so no connector's connect() call here
+          // ever races to overwrite the anchor with "whichever profile
+          // connected last" - it simply keeps whatever it was before All
+          // mode was entered (refs #337 I4). Push registration isn't a thing
+          // in All mode on web anyway (no FCM there), so that pre-All value
+          // is never actually read for push purposes while aggregating.
+          if (appCurrentProfileId === profileId) {
+            set({ currentProfileId: profileId });
+          }
 
           // Sync monitor filters after connection
-          get()._syncMonitorFilters();
+          get()._syncMonitorFilters(profileId);
 
           log.notifications('Successfully connected to notification server', LogLevel.INFO, { profileId, });
 
@@ -291,29 +358,44 @@ export const useNotificationStore = create<NotificationState>()(
           get()._registerPushTokenIfAvailable();
 
           // Sync badge count with server after connect
-          get()._updateBadge();
+          get()._updateBadge(profileId);
         } catch (error) {
           log.notifications('Failed to connect to notification server', LogLevel.ERROR, { profileId, error });
           throw error;
         }
       },
 
-      disconnect: () => {
-        log.notifications('Disconnecting from notification server', LogLevel.INFO, { profileId: get().currentProfileId });
+      disconnect: (profileId: string) => {
+        log.notifications('Disconnecting from notification server', LogLevel.INFO, { profileId });
 
-        get()._cleanup();
-        resetNotificationService();
+        get()._cleanup(profileId);
+        resetNotificationService(profileId);
 
-        set({
-          connectionState: 'disconnected',
-          isConnected: false,
-          currentProfileId: null,
-        });
+        set((state) => ({
+          connections: { ...state.connections, [profileId]: 'disconnected' },
+          currentProfileId: state.currentProfileId === profileId ? null : state.currentProfileId,
+        }));
       },
 
-      reconnect: async (force = false) => {
-        log.notifications('Triggering reconnect', LogLevel.INFO, { force });
-        const service = getNotificationService();
+      disconnectAll: () => {
+        // Per-profile disconnect() first: cleans up this store's own state
+        // (listener unsubscribes, connections map, anchor) for every profile
+        // it knows about.
+        Object.keys(get().connections).forEach((profileId) => get().disconnect(profileId));
+        // Then sweep the service registry directly: a service can exist
+        // there without ever appearing in `connections` (e.g. a lazily
+        // created instance from a checkAlive() call that never went through
+        // connect()/_initialize), and `connections` alone would miss it
+        // (refs #337 round 2 minor #3).
+        resetAllNotificationServices();
+        // Direct-mode pollers aren't tracked in `connections` either, so
+        // sweep them separately.
+        stopAllEventPollers();
+      },
+
+      reconnect: async (profileId: string, force = false) => {
+        log.notifications('Triggering reconnect', LogLevel.INFO, { profileId, force });
+        const service = getNotificationService(profileId);
         service.reconnectNow(force);
       },
 
@@ -360,8 +442,8 @@ export const useNotificationStore = create<NotificationState>()(
         );
 
         // Sync badge count with server so future push notifications use the correct number
-        if (get().currentProfileId === profileId) {
-          get()._updateBadge();
+        if (_isProfileActive(get(), profileId)) {
+          get()._updateBadge(profileId);
         }
       },
 
@@ -372,9 +454,9 @@ export const useNotificationStore = create<NotificationState>()(
           )
         );
 
-        // Update badge on server if this is the connected profile
-        if (get().currentProfileId === profileId) {
-          get()._updateBadge();
+        // Update badge on server if this profile is active
+        if (_isProfileActive(get(), profileId)) {
+          get()._updateBadge(profileId);
         }
       },
 
@@ -398,9 +480,9 @@ export const useNotificationStore = create<NotificationState>()(
 
         get()._clearNativeBadge();
 
-        // Update badge on server if this is the connected profile
-        if (get().currentProfileId === profileId) {
-          get()._updateBadge();
+        // Update badge on server if this profile is active
+        if (_isProfileActive(get(), profileId)) {
+          get()._updateBadge(profileId);
         }
       },
 
@@ -413,16 +495,17 @@ export const useNotificationStore = create<NotificationState>()(
 
         get()._clearNativeBadge();
 
-        // Update badge on server if this is the connected profile
-        if (get().currentProfileId === profileId) {
-          get()._updateBadge();
+        // Update badge on server if this profile is active
+        if (_isProfileActive(get(), profileId)) {
+          get()._updateBadge(profileId);
         }
       },
 
       // ========== Push Token Actions ==========
 
       registerPushToken: async (token: string, platform: 'ios' | 'android') => {
-        const { isConnected, currentProfileId } = get();
+        const { currentProfileId, connections } = get();
+        const isConnected = !!currentProfileId && connections[currentProfileId] === 'connected';
 
         if (!isConnected || !currentProfileId) {
           log.notifications('Cannot register push token - not connected', LogLevel.WARN);
@@ -431,7 +514,7 @@ export const useNotificationStore = create<NotificationState>()(
 
         log.notifications('Registering push token', LogLevel.INFO, { platform, profileId: currentProfileId });
 
-        const service = getNotificationService();
+        const service = getNotificationService(currentProfileId);
         const settings = get().getProfileSettings(currentProfileId);
         const { monitorFilters } = settings;
 
@@ -444,7 +527,8 @@ export const useNotificationStore = create<NotificationState>()(
       },
 
       deregisterPushToken: async (token: string, platform: 'ios' | 'android') => {
-        const { isConnected, currentProfileId } = get();
+        const { currentProfileId, connections } = get();
+        const isConnected = !!currentProfileId && connections[currentProfileId] === 'connected';
 
         if (!isConnected || !currentProfileId) {
           log.notifications('Cannot deregister push token - not connected', LogLevel.WARN);
@@ -453,57 +537,62 @@ export const useNotificationStore = create<NotificationState>()(
 
         log.notifications('Deregistering push token', LogLevel.INFO, { platform, profileId: currentProfileId });
 
-        const service = getNotificationService();
+        const service = getNotificationService(currentProfileId);
         const profile = useProfileStore.getState().profiles.find(p => p.id === currentProfileId);
         await service.deregisterPushToken(token, platform, profile?.name);
       },
 
       // ========== Internal Methods ==========
 
-      _initialize: () => {
-        const service = getNotificationService();
+      _initialize: (profileId: string) => {
+        // Drop any stale listeners from a previous _initialize(profileId)
+        // that was never matched by a _cleanup - otherwise the service's
+        // onEvent/onStateChange Sets (services/notifications.ts) accumulate
+        // duplicate callbacks and every event/state change fires twice
+        // (refs #337 #10).
+        get()._cleanup(profileId);
 
-        // Listen for connection state changes
+        const service = getNotificationService(profileId);
+
+        // Listen for connection state changes - scoped to this profile only
         const unsubscribeState = service.onStateChange((state) => {
-          log.notifications('Connection state changed', LogLevel.INFO, { state });
-          set({
-            connectionState: state,
-            isConnected: state === 'connected',
-          });
+          log.notifications('Connection state changed', LogLevel.INFO, { profileId, state });
+          set((s) => ({ connections: { ...s.connections, [profileId]: state } }));
         });
 
-        // Listen for alarm events
+        // Listen for alarm events. Each connection's callback binds its OWN
+        // profileId - never read a shared "current" profile here, or an
+        // event from profile B's socket could land in profile A's history
+        // once more than one profile is connected at once (refs #337).
         const unsubscribeEvents = service.onEvent((event) => {
-          const { currentProfileId } = get();
-          if (currentProfileId) {
-            get().addEvent(currentProfileId, event);
-            // Toast display and sound playback are handled by NotificationHandler,
-            // which reacts to the added event and reads showToasts/playSound itself.
-          }
+          get().addEvent(profileId, event);
+          // Toast display and sound playback are handled by NotificationHandler,
+          // which reacts to the added event and reads showToasts/playSound itself.
         });
 
-        // Store cleanup functions in state instead of window object
-        set({
-          _cleanupFunctions: [unsubscribeState, unsubscribeEvents],
-        });
+        // Store cleanup functions per profile instead of window object
+        set((s) => ({
+          _cleanupFunctions: {
+            ...s._cleanupFunctions,
+            [profileId]: [unsubscribeState, unsubscribeEvents],
+          },
+        }));
       },
 
-      _cleanup: () => {
-        const { _cleanupFunctions } = get();
-        if (_cleanupFunctions && _cleanupFunctions.length > 0) {
-          _cleanupFunctions.forEach((fn) => fn());
-          set({ _cleanupFunctions: [] });
+      _cleanup: (profileId: string) => {
+        const fns = get()._cleanupFunctions[profileId];
+        if (fns && fns.length > 0) {
+          fns.forEach((fn) => fn());
+          set((s) => {
+            const _cleanupFunctions = { ...s._cleanupFunctions };
+            delete _cleanupFunctions[profileId];
+            return { _cleanupFunctions };
+          });
         }
       },
 
-      _syncMonitorFilters: async () => {
-        const { currentProfileId } = get();
-        if (!currentProfileId) {
-          log.notifications('Cannot sync monitor filters - no profile connected', LogLevel.WARN);
-          return;
-        }
-
-        const settings = get().getProfileSettings(currentProfileId);
+      _syncMonitorFilters: async (profileId: string) => {
+        const settings = get().getProfileSettings(profileId);
         const { monitorFilters } = settings;
         const enabledFilters = monitorFilters.filter((f) => f.enabled);
 
@@ -519,59 +608,53 @@ export const useNotificationStore = create<NotificationState>()(
           const interval = settings.allMonitors ? 0 : Math.max(0, ...enabledFilters.map(f => f.checkInterval));
 
           log.notifications('Syncing monitor filters via ZM API', LogLevel.INFO, {
-            profileId: currentProfileId,
+            profileId,
             notificationId: notifId,
             monitorList: monitorList || '(all)',
             interval,
           });
 
           try {
-            await updateNotification(getSession(asProfileId(currentProfileId)).client, notifId, {
+            await updateNotification(getSession(asProfileId(profileId)).client, notifId, {
               monitorList: monitorList || undefined,
               interval,
             });
           } catch (error) {
             // Non-blocking: the next settings change retries the sync
-            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.WARN, { profileId: currentProfileId, error });
+            log.notifications('Failed to sync monitor filters via ZM API', LogLevel.WARN, { profileId, error });
           }
         } else {
           // ES mode: sync via websocket
           // When allMonitors is on, don't send a filter: ES treats empty monlist as "all monitors"
           if (settings.allMonitors) {
-            log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId: currentProfileId });
+            log.notifications('All monitors enabled, skipping filter sync', LogLevel.INFO, { profileId });
             return;
           }
 
           if (enabledFilters.length === 0) {
-            log.notifications('No enabled monitor filters to sync', LogLevel.INFO, { profileId: currentProfileId });
+            log.notifications('No enabled monitor filters to sync', LogLevel.INFO, { profileId });
             return;
           }
 
           const monitorIds = enabledFilters.map((f) => f.monitorId);
           const intervals = enabledFilters.map((f) => f.checkInterval);
 
-          log.notifications('Syncing monitor filters with server', LogLevel.INFO, { profileId: currentProfileId,
+          log.notifications('Syncing monitor filters with server', LogLevel.INFO, { profileId,
             monitors: monitorIds,
             intervals, });
 
           try {
-            const service = getNotificationService();
+            const service = getNotificationService(profileId);
             await service.setMonitorFilter(monitorIds, intervals);
           } catch (error) {
             // Non-blocking: the next settings change retries the sync
-            log.notifications('Failed to sync monitor filters', LogLevel.WARN, { profileId: currentProfileId, error });
+            log.notifications('Failed to sync monitor filters', LogLevel.WARN, { profileId, error });
           }
         }
       },
 
-      _updateBadge: async (count?: number) => {
-        const { currentProfileId } = get();
-        if (!currentProfileId) {
-          log.notifications('Cannot update badge - no profile connected', LogLevel.WARN);
-          return;
-        }
-
-        const settings = get().getProfileSettings(currentProfileId);
+      _updateBadge: async (profileId: string, count?: number) => {
+        const settings = get().getProfileSettings(profileId);
         const badgeCount = count ?? settings.badgeCount;
 
         // Set the iOS/Android app icon badge locally
@@ -590,19 +673,19 @@ export const useNotificationStore = create<NotificationState>()(
             // Direct mode: update badge count via ZM REST API
             const notifId = settings.notificationId;
             if (notifId) {
-              await updateNotification(getSession(asProfileId(currentProfileId)).client, notifId, { badgeCount });
+              await updateNotification(getSession(asProfileId(profileId)).client, notifId, { badgeCount });
               log.notifications('Updated badge count via ZM API', LogLevel.DEBUG, { badgeCount, notifId });
             } else {
               log.notifications('Cannot update badge - no notification ID (token not registered)', LogLevel.WARN);
             }
           } else {
             // ES mode: update badge count via WebSocket
-            const service = getNotificationService();
+            const service = getNotificationService(profileId);
             await service.updateBadgeCount(badgeCount);
           }
         } catch (error) {
           // Non-blocking: the badge resyncs on the next event or read action
-          log.notifications('Failed to update badge count', LogLevel.WARN, { profileId: currentProfileId, error });
+          log.notifications('Failed to update badge count', LogLevel.WARN, { profileId, error });
         }
       },
 
@@ -712,13 +795,15 @@ export function startEventPoller(profileId: string): Promise<void> {
       return resolvePollIntervalMs(bandwidthMode, pollingInterval);
     },
     getPortalUrl: () => {
-      const { profiles, currentProfileId } = useProfileStore.getState();
-      return profiles.find((p) => p.id === currentProfileId)?.portalUrl;
+      // This profile's own portal, not the app's currently-viewed profile:
+      // in All mode a poller can run for a profile other than the picked
+      // one (refs #337).
+      const { profiles } = useProfileStore.getState();
+      return profiles.find((p) => p.id === profileId)?.portalUrl;
     },
-    getMinStreamingPort: () =>
-      getEffectiveMinStreamingPort(useProfileStore.getState().currentProfileId),
+    getMinStreamingPort: () => getEffectiveMinStreamingPort(profileId),
   };
-  return getEventPoller().start(profileId, deps);
+  return getEventPoller(profileId).start(profileId, deps);
 }
 
 // services/pushNotifications.ts has no zustand imports; this store assembles
@@ -729,7 +814,10 @@ setPushServiceStoreGates({
   notifications: {
     getCurrentProfileId: () => useNotificationStore.getState().currentProfileId,
     getProfileSettings: (profileId) => useNotificationStore.getState().getProfileSettings(profileId),
-    isConnected: () => useNotificationStore.getState().isConnected,
+    isConnected: () => {
+      const { currentProfileId, connections } = useNotificationStore.getState();
+      return !!currentProfileId && connections[currentProfileId] === 'connected';
+    },
     updateProfileSettings: (profileId, updates) =>
       useNotificationStore.getState().updateProfileSettings(profileId, updates),
     deregisterPushToken: (token, platform) =>
@@ -742,6 +830,7 @@ setPushServiceStoreGates({
   profile: {
     getProfiles: () => useProfileStore.getState().profiles,
     getDecryptedPassword: (profileId) => useProfileStore.getState().getDecryptedPassword(profileId),
+    getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
   },
   auth: {
     getAccessToken: () => getAuthSlice(useProfileStore.getState().currentProfileId).accessToken,

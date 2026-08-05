@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useOpenMonitorEvents } from '../useOpenMonitorEvents';
 import { useMonitorSeenStore } from '../../stores/monitorSeen';
+import { asProfileId } from '../../api/types';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -125,5 +126,31 @@ describe('useOpenMonitorEvents', () => {
     const params = new URLSearchParams(url.split('?')[1]);
     expect(params.get('startDateTime')).toBe('2026-07-01T00:00:01');
     expect(useMonitorSeenStore.getState().getWatermark('p1', '1')).toBe('2026-07-10 09:15:00');
+  });
+
+  it('marks the owning profile B as seen when opened from an All-mode card, leaving current profile A untouched', () => {
+    // currentProfile is A (mocked above as 'p1'). Opening B's monitor from an
+    // All-mode card must write B's watermark, not A's - the bug this hook
+    // used to have (refs #337, Task 5).
+    useMonitorSeenStore.getState().seed('p1', '1', '2026-07-01 00:00:00');
+    useMonitorSeenStore.getState().seed('p2', '1', '2026-07-01 00:00:00');
+    const { result } = renderHook(() => useOpenMonitorEvents());
+
+    act(() => {
+      result.current({
+        monitorId: '1',
+        newEventCount: 2,
+        newestEventAt: '2026-07-10 09:15:00',
+        from: '/monitors',
+        profileId: asProfileId('p2'),
+      });
+    });
+
+    expect(useMonitorSeenStore.getState().getWatermark('p2', '1')).toBe('2026-07-10 09:15:00');
+    expect(useMonitorSeenStore.getState().getWatermark('p1', '1')).toBe('2026-07-01 00:00:00');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/events?monitorId=1&startDateTime=2026-07-01T00%3A00%3A01&profileId=p2',
+      { state: { from: '/monitors' } }
+    );
   });
 });

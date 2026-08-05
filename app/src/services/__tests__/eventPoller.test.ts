@@ -38,7 +38,7 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { getEventPoller } from '../eventPoller';
+import { getEventPoller, stopAllEventPollers, stopEventPoller } from '../eventPoller';
 
 // --- Helpers ---
 
@@ -84,19 +84,64 @@ describe('EventPollerService', () => {
   });
 
   afterEach(() => {
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     poller.stop();
     vi.useRealTimers();
   });
 
-  it('getEventPoller() returns a singleton', () => {
-    const a = getEventPoller();
-    const b = getEventPoller();
+  it('getEventPoller(id) returns the same instance for the same profile id', () => {
+    const a = getEventPoller('profile-1');
+    const b = getEventPoller('profile-1');
     expect(a).toBe(b);
   });
 
+  it('getEventPoller(id) returns a distinct instance per profile id', () => {
+    const a = getEventPoller('profile-1');
+    const b = getEventPoller('profile-2');
+    expect(a).not.toBe(b);
+  });
+
+  describe('stopEventPoller (refs #337 I5)', () => {
+    it('stops and evicts a running poller', async () => {
+      const poller = getEventPoller('profile-1');
+      await poller.start('profile-1', deps);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(poller.isRunning()).toBe(true);
+
+      stopEventPoller('profile-1');
+
+      expect(poller.isRunning()).toBe(false);
+      // Evicted from the registry: a fresh getEventPoller call returns a
+      // brand new instance instead of the (now-stopped) one above.
+      expect(getEventPoller('profile-1')).not.toBe(poller);
+    });
+
+    it('is a no-op for a profile that was never polled - no phantom registry entry', () => {
+      // A profile that only ever used ES mode has no poller. Calling
+      // getEventPoller(id).stop() here would silently create-then-orphan a
+      // never-started instance; stopEventPoller must not do that.
+      expect(() => stopEventPoller('never-started-profile')).not.toThrow();
+    });
+  });
+
+  it('two profiles poll independently and stopAllEventPollers stops both', async () => {
+    const a = getEventPoller('profile-1');
+    const b = getEventPoller('profile-2');
+    await a.start('profile-1', deps);
+    await b.start('profile-2', { ...makeDeps() });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(a.isRunning()).toBe(true);
+    expect(b.isRunning()).toBe(true);
+
+    stopAllEventPollers();
+
+    expect(a.isRunning()).toBe(false);
+    expect(b.isRunning()).toBe(false);
+  });
+
   it('start() loads monitor names and begins polling', async () => {
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     // _pollAndSchedule sets the timer inside .finally(), flush microtasks
     await vi.advanceTimersByTimeAsync(0);
@@ -111,7 +156,7 @@ describe('EventPollerService', () => {
       events: [makeEvent(100), makeEvent(101)],
     });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     expect(deps.onEvent).not.toHaveBeenCalled();
@@ -123,7 +168,7 @@ describe('EventPollerService', () => {
       events: [makeEvent(100), makeEvent(101)],
     });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     expect(deps.onEvent).not.toHaveBeenCalled();
 
@@ -149,7 +194,7 @@ describe('EventPollerService', () => {
   it('builds image URLs with the injected token', async () => {
     mockGetEvents.mockResolvedValueOnce({ events: [] });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(300)] });
@@ -168,7 +213,7 @@ describe('EventPollerService', () => {
     deps.getFreshAccessToken.mockResolvedValue(null);
     mockGetEvents.mockResolvedValueOnce({ events: [] });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     mockGetEvents.mockResolvedValueOnce({ events: [makeEvent(301)] });
@@ -185,7 +230,7 @@ describe('EventPollerService', () => {
       events: [makeEvent(200)],
     });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     // Second poll returns the same event
@@ -201,7 +246,7 @@ describe('EventPollerService', () => {
   it('uses the injected poll interval', async () => {
     deps.getPollIntervalMs.mockReturnValue(10_000);
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     await vi.advanceTimersByTimeAsync(0);
     expect(mockGetEvents).toHaveBeenCalledTimes(1);
@@ -211,7 +256,7 @@ describe('EventPollerService', () => {
   });
 
   it('stop() clears the timer and resets state', async () => {
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     await vi.advanceTimersByTimeAsync(0);
     expect(poller.isRunning()).toBe(true);
@@ -221,14 +266,14 @@ describe('EventPollerService', () => {
   });
 
   it('isRunning() reflects the running state', () => {
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     expect(poller.isRunning()).toBe(false);
   });
 
   it('applies notesRegexp filter when onlyDetectedEvents is enabled', async () => {
     deps.getOnlyDetectedEvents.mockReturnValue(true);
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     expect(mockGetEvents).toHaveBeenCalledWith(
@@ -245,7 +290,7 @@ describe('EventPollerService', () => {
     const seedEvents = Array.from({ length: 5 }, (_, i) => makeEvent(i));
     mockGetEvents.mockResolvedValueOnce({ events: seedEvents });
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
 
     // Build up past 500 seen IDs across multiple polls
@@ -275,7 +320,7 @@ describe('EventPollerService', () => {
   it('recovers the monitor name when the startup load failed', async () => {
     mockGetMonitors.mockRejectedValueOnce(new Error('401 during profile switch'));
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     await vi.advanceTimersByTimeAsync(0);
 
@@ -292,7 +337,7 @@ describe('EventPollerService', () => {
     // Poll faster than the reload window so several polls fall inside it.
     deps.getPollIntervalMs.mockReturnValue(10_000);
 
-    const poller = getEventPoller();
+    const poller = getEventPoller('profile-1');
     await poller.start('profile-1', deps);
     await vi.advanceTimersByTimeAsync(0);
     expect(mockGetMonitors).toHaveBeenCalledTimes(1);

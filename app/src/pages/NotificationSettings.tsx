@@ -10,14 +10,19 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
+import { useSettingsStore, type AllModeNotifications } from '../stores/settings';
 import { getMonitors } from '../api/monitors';
 import { useAuthSlice } from '../stores/auth';
+import { ProfilePicker } from '../components/profile-picker';
+import { type ProfileId } from '../api/types';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
 import {
   Bell,
@@ -35,27 +40,54 @@ import { Platform } from '../lib/platform';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
-import { getCurrentSession } from '../services/sessions';
-import { getEventPoller } from '../services/eventPoller';
+import { getSession } from '../services/sessions';
+import { getEventPoller, stopEventPoller } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { NotificationModeSection } from '../components/notifications/NotificationModeSection';
 import { ServerConfigSection } from '../components/notifications/ServerConfigSection';
 import { MonitorFilterSection } from '../components/notifications/MonitorFilterSection';
+import { NotificationOverview } from '../components/notifications/NotificationOverview';
 
 export default function NotificationSettings() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile: singleProfile, isAllMode } = useCurrentProfile();
+  const scope = useProfileScope();
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
+  const defaultPickedId = isAllMode ? (pickedProfileId ?? scope?.profiles[0]?.id) : undefined;
+  const { profile: allModeProfile } = useProfileById(defaultPickedId);
+  // Single mode: the page's own current profile, byte-identical to before.
+  // All mode: the picked profile (defaults to the first in scope). ES
+  // registration is per profile (refs #337), so this page is entirely
+  // server-scoped - one picker gates the whole page, not sub-sections.
+  const currentProfile = isAllMode ? allModeProfile : singleProfile;
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
   const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);
   const connect = useNotificationStore((s) => s.connect);
-  const disconnect = useNotificationStore((s) => s.disconnect);
-  const connectionState = useNotificationStore((s) => s.connectionState);
-  const isConnected = useNotificationStore((s) => s.isConnected);
+  const storeDisconnect = useNotificationStore((s) => s.disconnect);
+  const connectionState = useNotificationStore((s) => s.connections[currentProfile?.id ?? ''] ?? 'disconnected');
+  const isConnected = connectionState === 'connected';
+  const disconnect = () => currentProfile && storeDisconnect(currentProfile.id);
+
+  // All-mode notifications (live/muted/off): an aggregate-bucket app setting
+  // (not a per-profile notification setting), so it lives in the settings
+  // store under the active aggregate's own id - the ALL sentinel, or a group's
+  // id when a group is current (refs #337). `scope.settings` is already that
+  // aggregate's merged bucket whenever scope.mode is 'all' (useProfileScope),
+  // so no extra selector is needed, and `aggregateId` names the same bucket
+  // to write back to.
+  const allModeNotifications = scope?.settings.allModeNotifications ?? 'live';
+  const aggregateId = scope?.mode === 'all' ? scope.aggregateId : null;
+  // What the row calls itself: the group's name. The All Servers fallback is
+  // legacy - only the retired sentinel has no stored name, and it is migrated
+  // away on rehydrate (refs #337).
+  const aggregateName =
+    (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
+  const updateAllModeSettings = useSettingsStore((s) => s.updateProfileSettings);
 
   // Subscribe reactively to this profile's settings and unread count so the
   // enable switch and dependent sections update live. getProfileSettings is a
@@ -71,7 +103,7 @@ export default function NotificationSettings() {
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+    queryFn: () => getMonitors(getSession(currentProfile!.id).client, currentProfile!.id),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -84,7 +116,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     if (!currentProfile || !isAuthenticated) return;
 
-    checkNotificationsApiSupport(getCurrentSession().client)
+    checkNotificationsApiSupport(getSession(currentProfile.id).client)
       .then((supported) => {
         setDirectModeAvailable(supported);
         log.notificationSettings('ZM Notifications API support check', LogLevel.INFO, { supported });
@@ -199,10 +231,7 @@ export default function NotificationSettings() {
       toast.info(t('notification_settings.mode_switched_direct'));
     } else if (currentMode === 'direct' && mode === 'es') {
       // Switching from Direct to ES: stop poller, connect websocket
-      const poller = getEventPoller();
-      if (poller.isRunning()) {
-        poller.stop();
-      }
+      stopEventPoller(currentProfile.id);
 
       updateProfileSettings(currentProfile.id, { notificationMode: 'es' });
 
@@ -248,7 +277,7 @@ export default function NotificationSettings() {
 
   const handlePollingIntervalRestart = () => {
     if (!currentProfile) return;
-    const poller = getEventPoller();
+    const poller = getEventPoller(currentProfile.id);
     if (poller.isRunning()) {
       startEventPoller(currentProfile.id);
     }
@@ -326,6 +355,11 @@ export default function NotificationSettings() {
           <p className="text-muted-foreground mt-1">
             {t('notification_settings.subtitle')}
           </p>
+          {!isAllMode && (
+            <p className="text-xs text-muted-foreground mt-0.5" data-testid="notification-per-profile-caption">
+              {t('notification_settings.per_profile_caption')}
+            </p>
+          )}
         </div>
         <Button
           variant="outline"
@@ -336,6 +370,59 @@ export default function NotificationSettings() {
           {t('notification_settings.view_history')}
         </Button>
       </div>
+
+      {isAllMode && (
+        <>
+          <Card>
+            <CardContent className="flex items-center justify-between gap-3 p-4">
+              <div className="flex-1 space-y-0.5">
+                <Label htmlFor="all-mode-notifications-select" className="text-base font-semibold">
+                  {t('notification_settings.all_mode_notifications_label', { name: aggregateName })}
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  {t(`notification_settings.all_mode_notifications_${allModeNotifications}_desc`)}
+                </p>
+              </div>
+              <Select
+                value={allModeNotifications}
+                onValueChange={(value) =>
+                  aggregateId &&
+                  updateAllModeSettings(aggregateId, { allModeNotifications: value as AllModeNotifications })
+                }
+              >
+                <SelectTrigger
+                  id="all-mode-notifications-select"
+                  className="w-32"
+                  data-testid="all-mode-notifications-select"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="live" data-testid="all-mode-notifications-option-live">
+                    {t('notification_settings.all_mode_notifications_live')}
+                  </SelectItem>
+                  <SelectItem value="muted" data-testid="all-mode-notifications-option-muted">
+                    {t('notification_settings.all_mode_notifications_muted')}
+                  </SelectItem>
+                  <SelectItem value="off" data-testid="all-mode-notifications-option-off">
+                    {t('notification_settings.all_mode_notifications_off')}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+          <NotificationOverview
+            profiles={scope?.profiles ?? []}
+            activeProfileId={defaultPickedId}
+            onSelect={setPickedProfileId}
+          />
+          <ProfilePicker
+            profiles={scope?.profiles ?? []}
+            value={defaultPickedId}
+            onChange={setPickedProfileId}
+          />
+        </>
+      )}
 
       <div className="grid gap-4">
         {/* Enable/Disable */}

@@ -9,6 +9,19 @@ export interface TimelineEvent {
   notes: string;
   /** Timestamp (ms) when this event was injected in live mode. Used for pulse animation. */
   arrivedAt?: number;
+  /** All mode only: the owning profile's display name, for chip labels. */
+  profileChip?: string;
+  /** All mode only: the owning profile id. Consumers that need to resolve
+   *  that profile's own session (the scrubber's preview thumbnail, a
+   *  scrubber tap) read this instead of the (absent or wrong) current
+   *  profile. Undefined in single mode (refs #337 Task 2/3). */
+  profileId?: string;
+  /** All mode only: `monitorId` above is overwritten with the composite
+   *  `${profileId}:${monitorId}` key so the renderer's event->row matching
+   *  doesn't collide across two profiles' servers (see Timeline.tsx's
+   *  canvasEvents mapping); this preserves the real numeric monitor id for
+   *  consumers that need to build a URL from it. Undefined in single mode. */
+  realMonitorId?: string;
 }
 
 /** Fixed layout dimensions for the timeline canvas. */

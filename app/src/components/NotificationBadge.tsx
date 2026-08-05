@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
 import { useProfileStore } from '../stores/profile';
 import { useNotificationStore } from '../stores/notifications';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { NOTIFICATION_UI } from '../lib/zmninja-ng-constants';
 import { HintButton } from './ui/button';
 
@@ -21,7 +22,18 @@ export function NotificationBadge() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
   const unreadCount = useNotificationStore((state) => {
+    // Aggregating: sum every scope profile's own bucket. No aggregate's
+    // bucket is ever written to (refs #337), so none is ever read here
+    // either - only real profile ids.
+    if (isAllMode) {
+      return scope.profiles.reduce(
+        (sum, p) => sum + (state.profileEvents[p.id] || []).filter((e) => !e.read).length,
+        0
+      );
+    }
     if (!currentProfileId) return 0;
     const events = state.profileEvents[currentProfileId] || [];
     return events.filter((e) => !e.read).length;

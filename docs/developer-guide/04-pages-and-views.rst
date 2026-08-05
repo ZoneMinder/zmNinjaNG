@@ -423,6 +423,122 @@ An eye-toggle button shows and hides the toolbar (group filter, grid
 controls, fit selector, refresh, edit, fullscreen). Stored per profile in
 ``settings.montageShowToolbar``. i18n key: ``montage.toggle_toolbar``.
 
+Keeping aggregation affordable
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One montage across four servers is four servers' worth of encoding and one
+client's worth of decoding, so the page carries five guardrails that only
+apply while aggregating (refs #337). All five read the ALL settings bucket,
+which ``useCurrentProfile`` already resolves to while the sentinel profile is
+current, and all five are computed inside an ``isAllMode`` branch: a single
+profile carries the same keys and must never be throttled by them.
+
+They compose in a fixed order, and the order is the part worth remembering.
+The stream budget runs first and decides which tiles exist at all. Everything
+after it decides what those tiles do: viewport gating and the hidden pause
+both stop a tile outright, the idle downgrade drops it to snapshots, and
+reduced tuning only changes what a still-streaming tile asks for. Stopping
+wins over downgrading, because ``paused`` disables the stream hooks before
+``forceViewMode`` can reach them, so a tile that is both idle and out of view
+holds no connection rather than polling snapshots nobody can see. A gated
+tile still occupies its budget slot: scrolling changes which tiles stream,
+never which monitors are on the page.
+
+Each tile is rendered by ``MontageMonitor``, which forwards the decisions to
+``LiveMonitorPlayer``. The page decides, the tile carries, the player acts.
+Live Activity renders the same ``MontageMonitor`` and passes none of them, so
+it is unaffected.
+
+**The stream budget.** ``settings.allModeMaxStreams`` caps how many tiles
+open at once. ``allocateStreamBudget`` (``src/lib/monitor/stream-budget.ts``)
+decides whose tiles those are. The scoped monitor list arrives clustered by
+profile, so slicing the first N gave the whole budget to whichever server
+sorted first and left later servers with nothing on screen. The slots are
+dealt round-robin in profile order instead, and a server with fewer monitors
+than its even share drops out of later passes so its unused slots go to
+servers that can fill them. The total is unchanged, which is why the overflow
+count above the grid still describes exactly the tiles that were dropped.
+
+**Reduced stream tuning.** ``settings.allModeStreamTuning`` set to
+``'reduced'`` runs each tile's stream options through ``tunedStreamOptions``
+(``src/lib/monitor/stream-tuning.ts``), which holds ``maxfps`` and ``scale``
+down to ``MONTAGE_GRID.reducedMaxFps`` and ``MONTAGE_GRID.reducedScale``.
+They are ceilings and never floors, so a profile the user has already
+throttled below them keeps its own values. Both are ZMS query parameters, so
+this reaches the MJPEG path only; a go2rtc tile is served from an existing
+RTSP stream that neither parameter touches.
+
+**Pause while hidden.** ``settings.allModePauseHidden`` turns on
+``useHiddenPause`` (``src/hooks/useHiddenPause.ts``), one page-level watch on
+``visibilitychange``, seeded from the page's current state so a montage
+opened in a background tab pauses too. After
+``MONTAGE_GRID.pauseHiddenGraceMs`` out of sight it reports paused, and the
+player disables both stream hooks: the MJPEG
+lifecycle CMD_QUITs its connkey on the way down rather than orphaning an
+``nph-zms`` process, and ``useGo2RTCStream`` closes its own connection. The
+grace period is the debounce, because a teardown and reconnect of every tile
+costs more than the half minute of streaming it saves. Window blur is
+deliberately not a pause signal, unlike in ``useVisibilityResume``: on
+Electron a fully visible window on a second display fires it.
+
+**Viewport gating.** ``settings.allModeViewportGating`` turns on
+``useViewportGating`` (``src/hooks/useViewportGating.ts``), one
+IntersectionObserver for the whole grid rather than one per tile. Tiles hand
+an element to ``registerTile``, whose ref callback is memoized per tile id and
+kept for the life of the page. That map is also how an entry finds the
+composite tile id it belongs to, since raw monitor ids collide across servers.
+
+Both halves of that sentence are load-bearing, and each cost a round. The
+observed element is INSIDE the grid item rather than being the item itself,
+because ``react-grid-layout`` clones every child with ``ref:
+this.elementRef``, which replaces any ref on that element: a ref on the tile
+root is never called. And the callback cache must survive a detach. Dropping
+the entry when React calls the ref with ``null`` hands the next render a
+different callback for the same tile, React sees a new ref and detaches
+again, and the tile is observed, dropped and re-observed on every render;
+React's own StrictMode attach/detach/attach on mount is enough to start it.
+Either bug leaves every tile gated with nothing streaming, and the unit suite
+passed through both, because a mocked grid calls refs a real one ignores.
+
+The observer is rooted on the montage's scroll container, not the viewport.
+``rootMargin`` only expands the root, while an intermediate scroller clips
+without it, so a viewport-rooted observer would collapse
+``MONTAGE_GRID.viewportGatingRootMargin`` to nothing and tiles would connect
+only as they appeared. There is no scroll listener and nothing re-observes on
+layout change: react-grid-layout positions tiles with transforms, and the
+observer measures the element's real box, so a tile dragged or resized into
+view reports itself.
+
+Two asymmetries are deliberate. A tile nobody has measured yet counts as
+gated, because assuming the opposite mints a connkey for every off-screen
+tile on mount and quits it a frame later, which is the expensive half of a
+teardown for no streaming at all. That includes the first render, before the
+root exists: the root arrives from a ref, so waiting for it would render
+every tile ungated once and pay exactly that cost on every cold start, which
+is why gating is switched on by the setting alone and only the observer's
+construction waits for the element. And entering view connects at once while
+leaving it disconnects only after ``MONTAGE_GRID.viewportGatingLingerMs``, so
+scrolling down a tall montage does not quit and remint a key for every tile
+it passes. The gated tile takes the same ``paused`` prop the hidden pause
+uses, so the teardown path, the fresh key on return and the waiting
+placeholder are all the ones that already existed.
+
+**Idle downgrade.** ``settings.allModeIdleMinutes`` turns on
+``useIdleAfter`` (``src/hooks/useIdleAfter.ts``), one passive document
+listener for pointer, key and touch activity (plus a return to the page,
+which counts as looking at it, while leaving does not), throttled by
+``MONTAGE_GRID.idleActivityThrottleMs`` because a dragged pointer fires
+hundreds of events a second and each one would otherwise rebuild the timer.
+Going idle passes ``forceViewMode='snapshot'`` down to the player, which is
+the same override the single-monitor page uses, so tiles land on the existing
+periodic-snapshot path rather than a new render branch. Leaving streaming is a
+teardown, so each tile's live connkey is quit as it goes; that closure lives in
+``useStreamLifecycle`` rather than here, because the Streaming Mode setting
+reaches the same transition (see
+:doc:`12-shared-services-and-components`). It is independent of
+insomnia on purpose: a montage left up on a display insomnia is keeping awake
+is the case it exists for.
+
 Monitors
 --------
 
@@ -966,6 +1082,42 @@ profile:
 .. code:: tsx
 
    const currentProfileId = useProfileStore((state) => state.currentProfileId);
+
+Naming the active aggregate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A virtual profile is a stored group, so its label is the name the user gave
+it. The localized ``profiles.all_servers`` label is the legacy fallback for
+the retired All Servers sentinel, which has nothing stored behind it and is
+migrated away on rehydrate (refs #337). Nothing should branch on that in a
+component.
+
+While a surface is describing the aggregate it is already in, take the name
+off the scope:
+
+.. code:: tsx
+
+   const scope = useProfileScope();
+   const aggregateName =
+     (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
+
+``aggregateName`` is ``null`` only for the retired sentinel, which is why the
+localized label is the fallback rather than a value the hook invents. Settings
+uses this for its aggregate section headings.
+
+When a surface names an aggregate it is *not* in, the scope cannot answer:
+the profile switcher and the Profiles page both announce the aggregate they
+are switching to, before the switch. Use ``useAggregateLabel``
+(``src/hooks/useAggregateLabel.ts``), which resolves any aggregate id:
+
+.. code:: tsx
+
+   const aggregateLabel = useAggregateLabel();
+   const name = aggregateLabel(profileId); // the group's name
+
+An id with no group behind it (deleted in another tab, hand-edited storage)
+falls back to ``profiles.select_profile`` rather than an aggregate label, matching
+``useProfileScope``, which collapses that id to no scope at all.
 
 Loading and error states
 ~~~~~~~~~~~~~~~~~~~~~~~~

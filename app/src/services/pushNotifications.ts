@@ -13,7 +13,7 @@ import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import type { NotificationSettings, NotificationSource } from '../types/notifications';
 import type { Profile } from '../api/types';
-import { asProfileId } from '../api/types';
+import { asProfileId, isAggregateProfileId } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
 import { getSession } from './sessions';
 import { getAppVersion } from '../lib/version';
@@ -45,6 +45,10 @@ export interface PushServiceStoreGates {
   profile: {
     getProfiles(): Profile[];
     getDecryptedPassword(profileId: string): Promise<string | undefined>;
+    /** App-level active profile id (may be the All-mode sentinel), distinct
+     *  from notifications.getCurrentProfileId() which tracks the connected
+     *  ES/direct-poll profile only. */
+    getCurrentProfileId(): string | null;
   };
   auth: {
     getAccessToken(): string | null;
@@ -557,16 +561,46 @@ export class MobilePushService {
 
     const gates = getStoreGates();
     const currentProfileId = gates.notifications.getCurrentProfileId();
+    // App-level active profile: the only one that can carry an aggregate id -
+    // the All Servers sentinel or a virtual profile (the ES-connected profile
+    // above never does - there's no session for either). Outside an aggregate
+    // this is not consulted, so single-mode taps keep resolving off the
+    // ES-connected profile exactly as before (refs #337).
+    const appProfileId = gates.profile.getCurrentProfileId();
+    const isAllMode = isAggregateProfileId(appProfileId);
 
     // Resolve which profile this notification belongs to
     const { targetProfileId, isCrossProfile } = resolveProfileForNotification(
       data?.profile,
-      currentProfileId
+      isAllMode ? appProfileId : currentProfileId
     );
 
-    const profileIdForEvent = targetProfileId || currentProfileId;
+    // An aggregate with no (or an unmatched) profile in the payload resolves
+    // targetProfileId to the aggregate id itself
+    // (resolveProfileForNotification's absent-data early return echoes back
+    // whatever currentProfileId it was given, which is appProfileId here).
+    // Falling back straight to the generic /events list in that case drops
+    // the notification's history entry and deep link even though there IS
+    // a real profile available: the ES-connected one this app instance is
+    // actually listening on. Only when that is ALSO absent does the
+    // existing warn+/events fallback below apply (refs #337 I8).
+    const effectiveTargetProfileId =
+      isAllMode && (!targetProfileId || isAggregateProfileId(targetProfileId))
+        ? currentProfileId
+        : targetProfileId;
 
-    if (profileIdForEvent) {
+    const profileIdForEvent = effectiveTargetProfileId || currentProfileId;
+
+    // Never write into an aggregate's own bucket: nothing reads
+    // profileEvents[aggregateId] (NotificationBadge and NotificationHistory
+    // both key off a real profile id), so an entry there would be a
+    // permanently unread, unclearable stuck badge (refs #337).
+    //
+    // Defense in depth, not the load-bearing guard: the fallback just above
+    // has already swapped any aggregate id out for the ES-connected profile,
+    // so this condition is unreachable with an aggregate id today. It stays
+    // so a future change to that fallback cannot quietly start writing here.
+    if (profileIdForEvent && !isAggregateProfileId(profileIdForEvent)) {
       const profiles = gates.profile.getProfiles();
       const targetProfile = profiles.find(p => p.id === profileIdForEvent);
       const accessToken = gates.auth.getAccessToken();
@@ -624,6 +658,28 @@ export class MobilePushService {
         targetProfileName: targetProfile?.name || data?.profile || 'Unknown',
         eventId: String(eid),
       });
+    } else if (isAllMode) {
+      if (effectiveTargetProfileId && !isAggregateProfileId(effectiveTargetProfileId)) {
+        // Known (or ES-connected-fallback) profile while aggregating: no
+        // switch needed, deep-link straight into that profile's event via
+        // the /all/ route. The aggregate half of this condition is the same
+        // unreachable defense as the storage guard above - the fallback has
+        // already swapped an aggregate id out; what still decides the branch
+        // is whether there was any ES-connected profile to fall back to.
+        navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true }, effectiveTargetProfileId);
+        log.push('All-mode notification tap, navigating to owning profile event', LogLevel.INFO, {
+          targetProfileId: effectiveTargetProfileId,
+          eventId: eid,
+        });
+      } else {
+        // Unknown or absent profile while in All mode: no profile to
+        // deep-link into (there's no "current" session to fall back to
+        // either), so open the aggregated events list instead.
+        log.push('All-mode notification tap could not resolve a profile, opening aggregated events list', LogLevel.WARN, {
+          notificationProfile: data?.profile,
+        });
+        navigationService.navigate('/events', false, { from: '/monitors', fromNotification: true });
+      }
     } else {
       // Same profile: navigate directly (with fallback route for back button)
       navigationService.navigateToEvent(String(eid), { from: '/monitors', fromNotification: true });

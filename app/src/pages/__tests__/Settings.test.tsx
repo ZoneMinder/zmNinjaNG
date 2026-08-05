@@ -9,9 +9,15 @@ const updateProfileSettings = vi.fn();
 const logout = vi.fn();
 const changeLanguage = vi.fn();
 
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => null,
+}));
+
 vi.mock('../../hooks/useCurrentProfile', () => ({
+  useProfileById: () => ({ profile: null, settings: {} }),
   useCurrentProfile: () => ({
     currentProfile: { id: 'profile-1', name: 'Test Profile' },
+    isAllMode: false,
     settings: {
       viewMode: 'snapshot',
       displayMode: 'normal',

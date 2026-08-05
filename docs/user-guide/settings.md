@@ -116,6 +116,10 @@ A new profile picks a default based on the platform:
 
 Changing the Streaming Mode toggle overrides the default for that profile.
 
+#### While aggregating
+
+In a virtual profile group, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate aggregate Streaming Mode row appears at the top of the page, named after the group. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile in the aggregate for as long as you are aggregating; neither touches any profile's own setting, and neither carries between one aggregate and another.
+
 (connection-limits-by-platform)=
 
 #### Connection limits by platform
@@ -191,6 +195,34 @@ Manage the PIN used to lock and unlock kiosk mode. See {doc}`kiosk` for full det
 | **Set PIN** | Appears when no PIN is stored. Sets a new 4-digit PIN. |
 | **Change PIN** | Requires verifying your current PIN or biometrics before setting a new one. |
 | **Clear PIN** | Removes the PIN. Requires verifying the current PIN or biometrics first. |
+
+## Aggregate performance
+
+This section only appears while you are aggregating, above the server picker,
+because every row in it governs the combined view rather than one server. Its
+heading names the virtual profile group you are currently in, whose values are
+its own. Each row shows the value it ships
+with, and grows a reset button once you change it.
+
+Aggregating several servers multiplies work that one server does once: every
+tile is a separate live connection, and every watched camera is a separate
+request on every poll. The values that suit you depend on how many servers you
+combine and what your network and servers will take, which is why they are
+here rather than fixed.
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Maximum live streams** | 16 | Tiles the montage opens across every server at once. The slots are shared out evenly, so a server with many cameras cannot take the whole budget and leave another with none. The rest collapse into an overflow notice at the top of the grid. |
+| **Monitors watched for alarms** | 24 | Cameras {doc}`live-activity` polls across every server, drawn evenly from each so one busy server can't crowd the rest out. |
+| **Fastest alarm polling** | 10 seconds | A floor under the Live Activity check interval while aggregating. A slower interval set on that page still applies; this only stops the combined poll running faster than this. |
+| **Notification grouping** | 3 seconds | Events arriving from different servers within this window collapse into one summary notification instead of one each. |
+| **Stream tuning** | Off | On *Reduced*, montage tiles ask their server for 5 frames a second at quarter scale instead of what that server normally sends. A server you have already set lower than that keeps its own values, so this only ever asks for less. Go2RTC tiles are unaffected. |
+| **Pause hidden streams** | Off | Stops montage streams once the app has been in the background, or the window minimized, for 30 seconds, including when it opens that way. They come back when you do. A window merely covered by another window still counts as visible. |
+| **Pause off-screen tiles** | Off | Stops a montage tile once it has been scrolled a screen's worth past the edge of the grid, and starts it again as it comes back. The limit above still decides which cameras are on the page, so scrolling never brings an overflow camera in. |
+| **Idle timeout** | 0 (never) | Drops montage tiles to periodic snapshots after this many minutes with no touch, click or keypress. Any interaction puts them back on live streams, as does returning to the app. This runs whether or not *Keep screen awake* is on, which is the case it exists for. |
+
+None of these touch any profile's own settings, and none apply in single mode:
+a single server has nothing to fan out across.
 
 ## Multi-Server
 

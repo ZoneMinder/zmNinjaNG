@@ -4,20 +4,27 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useMonitorRecentEvents } from '../useMonitorRecentEvents';
 import { getEvents } from '../../api/events';
+import { asProfileId } from '../../api/types';
 
+const getSessionMock = vi.fn();
 vi.mock('../../api/events', () => ({ getEvents: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })) }));
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })),
+  getSession: (id: string) => getSessionMock(id),
+}));
 
 const updateProfileSettings = vi.fn();
 let hiddenList: string[] = [];
+const settingsFixture = {
+  monitorDetailRecentEventsCount: 5,
+  get monitorDetailRecentEventsHidden() { return hiddenList; },
+  bandwidthMode: 'normal',
+};
 vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'p1' },
-    settings: {
-      monitorDetailRecentEventsCount: 5,
-      get monitorDetailRecentEventsHidden() { return hiddenList; },
-      bandwidthMode: 'normal',
-    },
+  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: settingsFixture }),
+  useProfileById: (profileId?: string) => ({
+    profile: { id: profileId ?? 'p1' },
+    settings: settingsFixture,
   }),
 }));
 vi.mock('../../stores/auth', () => ({
@@ -66,5 +73,17 @@ describe('useMonitorRecentEvents', () => {
     expect(updateProfileSettings).toHaveBeenCalledWith('p1', {
       monitorDetailRecentEventsHidden: ['4'],
     });
+  });
+
+  it('fetches via the given profile\'s session and keys when profileId is provided (refs #337)', async () => {
+    const profileB = asProfileId('profile-b');
+    getSessionMock.mockReturnValue({ client: 'client-b', profileId: profileB });
+    (getEvents as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ events: [] });
+
+    renderHook(() => useMonitorRecentEvents('4', profileB), { wrapper });
+
+    await waitFor(() => expect(getEvents).toHaveBeenCalled());
+    expect(getSessionMock).toHaveBeenCalledWith(profileB);
+    expect(getEvents).toHaveBeenCalledWith('client-b', profileB, expect.objectContaining({ monitorId: '4' }));
   });
 });

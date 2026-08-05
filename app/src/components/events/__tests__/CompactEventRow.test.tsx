@@ -3,7 +3,9 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { CompactEventRow } from '../CompactEventRow';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../../stores/deleteSelection';
+import { asProfileId } from '../../../api/types';
+import { useProfileStore } from '../../../stores/profile';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -61,6 +63,21 @@ describe('CompactEventRow', () => {
     expect(navigate).toHaveBeenCalledWith('/events/233228', { state: { from: '/monitors/4' } });
   });
 
+  it('navigates to the /all/ deep route when a profileId is given (refs #337)', () => {
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          profileId={'profile-b' as never}
+        />
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('compact-event-row'));
+    expect(navigate).toHaveBeenCalledWith('/all/events/profile-b/233228', { state: { from: '/monitors/4' } });
+  });
+
   it('shows the return-flash indicator when returning to this event', () => {
     useReturnHighlightStore.getState().markViewed('233228');
     render1();
@@ -81,6 +98,52 @@ describe('CompactEventRow', () => {
     const cls = screen.getByTestId('compact-event-row').className;
     expect(cls).toContain('bg-destructive/10');
     expect(cls).toContain('opacity-60');
+    useDeleteSelectionStore.getState().clear();
+  });
+
+  it('is not marked when the same raw event id is queued on another profile', () => {
+    useDeleteSelectionStore.getState().clear();
+    useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p2'), '233228'));
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          profileId={asProfileId('p1')}
+          ownerProfileId={asProfileId('p1')}
+        />
+      </MemoryRouter>
+    );
+    const cls = screen.getByTestId('compact-event-row').className;
+    expect(cls).not.toContain('bg-destructive/10');
+    useDeleteSelectionStore.getState().clear();
+  });
+
+  // Against the REAL profile store, because the row used to read it: it
+  // subscribed to useCurrentProfile purely to rebuild an id its parent was
+  // already holding. The owner now arrives as a prop, and the globally
+  // current profile has no say in which key this row watches.
+  it('keys the selection off the owner prop, not whichever profile is current', () => {
+    useProfileStore.setState({
+      currentProfileId: asProfileId('p-current'),
+      profiles: [{ id: asProfileId('p-current'), name: 'Current' }],
+    } as never);
+    useDeleteSelectionStore.getState().clear();
+    useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '233228'));
+
+    render(
+      <MemoryRouter>
+        <CompactEventRow
+          event={base as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+          ownerProfileId={asProfileId('p1')}
+        />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('compact-event-row').className).toContain('bg-destructive/10');
     useDeleteSelectionStore.getState().clear();
   });
 });

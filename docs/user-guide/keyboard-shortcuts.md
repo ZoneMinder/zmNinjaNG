@@ -36,12 +36,24 @@ arrows to move the highlight. You can jump to any app page, to a monitor by name
 or ID, or to a monitor group. On a phone this is the quick way to navigate,
 since the letter keys need a hardware keyboard.
 
+In a {doc}`profiles` group the palette lists monitors from every server in it,
+and each monitor row names the server it belongs to - two servers can
+easily have a camera with the same name or the same ID, so the label is how you
+tell them apart. Opening one stays in the group. Monitor groups are not
+listed while aggregating: they belong to a single server, and there is no
+combined view of them.
+
 ## Open a monitor by ID
 
 Type a monitor's ID to open its live view. The number is the ZoneMinder monitor
 ID (the same ID ZoneMinder shows for the monitor), not its position in the list,
 so it stays the same as you add or remove monitors. If no monitor has that ID
 (or it is hidden), you get a "No monitor" message.
+
+Every shortcut on this page works while aggregating too. Since monitor IDs
+repeat across servers, a typed number opens the first monitor with that ID in
+the order the Monitors page lists them; use the command palette above when you
+want a specific server's copy.
 
 For IDs above 9, keep typing: the digits collect in a small indicator at the
 bottom of the screen (for example `12`). Press `Enter` to go there immediately,

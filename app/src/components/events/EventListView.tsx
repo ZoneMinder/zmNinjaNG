@@ -12,21 +12,33 @@ import { EventCard } from './EventCard';
 import { type EventFilters } from '../../api/events';
 import { getPortalUrlForMonitor, getServerMapVersion, subscribeServerMap } from '../../lib/zm/server-resolver';
 import { buildThumbnailChain, eventHasAlarmFrame } from '../../lib/event/thumbnail-chain';
-import { calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import type { EventData, Monitor, Tag } from '../../api/types';
+import { buildMonitorMap, calculateThumbnailDimensions, EVENT_GRID_CONSTANTS, getMonitorDimensions } from '../../lib/event/event-utils';
+import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
+import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
+import type { EventData, Monitor, ProfileId, Tag } from '../../api/types';
 import type { ThumbnailFallbackEntry } from '../../stores/settings';
+import { scopedEventKey } from '../../lib/event/scoped-event-key';
+
+/** An event tagged with its owning profile - set only in All mode
+ *  (see useScopedEvents); undefined in single mode. */
+export type ScopedEventItem = EventData & { profileId?: ProfileId; profileChip?: string };
 
 interface EventListViewProps {
-  events: EventData[];
-  monitors: Array<{ Monitor: Monitor }>;
+  events: ScopedEventItem[];
+  /** All mode only: monitors carry their owning profileId so a colliding
+   *  numeric id across two servers doesn't collapse into one map entry. */
+  monitors: Array<{ Monitor: Monitor; profileId?: ProfileId }>;
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
+  /** Default portal URL/token, used in single mode or for an item with no profileId. */
   portalUrl: string;
   accessToken?: string;
   batchSize: number;
   totalCount?: number;
   isFetching?: boolean;
   onLoadMore: () => void;
+  /** Tags keyed by scopedEventKey: `${profileId}:${eventId}` for All-mode
+   *  rows (event ids collide across servers), bare event id in single mode. */
   eventTagMap?: Map<string, Tag[]>;
   eventFilters?: EventFilters;
   minStreamingPort?: number;
@@ -46,7 +58,7 @@ const EventItem = memo(function EventItem({
   minStreamingPort,
   thumbnailChain,
 }: {
-  event: EventData;
+  event: ScopedEventItem;
   monitorMap: Map<string, Monitor>;
   thumbnailFit: 'contain' | 'cover' | 'none' | 'scale-down';
   portalUrl: string;
@@ -56,10 +68,36 @@ const EventItem = memo(function EventItem({
   minStreamingPort?: number;
   thumbnailChain: ThumbnailFallbackEntry[];
 }) {
-  const { Event } = event;
+  const { Event, profileId, profileChip } = event;
+
+  // Re-render THIS row when the server map changes (e.g. multi-server
+  // bootstrap populating it after first render). Subscribing here, not in
+  // the parent, means the parent's monitorMap useMemo doesn't need a
+  // serverMapVersion dependency it never actually reads just to bust this
+  // memo()-wrapped row's props (refs #337 fix round 1) - this row re-renders
+  // on its own regardless of memo, and getPortalUrlForMonitor below reads
+  // the (now up to date) server map fresh on every call.
+  useSyncExternalStore(subscribeServerMap, getServerMapVersion);
+
+  // All mode: resolve this row's OWN owning-profile client details instead
+  // of the page-level defaults (which reflect no/whatever profile is
+  // current - there isn't one in All mode). Cheap per-row hook calls are
+  // the established pattern here (MonitorCard does the same per tile).
+  // Single mode: profileId is undefined, both hooks fall back to the
+  // current profile, matching prior behavior exactly.
+  const { profile: ownerProfile, settings: ownerSettings } = useProfileById(profileId);
+  const { token: ownerToken, isFresh: ownerTokenFresh } = useFreshAccessToken(profileId);
+  const effectivePortalUrl = profileId ? (ownerProfile?.portalUrl || portalUrl) : portalUrl;
+  const effectiveAccessToken = profileId ? (ownerTokenFresh ? ownerToken ?? undefined : undefined) : accessToken;
+  const effectiveMinStreamingPort = profileId
+    ? resolveMinStreamingPort(ownerProfile?.minStreamingPort, ownerSettings.forceDisableMultiPort)
+    : minStreamingPort;
+
   // O(1) lookup via the id -> Monitor map built once per monitors change,
-  // instead of an O(monitors) `.find()` per row per render.
-  const monitorData = monitorMap.get(Event.MonitorId);
+  // instead of an O(monitors) `.find()` per row per render. All mode keys
+  // by `${profileId}:${monitorId}` so a colliding numeric id across two
+  // servers resolves to THIS row's own server's monitor.
+  const monitorData = monitorMap.get(profileId ? `${profileId}:${Event.MonitorId}` : Event.MonitorId);
 
   const { width: monitorWidth, height: monitorHeight } = getMonitorDimensions(monitorData, Event.Width, Event.Height);
 
@@ -73,12 +111,12 @@ const EventItem = memo(function EventItem({
   // Resolve the portal URL directly from the already-looked-up monitor
   // instead of getPortalUrlForEvent(), which would re-run its own
   // O(monitors) find() over the full monitors array.
-  const eventPortalUrl = getPortalUrlForMonitor(monitorData?.ServerId, portalUrl);
+  const eventPortalUrl = getPortalUrlForMonitor(monitorData?.ServerId, effectivePortalUrl, profileId);
   const thumbnailUrls = buildThumbnailChain(eventPortalUrl, Event.Id, thumbnailChain, {
-    token: accessToken,
+    token: effectiveAccessToken,
     width: thumbnailWidth,
     height: thumbnailHeight,
-    minStreamingPort,
+    minStreamingPort: effectiveMinStreamingPort,
     monitorId: Event.MonitorId,
     hasAlarmFrame: eventHasAlarmFrame(Event),
   });
@@ -86,8 +124,8 @@ const EventItem = memo(function EventItem({
   // Full-size image chain used by the desktop hover preview. No width/height
   // is passed so ZM returns the original image, which the view scales down.
   const largeThumbnailUrls = buildThumbnailChain(eventPortalUrl, Event.Id, thumbnailChain, {
-    token: accessToken,
-    minStreamingPort,
+    token: effectiveAccessToken,
+    minStreamingPort: effectiveMinStreamingPort,
     monitorId: Event.MonitorId,
     hasAlarmFrame: eventHasAlarmFrame(Event),
   });
@@ -99,12 +137,14 @@ const EventItem = memo(function EventItem({
       <EventCard
         event={Event}
         monitorName={monitorName}
+        profileId={profileId}
+        profileChip={profileChip}
         thumbnailUrls={thumbnailUrls}
         largeThumbnailUrls={largeThumbnailUrls}
         objectFit={thumbnailFit}
         thumbnailWidth={thumbnailWidth}
         thumbnailHeight={thumbnailHeight}
-        tags={eventTagMap?.get(Event.Id)}
+        tags={eventTagMap?.get(scopedEventKey(profileId, Event.Id))}
         eventFilters={eventFilters}
       />
     </div>
@@ -129,22 +169,12 @@ export const EventListView = ({
   const { settings } = useCurrentProfile();
   const thumbnailChain = settings.thumbnailFallbackChain;
 
-  // Re-render when the server map changes (e.g. multi-server bootstrap
-  // populating it after this list's first render). EventItem below is
-  // memo()-wrapped and resolves its portal URL from that module-global map
-  // directly in getPortalUrlForMonitor, so without this the memoized rows
-  // would keep the stale (possibly empty) URL forever once mounted.
-  const serverMapVersion = useSyncExternalStore(subscribeServerMap, getServerMapVersion);
-
-  // id -> Monitor lookup, rebuilt when the monitors array reference changes
-  // or the server map version bumps (see above). Replaces a monitors.find()
-  // per event per render (O(events x monitors)) with an O(1) map.get() per
-  // event, while still forcing memoized EventItem rows to refresh their
-  // per-server URLs once the server map arrives.
-  const monitorMap = useMemo(
-    () => new Map(monitors.map((m) => [m.Monitor.Id, m.Monitor])),
-    [monitors, serverMapVersion]
-  );
+  // id -> Monitor lookup, rebuilt only when the monitors array reference
+  // changes. Replaces a monitors.find() per event per render (O(events x
+  // monitors)) with an O(1) map.get() per event. EventItem below refreshes
+  // its own per-server URL when the server map changes (it subscribes to it
+  // directly), so this memo doesn't need to bust on that too.
+  const monitorMap = useMemo(() => buildMonitorMap(monitors), [monitors]);
 
   const isLoadingData = isFetching;
   const hasMore = totalCount !== undefined ? events.length < totalCount : false;
@@ -188,7 +218,7 @@ export const EventListView = ({
       {header}
       {events.map((event) => (
         <EventItem
-          key={event.Event.Id}
+          key={scopedEventKey(event.profileId, event.Event.Id)}
           event={event}
           monitorMap={monitorMap}
           thumbnailFit={thumbnailFit}

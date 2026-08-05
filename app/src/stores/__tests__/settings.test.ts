@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsStore, ALL_GROUPS_KEY, migrateSettings, SETTINGS_VERSION } from '../settings';
 import type { ProfileSettings } from '../settings';
-import { ASSISTANT } from '../../lib/zmninja-ng-constants';
+import {
+  ALL_MODE_PERFORMANCE,
+  ASSISTANT,
+  LIVE_ACTIVITY,
+  MONTAGE_GRID,
+  NOTIFICATIONS_SERVICE,
+} from '../../lib/zmninja-ng-constants';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 let isNative = false;
 vi.mock('../../lib/platform', () => ({ Platform: { get isNative() { return isNative; } } }));
@@ -367,5 +374,170 @@ describe('assistant backend migration for mobile', () => {
     useSettingsStore.getState().updateProfileSettings('profile-apple', { assistantBackend: 'apple' });
     const s = useSettingsStore.getState().getProfileSettings('profile-apple');
     expect(s.assistantBackend).toBe('apple');
+  });
+});
+
+// refs #337: allModeMuteToasts (boolean) was replaced by allModeNotifications
+// ('live' | 'muted' | 'off'). The migration lives in mergeProfileSettings,
+// same as the assistantBackend coercion above (Settings contract: every
+// coercion lives there, not in reactive readers).
+describe('all-mode notifications setting migration (refs #337)', () => {
+  it('migrates legacy allModeMuteToasts:true to muted', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeMuteToasts: true } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('muted');
+  });
+
+  it('migrates legacy allModeMuteToasts:false to live', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeMuteToasts: false } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('defaults to live when the field was never stored', () => {
+    const s = useSettingsStore.getState().getProfileSettings('brand-new-all-bucket');
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('coerces an invalid stored value to live', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeNotifications: 'bogus' } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('live');
+  });
+
+  it('preserves a validly stored off value', () => {
+    useSettingsStore.setState({
+      profileSettings: { [ALL_PROFILES_ID]: { allModeNotifications: 'off' } } as never,
+    });
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeNotifications).toBe('off');
+  });
+});
+
+/**
+ * The All Servers performance knobs (refs #337): the tuning values that used
+ * to be hardcoded constants, now stored in the ALL bucket so the settings
+ * section can edit them. Every one of them is a number or a small union read
+ * straight off persisted storage, so the merge is the trust boundary (I1):
+ * anything out of range, non-numeric, or not a known union member has to come
+ * back as the shipped default rather than reaching a consumer.
+ */
+describe('all-mode performance settings (refs #337)', () => {
+  beforeEach(() => {
+    useSettingsStore.setState({ profileSettings: {} });
+  });
+
+  const allBucket = (raw: Record<string, unknown>) => {
+    useSettingsStore.setState({ profileSettings: { [ALL_PROFILES_ID]: raw } as never });
+    return useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+  };
+
+  it('defaults every knob to the constant the hardcoded consumer used', () => {
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeMaxStreams).toBe(MONTAGE_GRID.allModeMaxStreams);
+    expect(s.allModeMaxWatched).toBe(LIVE_ACTIVITY.allModeMaxWatched);
+    expect(s.allModePollFloorSeconds).toBe(LIVE_ACTIVITY.allModePollFloorSeconds);
+    expect(s.allModeBurstSeconds).toBe(NOTIFICATIONS_SERVICE.allModeBurstWindowMs / 1000);
+  });
+
+  it('ships the task-7 connection knobs behavior-neutral', () => {
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeStreamTuning).toBe('off');
+    expect(s.allModePauseHidden).toBe(false);
+    expect(s.allModeIdleMinutes).toBe(0);
+  });
+
+  it('ships viewport gating off, like every other connection guardrail', () => {
+    const s = useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
+    expect(s.allModeViewportGating).toBe(false);
+  });
+
+  it('keeps in-range stored values untouched', () => {
+    const s = allBucket({
+      allModeMaxStreams: 4,
+      allModeMaxWatched: 6,
+      allModePollFloorSeconds: 20,
+      allModeBurstSeconds: 8,
+      allModeStreamTuning: 'reduced',
+      allModePauseHidden: true,
+      allModeIdleMinutes: 15,
+      allModeViewportGating: true,
+    });
+    expect(s.allModeMaxStreams).toBe(4);
+    expect(s.allModeMaxWatched).toBe(6);
+    expect(s.allModePollFloorSeconds).toBe(20);
+    expect(s.allModeBurstSeconds).toBe(8);
+    expect(s.allModeStreamTuning).toBe('reduced');
+    expect(s.allModePauseHidden).toBe(true);
+    expect(s.allModeIdleMinutes).toBe(15);
+    expect(s.allModeViewportGating).toBe(true);
+  });
+
+  it('clamps values stored below the floor up to the minimum', () => {
+    const s = allBucket({
+      allModeMaxStreams: 0,
+      allModeMaxWatched: -3,
+      allModePollFloorSeconds: 0,
+      allModeBurstSeconds: 0,
+      allModeIdleMinutes: -10,
+    });
+    expect(s.allModeMaxStreams).toBe(ALL_MODE_PERFORMANCE.minStreams);
+    expect(s.allModeMaxWatched).toBe(ALL_MODE_PERFORMANCE.minWatched);
+    expect(s.allModePollFloorSeconds).toBe(ALL_MODE_PERFORMANCE.minPollFloorSeconds);
+    expect(s.allModeBurstSeconds).toBe(ALL_MODE_PERFORMANCE.minBurstSeconds);
+    expect(s.allModeIdleMinutes).toBe(ALL_MODE_PERFORMANCE.minIdleMinutes);
+  });
+
+  it('clamps values stored above the ceiling down to the maximum', () => {
+    const s = allBucket({
+      allModeMaxStreams: 5000,
+      allModeMaxWatched: 5000,
+      allModePollFloorSeconds: 5000,
+      allModeBurstSeconds: 5000,
+      allModeIdleMinutes: 5000,
+    });
+    expect(s.allModeMaxStreams).toBe(ALL_MODE_PERFORMANCE.maxStreams);
+    expect(s.allModeMaxWatched).toBe(ALL_MODE_PERFORMANCE.maxWatched);
+    expect(s.allModePollFloorSeconds).toBe(ALL_MODE_PERFORMANCE.maxPollFloorSeconds);
+    expect(s.allModeBurstSeconds).toBe(ALL_MODE_PERFORMANCE.maxBurstSeconds);
+    expect(s.allModeIdleMinutes).toBe(ALL_MODE_PERFORMANCE.maxIdleMinutes);
+  });
+
+  it('falls back to the default when a stored number is not one', () => {
+    const s = allBucket({
+      allModeMaxStreams: NaN,
+      allModeMaxWatched: 'twelve',
+      allModePollFloorSeconds: null,
+      allModeBurstSeconds: Infinity,
+      allModeIdleMinutes: undefined,
+    });
+    expect(s.allModeMaxStreams).toBe(MONTAGE_GRID.allModeMaxStreams);
+    expect(s.allModeMaxWatched).toBe(LIVE_ACTIVITY.allModeMaxWatched);
+    expect(s.allModePollFloorSeconds).toBe(LIVE_ACTIVITY.allModePollFloorSeconds);
+    expect(s.allModeBurstSeconds).toBe(NOTIFICATIONS_SERVICE.allModeBurstWindowMs / 1000);
+    expect(s.allModeIdleMinutes).toBe(0);
+  });
+
+  it('rounds a fractional stored count to a whole one', () => {
+    const s = allBucket({ allModeMaxStreams: 7.6, allModeMaxWatched: 3.2 });
+    expect(s.allModeMaxStreams).toBe(8);
+    expect(s.allModeMaxWatched).toBe(3);
+  });
+
+  it('coerces an unknown stream-tuning value and the non-boolean flags', () => {
+    const s = allBucket({
+      allModeStreamTuning: 'bogus',
+      allModePauseHidden: 'yes',
+      allModeViewportGating: 1,
+    });
+    expect(s.allModeStreamTuning).toBe('off');
+    expect(s.allModePauseHidden).toBe(false);
+    expect(s.allModeViewportGating).toBe(false);
   });
 });

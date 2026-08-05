@@ -5,6 +5,11 @@
  * useCommandPaletteStore). Filters pages, monitors (name/ID), and groups, and
  * navigates on Enter or tap. Coexists with the letter/digit shortcuts.
  *
+ * All mode lists every profile's monitors, each row labelled with its owning
+ * server and navigating to `/all/monitors/:profileId/:id`. Group entries are
+ * omitted there: groups are per-server and this release has no cross-server
+ * group aggregation (refs #337).
+ *
  * Also doubles as one of the entry points for the on-device assistant (refs
  * #246): the "Ask" command item opens the assistant's own floating window
  * (`stores/assistantPanel.ts`, `components/assistant/AssistantWidget.tsx`)
@@ -14,21 +19,18 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Command } from 'lucide-react';
-import { getMonitors } from '../api/monitors';
-import { getCurrentSession } from '../services/sessions';
-import { queryKeys } from '../lib/query/query-keys';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthSlice } from '../stores/auth';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { useScopedMonitors } from '../hooks/useScopedMonitors';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
 import { filterCommandItems, type CommandItem } from '../lib/command-palette';
 import { useCommandPaletteStore } from '../stores/commandPalette';
 import { useAssistantPanelStore } from '../stores/assistantPanel';
+import type { ProfileId } from '../api/types';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog';
 import { cn } from '../lib/utils';
 
@@ -50,20 +52,25 @@ export function CommandPalette() {
   const open = useCommandPaletteStore((s) => s.open);
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
   const openAssistant = useAssistantPanelStore((s) => s.open);
-  const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
+  const settings = scope?.settings;
   const { setSelectedGroup } = useGroupFilter();
+  // Groups are per-server entities with no cross-server aggregation (that is
+  // the montage work's parked scope), so this list is empty in All mode - the
+  // groups query is current-profile gated. Group entries are therefore simply
+  // absent from the palette there rather than present and dead (refs #337,
+  // audit C13).
   const { groups } = useGroups();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const { data: monitorsData } = useQuery({
-    queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
-    enabled: !!currentProfile && isAuthenticated,
-  });
+  // Monitors across the whole scope: one profile in single mode, every profile
+  // in All mode, in the order the Monitors page lists them (refs #337, audit
+  // C12 - the old current-profile query left the palette listing pages only).
+  const { monitors: scopedMonitors } = useScopedMonitors({ poll: false });
 
   const items = useMemo<CommandItem[]>(() => {
     const pages: CommandItem[] = NAV_SHORTCUTS.map((s) => ({
@@ -79,12 +86,30 @@ export function CommandPalette() {
       label: g.Group.Name,
       groupId: g.Group.Id,
     }));
-    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
-    const monitorItems: CommandItem[] = (monitorsData?.monitors || [])
-      .filter((m) => !excluded.has(m.Monitor.Id))
-      .map((m) => ({ kind: 'monitor', id: `m-${m.Monitor.Id}`, label: m.Monitor.Name, monitorId: m.Monitor.Id }));
+    // Exclusions are per profile, so they resolve against the OWNING profile
+    // rather than one shared set.
+    const excludedByProfile = new Map<ProfileId, Set<string>>();
+    const monitorItems: CommandItem[] = scopedMonitors
+      .filter((m) => {
+        let excluded = excludedByProfile.get(m.profileId);
+        if (!excluded) {
+          excluded = getExcludedMonitorIdSet(m.profileId);
+          excludedByProfile.set(m.profileId, excluded);
+        }
+        return !excluded.has(m.item.Monitor.Id);
+      })
+      .map((m) => ({
+        kind: 'monitor',
+        // Monitor ids collide across servers, so All mode keys (and labels)
+        // each entry by its owner - two "3"s are two rows, not one.
+        id: isAllMode ? `m-${m.profileId}-${m.item.Monitor.Id}` : `m-${m.item.Monitor.Id}`,
+        label: m.item.Monitor.Name,
+        monitorId: m.item.Monitor.Id,
+        profileId: isAllMode ? m.profileId : undefined,
+        profileName: isAllMode ? m.profileName : undefined,
+      }));
     return [...pages, ...groupItems, ...monitorItems];
-  }, [t, groups, monitorsData, currentProfile]);
+  }, [t, groups, scopedMonitors, isAllMode]);
 
   const results = useMemo(() => filterCommandItems(items, query), [items, query]);
 
@@ -112,7 +137,10 @@ export function CommandPalette() {
     if (item.kind === 'page') {
       navigate(item.route);
     } else if (item.kind === 'monitor') {
-      navigate(`/monitors/${item.monitorId}`, { state: { from: location.pathname } });
+      // The bare route lands with a null session in All mode; the /all/ deep
+      // route carries the owning profile (refs #337).
+      const path = item.profileId ? `/all/monitors/${item.profileId}/${item.monitorId}` : `/monitors/${item.monitorId}`;
+      navigate(path, { state: { from: location.pathname } });
     } else {
       setSelectedGroup(item.groupId);
       navigate('/montage');
@@ -161,7 +189,7 @@ export function CommandPalette() {
           />
         </div>
         <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results" role="listbox" id={LISTBOX_ID}>
-          {settings.assistantEnabled && (
+          {settings?.assistantEnabled && (
             <button
               type="button"
               onClick={() => {
@@ -202,7 +230,7 @@ export function CommandPalette() {
                     'flex w-full items-center justify-between gap-3 px-3 py-2 text-sm text-left',
                     index === activeIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
                   )}
-                  data-testid={`command-item-${item.kind}-${item.kind === 'page' ? item.route : item.kind === 'monitor' ? item.monitorId : item.groupId}`}
+                  data-testid={`command-item-${item.kind}-${item.kind === 'page' ? item.route : item.kind === 'monitor' ? (item.profileId ? `${item.profileId}-${item.monitorId}` : item.monitorId) : item.groupId}`}
                 >
                   <span className="truncate min-w-0">{item.label}</span>
                   {item.kind === 'page' && item.hintKey && (
@@ -211,7 +239,11 @@ export function CommandPalette() {
                     </kbd>
                   )}
                   {item.kind === 'monitor' && (
-                    <span className="shrink-0 text-xs text-muted-foreground">{t('command_palette.monitor_id_label')} {item.monitorId}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {/* Names repeat across servers, so All mode says which one owns this row. */}
+                      {item.profileName && <span className="mr-1.5">{item.profileName}</span>}
+                      {t('command_palette.monitor_id_label')} {item.monitorId}
+                    </span>
                   )}
                 </button>
               </div>

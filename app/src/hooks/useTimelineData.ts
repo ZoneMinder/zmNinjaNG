@@ -38,6 +38,9 @@ export interface UseTimelineDataOptions {
   selectedMonitorIds: string[];
   onlyDetectedObjects: boolean;
   causeFilter: string;
+  /** Whether the queries are enabled (default: true). All mode disables this
+   *  hook and reads useScopedTimelineEvents instead (refs #337). */
+  enabled?: boolean;
 }
 
 export function useTimelineData({
@@ -47,6 +50,7 @@ export function useTimelineData({
   selectedMonitorIds,
   onlyDetectedObjects,
   causeFilter,
+  enabled = true,
 }: UseTimelineDataOptions) {
   const queryClient = useQueryClient();
   const currentProfileId = useProfileStore((s) => s.currentProfileId);
@@ -59,6 +63,7 @@ export function useTimelineData({
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfileId),
     queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
+    enabled,
   });
 
   // Get enabled monitors
@@ -126,6 +131,7 @@ export function useTimelineData({
       });
     },
     refetchInterval: livePolling ? bandwidth.timelineHeatmapInterval : false,
+    enabled,
   });
 
   // Log live mode source when it changes

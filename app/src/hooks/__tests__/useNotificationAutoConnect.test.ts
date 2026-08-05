@@ -38,7 +38,7 @@ vi.mock('@capacitor/app', () => ({
 }));
 
 // Mock notification store (getState + poller wiring usage inside hook)
-const mockNotificationStoreState = { connectionState: 'disconnected' };
+const mockNotificationStoreState = { connections: {} as Record<string, string> };
 const mockStartEventPoller = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../stores/notifications', () => ({
@@ -49,14 +49,10 @@ vi.mock('../../stores/notifications', () => ({
 }));
 
 // Mock event poller
-const mockPollerStop = vi.fn();
-const mockPollerIsRunning = vi.fn().mockReturnValue(false);
+const mockStopEventPoller = vi.fn();
 
 vi.mock('../../services/eventPoller', () => ({
-  getEventPoller: vi.fn(() => ({
-    stop: mockPollerStop,
-    isRunning: mockPollerIsRunning,
-  })),
+  stopEventPoller: (profileId: string) => mockStopEventPoller(profileId),
 }));
 
 // Mock notification service
@@ -98,6 +94,7 @@ function makeParams(overrides: Partial<{
   currentProfile: typeof defaultProfile | null;
   settings: Settings | null;
   isConnected: boolean;
+  isPreviousProfileConnected: boolean;
   connectionState: string;
   currentProfileId: string | null;
 }> & Record<string, unknown> = {}) {
@@ -110,6 +107,7 @@ function makeParams(overrides: Partial<{
     currentProfile: defaultProfile,
     settings: defaultSettings,
     isConnected: false,
+    isPreviousProfileConnected: false,
     connectionState: 'disconnected',
     currentProfileId: 'profile-1',
     connect,
@@ -124,7 +122,7 @@ describe('useNotificationAutoConnect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    mockNotificationStoreState.connectionState = 'disconnected';
+    mockNotificationStoreState.connections = {};
     mockPlatform.isDesktopOrWeb = true;
     mockPlatform.isNative = false;
     mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
@@ -188,8 +186,13 @@ describe('useNotificationAutoConnect', () => {
       );
     });
 
+    // The ES-connect effect reads live connection state from the store
+    // directly (mockNotificationStoreState.connections), not the
+    // isConnected/connectionState props - those are deliberately not
+    // reactive deps on this effect (refs #337 round 3).
     it('does not connect when already connected', async () => {
-      const params = makeParams({ isConnected: true });
+      mockNotificationStoreState.connections = { 'profile-1': 'connected' };
+      const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
       await act(async () => {
@@ -201,7 +204,8 @@ describe('useNotificationAutoConnect', () => {
     });
 
     it('does not connect when connectionState is not "disconnected"', async () => {
-      const params = makeParams({ connectionState: 'connecting' });
+      mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
+      const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
       await act(async () => {
@@ -254,7 +258,7 @@ describe('useNotificationAutoConnect', () => {
       const params = makeParams();
       // Simulate store having changed state by the time decrypt resolves
       params.getDecryptedPassword = vi.fn().mockImplementation(async () => {
-        mockNotificationStoreState.connectionState = 'connecting';
+        mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
         return 'secret';
       });
 
@@ -303,6 +307,135 @@ describe('useNotificationAutoConnect', () => {
       // Still only once: hasAttemptedAutoConnect flag prevents repeated calls
       expect(params.connect).toHaveBeenCalledTimes(1);
     });
+
+    // Regression (refs #337 I3): the 500ms delay timer was never cancelled,
+    // so unmounting mid-window (or mid-getDecryptedPassword) could still
+    // connect a socket nobody would ever disconnect.
+    it('cancels the pending auto-connect timer on unmount before it fires', async () => {
+      const params = makeParams();
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      unmount();
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).not.toHaveBeenCalled();
+    });
+
+    it('does not connect if unmounted while decrypting the password', async () => {
+      const params = makeParams();
+      let resolvePassword: (value: string) => void = () => {};
+      params.getDecryptedPassword = vi.fn().mockImplementation(
+        () => new Promise<string>((resolve) => { resolvePassword = resolve; })
+      );
+
+      const { unmount } = renderHook(() => useNotificationAutoConnect(params));
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await Promise.resolve();
+      });
+
+      unmount();
+      resolvePassword('secret');
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(params.connect).not.toHaveBeenCalled();
+    });
+
+    // Regression (refs #337 round 2, critical): bootstrap routinely writes a
+    // NEW profile object with the SAME id (e.g. after a token refresh).
+    // Depending on the whole `currentProfile` object re-ran this effect on
+    // that identity churn; combined with the I3 timer-cancel cleanup, the
+    // re-run cancelled the pending timer, then hit the hasAttemptedAutoConnect
+    // guard and returned without rescheduling - ES never connected for the
+    // rest of the session.
+    it('still connects after a mid-window rerender with a new profile object of the same id', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+
+      // Same id, same credentials, new object identity - simulates a
+      // bootstrap/updateProfile write mid-window.
+      rerender({ ...params, currentProfile: { ...defaultProfile } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).toHaveBeenCalledWith('profile-1', 'admin', 'secret', 'http://zm.local');
+    });
+
+    it('reschedules instead of permanently stalling when a primitive dep changes mid-window', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      await act(async () => {
+        vi.advanceTimersByTime(250);
+      });
+
+      // A genuine primitive change (host) interrupts the window - this MUST
+      // still result in exactly one connect() once things settle, not zero.
+      rerender({ ...params, settings: { ...defaultSettings, host: 'ws://new-host:9000' } });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      expect(params.connect).toHaveBeenCalledTimes(1);
+    });
+
+    // Regression (refs #337 round 3, important): isConnected/connectionState
+    // used to be reactive deps on this effect. A drop (connected ->
+    // disconnected) re-ran it, and with the round-2 cleanup reset, that
+    // re-armed a second auto-connect attempt on top of the service's own
+    // exponential backoff (refs #274) - duplicating/fighting it. Recovery
+    // after the first attempt belongs to the service alone.
+    it('does not re-attempt auto-connect when the connection later drops', async () => {
+      const params = makeParams();
+      const { rerender } = renderHook(
+        (p: Parameters<typeof useNotificationAutoConnect>[0]) => useNotificationAutoConnect(p),
+        { initialProps: params },
+      );
+
+      // Let the initial auto-connect attempt complete.
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+      expect(params.connect).toHaveBeenCalledTimes(1);
+
+      // Simulate a drop flowing into the hook's props, exactly as
+      // NotificationHandler would pass it down from the store.
+      rerender({ ...params, isConnected: false, connectionState: 'disconnected' });
+
+      await act(async () => {
+        vi.advanceTimersByTime(500);
+        await vi.runAllTimersAsync();
+      });
+
+      // Still only once: isConnected/connectionState are not deps on this
+      // effect, so the drop can't re-run it and schedule a duplicate attempt.
+      expect(params.connect).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('direct mode auto-connect (desktop/web)', () => {
@@ -331,9 +464,9 @@ describe('useNotificationAutoConnect', () => {
   });
 
   describe('profile switching', () => {
-    it('disconnects when profile changes and was connected to different profile', () => {
+    it('disconnects when profile changes and the previous profile was connected', () => {
       const params = makeParams({
-        isConnected: true,
+        isPreviousProfileConnected: true,
         currentProfileId: 'profile-OLD',
         currentProfile: { ...defaultProfile, id: asProfileId('profile-NEW') },
       });
@@ -342,9 +475,25 @@ describe('useNotificationAutoConnect', () => {
       expect(params.disconnect).toHaveBeenCalled();
     });
 
-    it('does not disconnect when connected to the same profile', () => {
+    // Regression (refs #337 C1): `isConnected` alone is scoped to the NEW
+    // currentProfile after a switch and can never see whether the OLD
+    // (anchor) profile is still connected - `isPreviousProfileConnected` is
+    // the value that must gate this, independently of `isConnected`.
+    it('does not disconnect when isConnected is true but the previous profile was not', () => {
       const params = makeParams({
         isConnected: true,
+        isPreviousProfileConnected: false,
+        currentProfileId: 'profile-OLD',
+        currentProfile: { ...defaultProfile, id: asProfileId('profile-NEW') },
+      });
+      renderHook(() => useNotificationAutoConnect(params));
+
+      expect(params.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('does not disconnect when connected to the same profile', () => {
+      const params = makeParams({
+        isPreviousProfileConnected: true,
         currentProfileId: 'profile-1',
         currentProfile: defaultProfile,
       });
@@ -382,8 +531,7 @@ describe('useNotificationAutoConnect', () => {
   });
 
   describe('event poller cleanup', () => {
-    it('stops event poller on unmount when running', () => {
-      mockPollerIsRunning.mockReturnValue(true);
+    it('stops this profile\'s event poller on unmount', () => {
       const params = makeParams({
         settings: { ...defaultSettings, notificationMode: 'direct' },
       });
@@ -392,18 +540,17 @@ describe('useNotificationAutoConnect', () => {
 
       unmount();
 
-      expect(mockPollerStop).toHaveBeenCalled();
+      expect(mockStopEventPoller).toHaveBeenCalledWith('profile-1');
     });
 
-    it('does not stop poller on unmount when not running', () => {
-      mockPollerIsRunning.mockReturnValue(false);
-      const params = makeParams();
+    it('does not call stopEventPoller when currentProfile is null', () => {
+      const params = makeParams({ currentProfile: null });
 
       const { unmount } = renderHook(() => useNotificationAutoConnect(params));
 
       unmount();
 
-      expect(mockPollerStop).not.toHaveBeenCalled();
+      expect(mockStopEventPoller).not.toHaveBeenCalled();
     });
   });
 

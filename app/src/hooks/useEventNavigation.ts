@@ -9,12 +9,20 @@
 import { useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getAdjacentEvent, type EventFilters } from '../api/events';
-import { getCurrentSession } from '../services/sessions';
+import { getSession, getCurrentSession } from '../services/sessions';
 import { log, LogLevel } from '../lib/logger';
+import type { ProfileId } from '../api/types';
 
 interface UseEventNavigationOptions {
   currentEventId: string | undefined;
   currentStartDateTime: string | undefined;
+  /**
+   * Owning profile for an /all/ deep route; defaults to the current profile.
+   * Also selects the path template prev/next navigate to: when set,
+   * `/all/events/:profileId/:id` (stays in owning-profile context) instead
+   * of `/events/:id`.
+   */
+  profileId?: ProfileId;
 }
 
 interface UseEventNavigationReturn {
@@ -31,6 +39,7 @@ interface UseEventNavigationReturn {
 
 export function useEventNavigation({
   currentStartDateTime,
+  profileId,
 }: UseEventNavigationOptions): UseEventNavigationReturn {
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,7 +57,8 @@ export function useEventNavigation({
   const navigateToEvent = useCallback(
     (eventId: string, direction: 'left' | 'right', continuousPlayback = false) => {
       setSlideDirection(direction);
-      navigate(`/events/${eventId}`, {
+      const path = profileId ? `/all/events/${profileId}/${eventId}` : `/events/${eventId}`;
+      navigate(path, {
         state: {
           from: originalFrom,
           eventFilters,
@@ -58,14 +68,15 @@ export function useEventNavigation({
         replace: true,
       });
     },
-    [navigate, eventFilters, originalFrom]
+    [navigate, eventFilters, originalFrom, profileId]
   );
 
   const goToPrevEvent = useCallback(async (): Promise<boolean> => {
     if (!currentStartDateTime || isLoadingPrev) return false;
     setIsLoadingPrev(true);
     try {
-      const prev = await getAdjacentEvent(getCurrentSession().client, getCurrentSession().profileId, 'prev', currentStartDateTime, eventFilters);
+      const session = profileId ? getSession(profileId) : getCurrentSession();
+      const prev = await getAdjacentEvent(session.client, session.profileId, 'prev', currentStartDateTime, eventFilters);
       if (prev) {
         navigateToEvent(prev.Event.Id, 'right');
         return true;
@@ -77,13 +88,14 @@ export function useEventNavigation({
     } finally {
       setIsLoadingPrev(false);
     }
-  }, [currentStartDateTime, eventFilters, isLoadingPrev, navigateToEvent]);
+  }, [currentStartDateTime, eventFilters, isLoadingPrev, navigateToEvent, profileId]);
 
   const goToNextEvent = useCallback(async ({ continuousPlayback = false } = {}): Promise<boolean> => {
     if (!currentStartDateTime || isLoadingNext) return false;
     setIsLoadingNext(true);
     try {
-      const next = await getAdjacentEvent(getCurrentSession().client, getCurrentSession().profileId, 'next', currentStartDateTime, eventFilters);
+      const session = profileId ? getSession(profileId) : getCurrentSession();
+      const next = await getAdjacentEvent(session.client, session.profileId, 'next', currentStartDateTime, eventFilters);
       if (next) {
         navigateToEvent(next.Event.Id, 'left', continuousPlayback);
         return true;
@@ -95,7 +107,7 @@ export function useEventNavigation({
     } finally {
       setIsLoadingNext(false);
     }
-  }, [currentStartDateTime, eventFilters, isLoadingNext, navigateToEvent]);
+  }, [currentStartDateTime, eventFilters, isLoadingNext, navigateToEvent, profileId]);
 
   return {
     goToPrevEvent,

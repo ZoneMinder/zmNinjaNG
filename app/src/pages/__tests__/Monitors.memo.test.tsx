@@ -15,16 +15,58 @@ const mockState = vi.hoisted(() => ({
   settingsProps: [] as Array<(monitor: unknown) => void>,
   newEventCounts: { '1': 2, '2': 1 } as Record<string, number>,
   newestEventAt: { '1': '2026-07-10 09:00:00', '2': '2026-07-10 08:00:00' } as Record<string, string | null>,
+  // Same array reference returned on every call, mirroring the real
+  // useScopedMonitors' `combine`-based reference stability (Task 4). A fresh
+  // array per call would defeat the memo comparison this file exists to test.
+  scopedMonitors: [
+    { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+    { profileId: 'profile-1', profileName: 'Home', item: { Monitor: { Id: '2', Name: 'Back Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } } },
+  ],
 }));
 
-const useQueryMock = vi.fn();
+vi.mock('../../hooks/useScopedMonitors', () => ({
+  useScopedMonitors: () => ({
+    monitors: mockState.scopedMonitors,
+    errors: [],
+    isLoading: false,
+    refetchProfile: vi.fn(),
+  }),
+}));
 
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: (options: { queryKey: (string | undefined)[] }) => useQueryMock(options),
+vi.mock('../../hooks/useCurrentProfile', () => ({
+  useCurrentProfile: () => ({
+    currentProfile: { id: 'profile-1', name: 'Home' },
+    settings: {
+      monitorsViewMode: 'list',
+      monitorsFeedFit: 'contain',
+      monitorGridCols: 2,
+      monitorsGroupByServer: false,
+    },
+    isAllMode: false,
+  }),
+}));
+
+vi.mock('../../hooks/useProfileScope', () => ({
+  useProfileScope: () => ({ profiles: [{ id: 'profile-1' }] }),
+}));
+
+vi.mock('../../hooks/useGroupFilter', () => ({
+  useGroupFilter: () => ({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true }),
+}));
+
+vi.mock('../../components/filters/GroupFilterSelect', () => ({
+  GroupFilterSelect: () => <div data-testid="group-filter-select-stub" />,
+}));
+
+vi.mock('../../stores/settings', () => ({
+  useSettingsStore: (selector: (state: { updateProfileSettings: (...args: unknown[]) => void }) => unknown) =>
+    selector({ updateProfileSettings: vi.fn() }),
 }));
 
 vi.mock('../../hooks/useMonitorNewEvents', () => ({
   useMonitorNewEvents: () => ({ counts: mockState.newEventCounts, newest: mockState.newestEventAt }),
+  useScopedMonitorNewEvents: () => ({ counts: {}, newest: {} }),
+  scopedMonitorEventKey: (profileId: string, monitorId: string) => `${profileId}:${monitorId}`,
 }));
 
 // Stand-in for the real memo()'d MonitorCard (MonitorCard.tsx:382). It is
@@ -47,16 +89,12 @@ vi.mock('../../components/monitors/MonitorCard', async () => {
 });
 
 vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfile: () => { id: string; username?: string } | null }) => unknown) =>
-    selector({
-      currentProfile: () => ({ id: 'profile-1', username: 'admin' }),
-    }),
+  useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
+    selector({ currentProfileId: 'profile-1' }),
 }));
 
 vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (state: { isAuthenticated: boolean }) => unknown) =>
-    selector({ isAuthenticated: true }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
+  useAuthSlice: () => ({ version: '1.38.0' }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -67,30 +105,17 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => vi.fn(),
 }));
 
-// Frozen identities. React Query's structural sharing returns the same object
-// references when a refetch produces unchanged data, so the real page sees these
-// props as reference-equal across a poll too. Recreating them here would hide
-// the callback regression behind a `monitor` prop that also changed.
-const MONITORS = {
-  monitors: [
-    { Monitor: { Id: '1', Name: 'Front Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } },
-    { Monitor: { Id: '2', Name: 'Back Door', Deleted: false }, Monitor_Status: { Status: 'Connected' } },
-  ],
-};
+// Its own tests cover the toggle (including how it resolves the page's
+// Streaming Mode in All mode); stubbing keeps that resolution's stores out of
+// this file's mock surface.
+vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
+  AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
+}));
 
 describe('Monitors page memo stability', () => {
   beforeEach(() => {
-    useQueryMock.mockReset();
     mockState.renderCount.clear();
     mockState.settingsProps.length = 0;
-
-    useQueryMock.mockImplementation(({ queryKey }) => {
-      const refetch = vi.fn();
-      if (queryKey[0] === 'monitors') {
-        return { data: MONITORS, isLoading: false, error: null, refetch };
-      }
-      return { data: {}, isLoading: false, error: null, refetch };
-    });
   });
 
   it('passes a reference-stable onShowSettings to every card across re-renders', () => {

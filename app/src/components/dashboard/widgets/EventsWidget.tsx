@@ -11,23 +11,33 @@
  * - Tag chips displayed per event
  * - Configurable event limit
  * - Loading and empty states
+ * - All mode: fans out per profile in scope (single mode's array of one
+ *   shares the exact query key/session the old single query used) and
+ *   merges by true chronological instant, with a profile chip per row.
  */
 
 import { memo, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries } from '@tanstack/react-query';
 import { getEvents } from '../../../api/events';
-import { getCurrentSession } from '../../../services/sessions';
+import { getSession } from '../../../services/sessions';
 import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEventCauseIcon } from '../../../lib/event/event-icons';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
-import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../../hooks/useProfileScope';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useEventTagMapping } from '../../../hooks/useEventTags';
 import { TagChipList } from '../../events/TagChip';
 import { ALL_TAGS_FILTER_ID } from '../../../hooks/useEventFilters';
 import { activateOnEnterOrSpace } from '../../../lib/utils';
+import { staggeredRefetchInterval } from '../../../lib/query/stagger-interval';
+import { eventInstant } from '../../../lib/event/event-instant';
+import { ErrorBanner } from '../../ui/query-state';
+import { ProfileChip } from '../../ui/profile-chip';
+import { resolveQueryError } from '../../../lib/query/query-error';
+import type { Scoped, ProfileError } from '../../../api/scoped-types';
+import type { EventData } from '../../../api/types';
 
 interface EventsWidgetProps {
     /** Optional monitor IDs to filter events */
@@ -53,44 +63,82 @@ export const EventsWidget = memo(function EventsWidget({
     const { fmtDateTimeShort } = useDateTimeFormat();
     const navigate = useNavigate();
     const bandwidth = useBandwidthSettings();
-    const { currentProfile } = useCurrentProfile();
+    const scope = useProfileScope();
+    const profiles = scope?.profiles ?? [];
+    // scope.mode, not profiles.length > 1: a single remaining profile after
+    // deleting down to one WHILE still in All mode must keep chips/deep-links
+    // (profiles.length > 1 collapses to the single-mode branch there, refs
+    // #337).
+    const isAllMode = scope?.mode === 'all';
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
-    const { data: eventsData, isLoading } = useQuery({
-        queryKey: queryKeys.eventsWidget(currentProfile?.id, monitorIdFilter, limit, onlyDetectedObjects),
-        queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, {
-            monitorId: monitorIdFilter,
-            limit,
-            sort: 'StartTime',
-            direction: 'desc',
-            notesRegexp: onlyDetectedObjects ? 'detected:' : undefined,
-        }),
-        refetchInterval: refreshInterval ?? bandwidth.eventsWidgetInterval,
+    const refetchMs = refreshInterval ?? bandwidth.eventsWidgetInterval;
+
+    // One query per profile in scope - single mode's array of one uses the
+    // exact key+session the old single useQuery used, so it shares that
+    // cache entry (byte-identical). All mode's monitor id filter, if set,
+    // applies identically to every profile - same v1 precedent as
+    // useScopedEvents (a bare id only ever means something on one server).
+    const { events, isLoading, errors } = useQueries({
+        queries: profiles.map((p, i) => ({
+            queryKey: queryKeys.eventsWidget(p.id, monitorIdFilter, limit, onlyDetectedObjects),
+            queryFn: () => getEvents(getSession(p.id).client, p.id, {
+                monitorId: monitorIdFilter,
+                limit,
+                sort: 'StartTime',
+                direction: 'desc',
+                notesRegexp: onlyDetectedObjects ? 'detected:' : undefined,
+            }),
+            refetchInterval: staggeredRefetchInterval(i, profiles.length, refetchMs),
+        })),
+        combine: (results) => {
+            const scoped: Scoped<EventData>[] = [];
+            const errors: ProfileError[] = [];
+            let anyData = false;
+            profiles.forEach((p, i) => {
+                const q = results[i];
+                if (!q) return;
+                if (q.data) {
+                    anyData = true;
+                    for (const item of q.data.events) scoped.push({ profileId: p.id, profileName: p.name, item });
+                }
+                if (q.error) errors.push({ profileId: p.id, profileName: p.name, error: q.error });
+            });
+            const tzById = new Map(profiles.map((p) => [p.id, p.timezone ?? 'UTC']));
+            scoped.sort((a, b) =>
+                eventInstant(b.item, tzById.get(b.profileId) ?? 'UTC') - eventInstant(a.item, tzById.get(a.profileId) ?? 'UTC')
+            );
+            return { events: scoped.slice(0, limit), isLoading: !anyData, errors };
+        },
     });
 
-    // Fetch tags for displayed events
+    // Fetch tags for displayed events - single-profile-only. useEventTagMapping
+    // takes one profileId for the whole batch; All mode can mix event ids
+    // from different servers under the same numeric id, so a shared lookup
+    // risks querying the wrong server for the wrong id. ponytail:
+    // cross-profile tag lookups stay out of v1 scope (refs #337), same line
+    // as the spec's other stated aggregation gaps.
     const eventIds = useMemo(
-        () => (eventsData?.events || []).map((e) => e.Event.Id),
-        [eventsData?.events]
+        () => (isAllMode ? [] : events.map((e) => e.item.Event.Id)),
+        [isAllMode, events]
     );
     const { eventTagMap } = useEventTagMapping({
         eventIds,
         enabled: eventIds.length > 0,
+        profileId: profiles[0]?.id,
     });
 
     // Apply client-side tag filter
-    const events = useMemo(() => {
-        const raw = eventsData?.events || [];
-        if (tagIds.length === 0 || eventTagMap.size === 0) return raw;
-
+    const filteredEvents = useMemo(() => {
+        if (tagIds.length === 0 || eventTagMap.size === 0) return events;
         const isAllTagsFilter = tagIds.includes(ALL_TAGS_FILTER_ID);
-        return raw.filter((e) => {
-            const eTags = eventTagMap.get(e.Event.Id) || [];
+        return events.filter((e) => {
+            const eTags = eventTagMap.get(e.item.Event.Id) || [];
             if (isAllTagsFilter) return eTags.length > 0;
             return eTags.some((tag) => tagIds.includes(tag.Id));
         });
-    }, [eventsData?.events, tagIds, eventTagMap]);
+    }, [events, tagIds, eventTagMap]);
 
-    if (isLoading) {
+    if (isLoading && errors.length === 0) {
         return (
             <div className="p-4 space-y-2">
                 {[...Array(3)].map((_, i) => (
@@ -100,7 +148,11 @@ export const EventsWidget = memo(function EventsWidget({
         );
     }
 
-    if (!events.length) {
+    if (events.length === 0 && errors.length > 0) {
+        return <ErrorBanner message={resolveQueryError(errors[0].error, t)} className="m-4" />;
+    }
+
+    if (!filteredEvents.length) {
         return (
             <div className="h-full flex items-center justify-center text-muted-foreground text-sm p-4">
                 {t('dashboard.no_recent_events')}
@@ -111,16 +163,20 @@ export const EventsWidget = memo(function EventsWidget({
     return (
         <div className="h-full overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <div className="divide-y">
-                {events.map((event) => {
+                {filteredEvents.map((scopedEvent) => {
+                    const event = scopedEvent.item;
                     const tags = eventTagMap.get(event.Event.Id) || [];
+                    const detailPath = isAllMode
+                        ? `/all/events/${scopedEvent.profileId}/${event.Event.Id}`
+                        : `/events/${event.Event.Id}`;
                     return (
                         <div
-                            key={event.Event.Id}
+                            key={`${scopedEvent.profileId}-${event.Event.Id}`}
                             className="p-3 hover:bg-muted/50 cursor-pointer transition-colors flex items-center gap-3"
                             role="button"
                             tabIndex={0}
-                            onClick={() => navigate(`/events/${event.Event.Id}`, { state: { from: '/dashboard' } })}
-                            onKeyDown={activateOnEnterOrSpace(() => navigate(`/events/${event.Event.Id}`, { state: { from: '/dashboard' } }))}
+                            onClick={() => navigate(detailPath, { state: { from: '/dashboard' } })}
+                            onKeyDown={activateOnEnterOrSpace(() => navigate(detailPath, { state: { from: '/dashboard' } }))}
                         >
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between mb-1">
@@ -148,9 +204,15 @@ export const EventsWidget = memo(function EventsWidget({
                                         {event.Event.Notes.split('|')[0].trim()}
                                     </p>
                                 )}
-                                {tags.length > 0 && (
-                                    <div className="mt-1">
-                                        <TagChipList tags={tags} maxVisible={3} size="sm" />
+                                {(isAllMode || tags.length > 0) && (
+                                    <div className="flex items-center gap-1 flex-wrap mt-1">
+                                        {isAllMode && (
+                                            <ProfileChip
+                                                name={scopedEvent.profileName}
+                                                testId="widget-profile-chip"
+                                            />
+                                        )}
+                                        {tags.length > 0 && <TagChipList tags={tags} maxVisible={3} size="sm" />}
                                     </div>
                                 )}
                             </div>

@@ -6,9 +6,9 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
-import { getCurrentSession } from '../services/sessions';
-import type { EventData } from '../api/types';
-import { useCurrentProfile } from './useCurrentProfile';
+import { getSession, getCurrentSession } from '../services/sessions';
+import type { EventData, ProfileId } from '../api/types';
+import { useProfileById } from './useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from './useBandwidthSettings';
@@ -30,9 +30,11 @@ export interface UseMonitorRecentEvents {
   refetch: () => void;
 }
 
-export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvents {
-  const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
+/** @param profileId - Owning profile for an /all/ deep route; defaults to the current profile. */
+export function useMonitorRecentEvents(monitorId: string, profileId?: ProfileId): UseMonitorRecentEvents {
+  const { profile: ownerProfile, settings } = useProfileById(profileId);
+  const effectiveProfileId = ownerProfile?.id;
+  const isAuthenticated = useAuthSlice(effectiveProfileId ?? null).isAuthenticated;
   const updateProfileSettings = useSettingsStore((s) => s.updateProfileSettings);
   const bandwidth = useBandwidthSettings();
 
@@ -41,17 +43,20 @@ export function useMonitorRecentEvents(monitorId: string): UseMonitorRecentEvent
   const hidden = isMonitorRecentEventsHidden(hiddenList, monitorId);
 
   const { data, isLoading, isError, isFetching, refetch } = useQuery({
-    queryKey: queryKeys.monitorRecentEvents(currentProfile?.id, monitorId, count),
-    queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, { monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' }),
-    enabled: !!currentProfile && isAuthenticated && !hidden,
+    queryKey: queryKeys.monitorRecentEvents(effectiveProfileId, monitorId, count),
+    queryFn: () => {
+      const session = profileId ? getSession(profileId) : getCurrentSession();
+      return getEvents(session.client, session.profileId, { monitorId, limit: count, sort: 'StartDateTime', direction: 'desc' });
+    },
+    enabled: !!effectiveProfileId && isAuthenticated && !hidden,
     refetchInterval: hidden ? false : bandwidth.monitorRecentEventsInterval,
   });
 
   const events = useMemo(() => (data?.events ?? []).slice(0, count), [data?.events, count]);
 
   const toggleHidden = () => {
-    if (!currentProfile) return;
-    updateProfileSettings(currentProfile.id, {
+    if (!effectiveProfileId) return;
+    updateProfileSettings(effectiveProfileId, {
       monitorDetailRecentEventsHidden: toggleMonitorRecentEventsHidden(hiddenList, monitorId),
     });
   };

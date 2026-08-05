@@ -11,7 +11,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
-import type { Monitor, MonitorStatus, Profile } from '../../api/types';
+import type { Monitor, MonitorStatus, Profile, ProfileId } from '../../api/types';
 import type { ActiveMonitorEntry } from '../../lib/monitor/live-activity';
 import { formatElapsedShort } from '../../lib/format-date-time';
 import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
@@ -24,9 +24,16 @@ interface LiveActivityTileProps {
   entry: ActiveMonitorEntry;
   monitor: Monitor;
   status: MonitorStatus | undefined;
+  /** The tile's owning profile: the current profile in single mode, the
+   *  monitor's OWN server in All mode (see useScopedMonitors / MontageMonitor). */
   currentProfile: Profile | null;
   accessToken: string | null;
   navigate: NavigateFunction;
+  /** All mode only: the owning profile's id/display name, threaded straight
+   *  through to MontageMonitor (its LiveMonitorPlayer cache-key scoping,
+   *  events watermark, and profile chip). Undefined in single mode. */
+  profileId?: ProfileId;
+  profileChip?: string;
   /** The page's one-second clock. Drives the elapsed label and nothing else. */
   now: number;
   /**
@@ -47,6 +54,8 @@ export function LiveActivityTile({
   currentProfile,
   accessToken,
   navigate,
+  profileId,
+  profileChip,
   now,
   rowSpan,
   onDismiss,
@@ -108,8 +117,13 @@ export function LiveActivityTile({
       //
       // gridRowEnd is placement, not a visual effect, so it is safe next to
       // the view-transition name the note above is about.
+      //
+      // entry.monitorId is monitorCacheKey(profileId, monitorId) in All mode
+      // (`profileId:monitorId`), and a CSS custom-ident cannot contain a
+      // colon - the browser drops the whole declaration, silently losing the
+      // transition rather than erroring, so the colon is swapped for a dash.
       style={{
-        viewTransitionName: `live-activity-tile-${entry.monitorId}`,
+        viewTransitionName: `live-activity-tile-${entry.monitorId.replace(/:/g, '-')}`,
         gridRowEnd: rowSpan ? `span ${rowSpan}` : undefined,
       }}
       data-testid="live-activity-tile"
@@ -120,6 +134,8 @@ export function LiveActivityTile({
         currentProfile={currentProfile}
         accessToken={accessToken}
         navigate={navigate}
+        profileId={profileId}
+        profileChip={profileChip}
         titleIcon={titleIcon}
         mediaAspectRatio={mediaAspectRatio}
         fromRoute="/live-activity"

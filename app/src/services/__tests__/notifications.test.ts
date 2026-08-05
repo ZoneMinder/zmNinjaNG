@@ -3,6 +3,7 @@ import {
   ZMNotificationService,
   getNotificationService,
   resetNotificationService,
+  resetAllNotificationServices,
 } from '../notifications';
 
 // Mock WebSocket
@@ -191,6 +192,32 @@ describe('ZMNotificationService', () => {
 
       await vi.advanceTimersByTimeAsync(300_000);
       expect(wsCtor).toHaveBeenCalledTimes(1);
+    });
+
+    // refs #337 round 3 belt-and-braces: a manual/hook-triggered connect()
+    // can land while a backoff timer from a previous drop is still armed -
+    // state sits at 'disconnected' between attempts, so the already-
+    // connected/connecting guard in connect() doesn't catch it. Without
+    // clearing the armed timer first, both the manual call and the stale
+    // timer would eventually create their own socket.
+    it('connect() during an armed backoff timer produces only one new socket', async () => {
+      const ws = await connectAndAuth();
+      ws._triggerClose(false, 1006); // schedules a reconnect (~2s backoff)
+      expect(service.getState()).toBe('disconnected');
+
+      const manualConnect = service.connect(testConfig, providers);
+      const newWs = wsCtor.instances[wsCtor.instances.length - 1];
+      newWs._triggerOpen();
+      newWs._triggerMessage({ event: 'auth', status: 'Success', version: '1.0' });
+      await manualConnect;
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
+
+      // Advance well past the original backoff delay: if the old timer were
+      // still armed, it would fire and create a THIRD socket.
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      expect(wsCtor).toHaveBeenCalledTimes(2);
     });
 
     it('uses exponential backoff with increasing delays', async () => {
@@ -595,18 +622,36 @@ describe('ZMNotificationService', () => {
     });
   });
 
-  describe('Singleton', () => {
-    it('getNotificationService returns same instance', () => {
-      const a = getNotificationService();
-      const b = getNotificationService();
+  describe('Per-profile registry (refs #337)', () => {
+    it('getNotificationService returns same instance for the same profile id', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-1');
       expect(a).toBe(b);
     });
 
-    it('resetNotificationService creates new instance', () => {
-      const a = getNotificationService();
-      resetNotificationService();
-      const b = getNotificationService();
+    it('getNotificationService returns a distinct instance per profile id', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-2');
       expect(a).not.toBe(b);
+    });
+
+    it('resetNotificationService creates a new instance for that profile only', () => {
+      const a = getNotificationService('profile-1');
+      const other = getNotificationService('profile-2');
+      resetNotificationService('profile-1');
+      const b = getNotificationService('profile-1');
+      expect(a).not.toBe(b);
+      expect(getNotificationService('profile-2')).toBe(other);
+    });
+
+    it('resetAllNotificationServices tears down every profile', () => {
+      const a = getNotificationService('profile-1');
+      const b = getNotificationService('profile-2');
+
+      resetAllNotificationServices();
+
+      expect(getNotificationService('profile-1')).not.toBe(a);
+      expect(getNotificationService('profile-2')).not.toBe(b);
     });
   });
 });

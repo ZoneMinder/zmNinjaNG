@@ -37,10 +37,10 @@ The same selection and delete flow is available in the Recent Events list on a m
 Filter events using the controls at the top:
 
 - **Date range** - Select a start and end date
-- **Monitor** - Show events from a specific camera only
+- **Monitor** - Show events from a specific camera only. In a {doc}`profiles` group the picker groups cameras by server, and picking from one server narrows the list to that server's events - the other servers drop out rather than showing everything they have.
 - **Groups** - Filter by monitor group
 - **Favorites only** - Show only events you have starred. This works across all your favorites, including ones older than the first page of results.
-- **Tags** - Show only events carrying the tags you pick (if your server supports tags). Select several tags to see events with any of them, or "All" for events with any tag. Like favorites, this covers tagged events older than the first page.
+- **Tags** - Show only events carrying the tags you pick (if your server supports tags). Select several tags to see events with any of them, or "All" for events with any tag. Like favorites, this covers tagged events older than the first page. In a {doc}`profiles` group the list offers each tag name once, however many servers in it define it, and picking one matches that name on every server. A server that has no tag by that name contributes no events, so filtering by a tag only one of your servers uses shows you only that server's events.
 - **Archived only** - Restrict the list to archived events. To archive an event, open it in the event detail screen and use the archive action.
 
 ## Event Playback

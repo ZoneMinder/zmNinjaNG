@@ -2,6 +2,7 @@ import { MoreVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 import { Button } from '../ui/button';
+import { ProfileChip } from '../ui/profile-chip';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -11,31 +12,33 @@ import {
   DropdownMenuSubContent,
   DropdownMenuCheckboxItem,
 } from '../ui/dropdown-menu';
-import type { Monitor } from '../../api/types';
+
+/** One entry in the show-monitors list. */
+export interface MontageVisibilityItem {
+  /** Toggle key: the bare monitor id in single mode, the composite
+   *  profileId:monitorId tile id in All mode, where two servers can expose
+   *  the same raw monitor id (refs #337). */
+  id: string;
+  name: string;
+  /** Owning server label, All mode only. */
+  profileChip?: string;
+}
 
 interface MontageKebabMenuProps {
-  monitors: Monitor[];
+  /** Already sorted by the page, which knows the server order. */
+  items: MontageVisibilityItem[];
   hiddenMonitorIds: string[];
-  onToggleVisibility: (monitorId: string) => void;
+  onToggleVisibility: (id: string) => void;
 }
 
 export function MontageKebabMenu({
-  monitors,
+  items,
   hiddenMonitorIds,
   onToggleVisibility,
 }: MontageKebabMenuProps) {
   const { t } = useTranslation();
 
   const hiddenSet = useMemo(() => new Set(hiddenMonitorIds), [hiddenMonitorIds]);
-
-  const sortedMonitors = useMemo(() => {
-    return [...monitors].sort((a, b) => {
-      const sa = Number(a.Sequence ?? 0);
-      const sb = Number(b.Sequence ?? 0);
-      if (sa !== sb) return sa - sb;
-      return (a.Name ?? '').localeCompare(b.Name ?? '');
-    });
-  }, [monitors]);
 
   return (
     <DropdownMenu>
@@ -52,28 +55,39 @@ export function MontageKebabMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {sortedMonitors.length > 0 && (
+        {items.length > 0 && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger data-testid="montage-kebab-visibility">
               {t('montage.menu_show_monitors')}
             </DropdownMenuSubTrigger>
-            <DropdownMenuSubContent className="max-h-[min(60vh,24rem)] overflow-y-auto">
-              {sortedMonitors.map((m) => {
-                const visible = !hiddenSet.has(m.Id);
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={m.Id}
-                    checked={visible}
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      onToggleVisibility(m.Id);
-                    }}
-                    data-testid={`montage-visibility-${m.Id}`}
-                  >
-                    {m.Name}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
+            {/* Bounded width, or the submenu grows to the longest monitor
+                name and the entry's `truncate` never engages - a name long
+                enough would push the panel past the 320px floor the project
+                sizes labels against. The title attribute carries the full
+                name for anything the ellipsis eats. */}
+            <DropdownMenuSubContent className="max-w-[15rem] max-h-[min(60vh,24rem)] overflow-y-auto">
+              {items.map((item) => (
+                <DropdownMenuCheckboxItem
+                  key={item.id}
+                  checked={!hiddenSet.has(item.id)}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onToggleVisibility(item.id);
+                  }}
+                  data-testid={`montage-visibility-${item.id}`}
+                >
+                  <span className="truncate min-w-0" title={item.name}>
+                    {item.name}
+                  </span>
+                  {item.profileChip && (
+                    <ProfileChip
+                      name={item.profileChip}
+                      testId={`montage-visibility-chip-${item.id}`}
+                      className="ml-1.5"
+                    />
+                  )}
+                </DropdownMenuCheckboxItem>
+              ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
         )}

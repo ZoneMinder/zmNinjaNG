@@ -63,6 +63,16 @@ vi.mock('../../../hooks/useCurrentProfile', () => ({
       hoverPreview: { assistant: false },
     },
   }),
+  // Only read in All mode (refs #337); single mode's isAllMode is false so
+  // this is never actually consulted, but it's called unconditionally.
+  useProfileById: () => ({ profile: null, settings: {} }),
+}));
+// null: useProfileScope's real return for single mode (see its own doc
+// comment) - AskPanel's isAllMode check must see it that way, not the real
+// hook, which would otherwise pull in stores/profile.ts's whole dependency
+// chain into this unit test (refs #337, same rationale as the mocks above).
+vi.mock('../../../hooks/useProfileScope', () => ({
+  useProfileScope: () => null,
 }));
 // The warmup effect (refs #261) resolves the stored API key and fires
 // warmOllamaModel on mount for the Ollama backend; both are stubbed so the
@@ -103,6 +113,14 @@ describe('AskPanel', () => {
     mockBackend.current = 'on-device';
     mockOllamaModel.current = '';
     warmResolvers.length = 0;
+  });
+
+  // Single mode: no pinned-profile banner or picker at all (refs #337).
+  it('renders no pinned-profile banner or picker in single mode', () => {
+    render(<AskPanel />);
+
+    expect(screen.queryByTestId('assistant-pinned-banner')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
   });
 
   it('renders Ninjii\'s self-introduction when the thread is empty (refs #246)', () => {

@@ -1,22 +1,22 @@
 /**
  * Notification History Page
  *
- * Displays a list of past notifications.
+ * Displays a list of past notifications. Single mode: the current profile's
+ * bucket. All mode: the union of every scope profile's bucket, newest first,
+ * with a profile chip per row and per-row actions acting on the OWNING
+ * profile's bucket (refs #337).
+ *
  * Allows users to view event details, mark as read, or clear history.
  */
 
 import { useState, useMemo, useCallback } from 'react';
-import { useNotificationStore, type NotificationEvent } from '../stores/notifications';
+import { useNotificationStore } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
-import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
-import { EventThumbnail } from '../components/events/EventThumbnail';
-import { HoverPreview } from '../components/ui/hover-preview';
-import { EventZmsHoverPlayer } from '../components/events/EventThumbnailHoverPreview';
+import { useProfileScope } from '../hooks/useProfileScope';
+import { NotificationHistoryItem, type HistoryEvent } from '../components/notifications/NotificationHistoryItem';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,79 +27,78 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Bell, Trash2, CheckCheck, ExternalLink, AlertCircle, Wifi, Smartphone, RefreshCw } from 'lucide-react';
-import { getEventCauseIcon } from '../lib/event/event-icons';
-import { formatDistanceToNow, isToday, isYesterday, startOfWeek, startOfMonth } from 'date-fns';
+import { Bell, Trash2, CheckCheck, AlertCircle } from 'lucide-react';
+import { isToday, isYesterday, startOfWeek, startOfMonth } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { PageContainer } from '../components/common/PageContainer';
-import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
-import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
-import { activateOnEnterOrSpace } from '../lib/utils';
 import { EmptyState } from '../components/ui/empty-state';
 
 // Stable empty reference for the no-profile case, so the selector below does
 // not return a fresh array each render.
-const EMPTY_EVENTS: NotificationEvent[] = [];
+const EMPTY_EVENTS: HistoryEvent[] = [];
 
 export default function NotificationHistory() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile } = useCurrentProfile();
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
   const markEventRead = useNotificationStore((s) => s.markEventRead);
   const markAllRead = useNotificationStore((s) => s.markAllRead);
   const clearEvents = useNotificationStore((s) => s.clearEvents);
-  const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
-  const { fmtDateTimeShort } = useDateTimeFormat();
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
 
-  // Subscribe reactively to this profile's events so the list, unread count,
-  // and mark-read actions update live. Selecting only the store's action
-  // functions (stable refs) would not re-render on new/changed events.
-  const profileId = currentProfile?.id;
-  const events = useNotificationStore(
-    useShallow((s) => (profileId ? s.getEvents(profileId) : EMPTY_EVENTS))
+  // Every real profile in scope: [currentProfile] in single mode, every
+  // scope profile in All mode - same "profiles is always an array" idiom
+  // useProfileScope documents, so one code path covers both modes.
+  const scopeProfiles = useMemo(
+    () => (isAllMode ? scope.profiles : currentProfile ? [currentProfile] : []),
+    [isAllMode, scope, currentProfile]
+  );
+
+  // Subscribe to the RAW per-profile event arrays only - not a derived,
+  // freshly-allocated union. A selector that builds a new array/object every
+  // call defeats useShallow's element-wise Object.is compare (every element
+  // differs every time) and useSyncExternalStore loops forever (refs #337).
+  const buckets = useNotificationStore(
+    useShallow((s) => scopeProfiles.map((p) => s.profileEvents[p.id] ?? EMPTY_EVENTS))
+  );
+
+  // Tag/merge/sort OUTSIDE the store subscription, in a plain useMemo keyed
+  // on the stable bucket references.
+  const events = useMemo<HistoryEvent[]>(
+    () =>
+      scopeProfiles
+        .flatMap((p, i) => buckets[i].map((e) => ({ ...e, profileId: p.id, profileName: p.name })))
+        .sort((a, b) => b.receivedAt - a.receivedAt),
+    [buckets, scopeProfiles]
   );
   const unreadCount = useMemo(() => events.filter((e) => !e.read).length, [events]);
 
-  const handleViewEvent = (eventId: number) => {
-    // Id 0 is a notification with no ZM event: nothing to open (issue #242).
-    if (eventId <= 0) return;
-    if (currentProfile) {
-      markEventRead(currentProfile.id, eventId);
-    }
-    navigate(`/events/${eventId}`);
-  };
+  const handleViewEvent = useCallback(
+    (event: HistoryEvent) => {
+      // Id 0 is a notification with no ZM event: nothing to open (issue #242).
+      if (event.EventId <= 0) return;
+      markEventRead(event.profileId, event.EventId);
+      navigate(isAllMode ? `/all/events/${event.profileId}/${event.EventId}` : `/events/${event.EventId}`);
+    },
+    [markEventRead, navigate, isAllMode]
+  );
+
+  const handleMarkRead = useCallback(
+    (event: HistoryEvent) => markEventRead(event.profileId, event.EventId),
+    [markEventRead]
+  );
 
   const handleMarkAllRead = () => {
-    if (currentProfile) {
-      markAllRead(currentProfile.id);
-    }
+    scopeProfiles.forEach((p) => markAllRead(p.id));
   };
 
   const handleClearEvents = () => {
-    if (currentProfile) {
-      clearEvents(currentProfile.id);
-    }
+    scopeProfiles.forEach((p) => clearEvents(p.id));
   };
-
-  /** Build the thumbnail fallback chain URLs for a notification event. */
-  const buildChainForEvent = useCallback(
-    (eventId: number) => {
-      if (!currentProfile) return [];
-      return buildThumbnailChain(
-        currentProfile.portalUrl,
-        String(eventId),
-        settings.thumbnailFallbackChain,
-        {
-          token: isAccessTokenFresh ? accessToken ?? undefined : undefined,
-          minStreamingPort: resolveMinStreamingPort(currentProfile.minStreamingPort, settings.forceDisableMultiPort),
-        }
-      );
-    },
-    [currentProfile, accessToken, isAccessTokenFresh, settings.thumbnailFallbackChain]
-  );
 
   type DateSection = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'older';
 
@@ -128,15 +127,10 @@ export default function NotificationHistory() {
     return sections.filter((s) => s.events.length > 0);
   }, [events, getDateSection, t]);
 
-  // Source icon component
-  const SourceIcon = ({ source }: { source: string }) => {
-    if (source === 'push') return <Smartphone className="h-3 w-3" />;
-    if (source === 'poll') return <RefreshCw className="h-3 w-3" />;
-    return <Wifi className="h-3 w-3" />;
-  };
-
-  // Early return if no profile
-  if (!currentProfile) {
+  // Early return if no profile at all (both modes: All mode always has
+  // scopeProfiles.length > 0 when it renders at all - useProfileScope
+  // collapses to null otherwise).
+  if (scopeProfiles.length === 0) {
     return (
       <div className="p-4">
         <div className="flex items-center justify-center min-h-[300px]">
@@ -203,124 +197,15 @@ export default function NotificationHistory() {
               </div>
               {/* Events in section */}
               <div className="border rounded-md divide-y overflow-hidden">
-                {section.events.map((event) => {
-                  const causeDisplay = event.Cause.split('|')[0].trim();
-                  const CauseIcon = getEventCauseIcon(causeDisplay);
-                  // EventId 0 means the push had no ZM event (issue #242): nothing
-                  // to open and no image to fetch, so the row is not clickable.
-                  const canView = event.EventId > 0;
-                  return (
-                    <div
-                      key={`${event.EventId}-${event.receivedAt}`}
-                      className={`flex items-center gap-3 p-2 sm:p-3 transition-colors ${canView ? 'hover:bg-muted/50 cursor-pointer' : ''} ${event.read ? 'opacity-50' : ''}`}
-                      role={canView ? 'button' : undefined}
-                      tabIndex={canView ? 0 : undefined}
-                      onClick={canView ? () => handleViewEvent(event.EventId) : undefined}
-                      onKeyDown={canView ? activateOnEnterOrSpace(() => handleViewEvent(event.EventId)) : undefined}
-                      data-testid="notification-history-item"
-                    >
-                      {/* Thumbnail */}
-                      {canView ? (
-                        <div className="h-14 w-20 rounded border overflow-hidden bg-muted/30 flex-shrink-0">
-                          {settings.hoverPreview.notifications ? (
-                            <HoverPreview
-                              aspectRatio={16 / 9}
-                              testId="event-thumbnail-hover-preview"
-                              renderPreview={() => (
-                                <EventZmsHoverPlayer
-                                  descriptor={{
-                                    eventId: String(event.EventId),
-                                    monitorId: String(event.MonitorId),
-                                    name: event.MonitorName,
-                                  }}
-                                />
-                              )}
-                            >
-                              <EventThumbnail
-                                urls={buildChainForEvent(event.EventId)}
-                                cacheKey={`notif-${event.EventId}`}
-                                alt={`Event ${event.EventId}`}
-                                className="h-full w-full"
-                                objectFit="cover"
-                              />
-                            </HoverPreview>
-                          ) : (
-                            <EventThumbnail
-                              urls={buildChainForEvent(event.EventId)}
-                              cacheKey={`notif-${event.EventId}`}
-                              alt={`Event ${event.EventId}`}
-                              className="h-full w-full"
-                              objectFit="cover"
-                            />
-                          )}
-                        </div>
-                      ) : (
-                        <div className="h-14 w-20 rounded border overflow-hidden bg-muted/30 flex-shrink-0">
-                          {/* No ZM event: show the shared no-image placeholder, never fetch (issue #242) */}
-                          <EventThumbnail
-                            urls={[]}
-                            cacheKey={`notif-noevent-${event.receivedAt}`}
-                            alt={event.MonitorName}
-                            className="h-full w-full"
-                            objectFit="cover"
-                          />
-                        </div>
-                      )}
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold truncate">{event.MonitorName}</span>
-                          {!event.read && (
-                            <Badge variant="destructive" className="text-[9px] h-4 px-1 shrink-0">
-                              {t('notification_history.new')}
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                          <CauseIcon className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{causeDisplay}</span>
-                          {event.Notes && (
-                            <>
-                              <span className="shrink-0">·</span>
-                              <span className="truncate hidden sm:inline" title={event.Notes}>{event.Notes.split('|')[0].trim()}</span>
-                            </>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70 mt-0.5 flex-wrap">
-                          <span>{fmtDateTimeShort(new Date(event.receivedAt))}</span>
-                          <span>·</span>
-                          <SourceIcon source={event.source} />
-                          <span>{formatDistanceToNow(event.receivedAt, { addSuffix: true })}</span>
-                        </div>
-                        {canView && (
-                          <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground/50 mt-0.5">
-                            <span>{t('notification_history.event_id', { id: event.EventId })}</span>
-                            <span>·</span>
-                            <span>{t('notification_history.monitor_id', { id: event.MonitorId })}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-1 shrink-0" role="presentation" onClick={(e) => e.stopPropagation()}>
-                        {!event.read && currentProfile && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            onClick={() => markEventRead(currentProfile.id, event.EventId)}
-                            data-testid="mark-read"
-                          >
-                            <CheckCheck className="h-3 w-3 sm:mr-1" />
-                            <span className="hidden sm:inline">{t('notification_history.mark_read')}</span>
-                          </Button>
-                        )}
-                        <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                      </div>
-                    </div>
-                  );
-                })}
+                {section.events.map((event) => (
+                  <NotificationHistoryItem
+                    key={`${event.profileId}-${event.EventId}-${event.receivedAt}`}
+                    event={event}
+                    showProfileChip={isAllMode}
+                    onView={handleViewEvent}
+                    onMarkRead={handleMarkRead}
+                  />
+                ))}
               </div>
             </div>
           ))}

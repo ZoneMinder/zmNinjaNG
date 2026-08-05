@@ -9,11 +9,12 @@
 import { Outlet, useLocation, Navigate } from 'react-router-dom';
 import logoUrl from '../../../assets/logo.png';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useProfileScope } from '../../hooks/useProfileScope';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 import { Button } from '../ui/button';
 import { log, LogLevel } from '../../lib/logger';
-import { viewNameForPath } from '../../lib/navigation';
+import { viewNameForPath, resolveLastRouteSaveTarget } from '../../lib/navigation';
 import { useInsomnia } from '../../hooks/useInsomnia';
 import {
   Menu,
@@ -50,6 +51,15 @@ import { AssistantWidget } from '../assistant/AssistantWidget';
  */
 export default function AppLayout() {
   const { currentProfile, settings } = useCurrentProfile();
+  // Route guard below must treat All mode (currentProfile stays null there)
+  // as having a profile: gate on scope resolving, not on currentProfile
+  // (refs #337, Task 2 finding).
+  const scope = useProfileScope();
+  // Write target for this file's view-level preferences (sidebar width, the
+  // montage toolbar, insomnia, TV mode): the real profile id in single mode,
+  // the active aggregate's id while aggregating - the same bucket `settings`
+  // above reads (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateProfileSettings = useSettingsStore((state) => state.updateProfileSettings);
   const location = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -68,23 +78,24 @@ export default function AppLayout() {
     }
   }, [isTvMode]);
 
-  const profileId = currentProfile?.id;
   const tvAutoDetectedRef = useRef(false);
 
   useEffect(() => {
-    if (!profileId || tvAutoDetectedRef.current) return;
+    if (!currentProfileId || tvAutoDetectedRef.current) return;
     tvAutoDetectedRef.current = true;
 
     checkIsTV().then((isTV) => {
       if (isTV && !settings.tvMode) {
-        updateProfileSettings(profileId, { tvMode: true });
+        updateProfileSettings(currentProfileId, { tvMode: true });
       }
     });
-  }, [profileId, settings.tvMode, updateProfileSettings]);
+  }, [currentProfileId, settings.tvMode, updateProfileSettings]);
 
-  // Track route changes and save to settings
+  // Track route changes and save to settings. Gated on `scope` (resolves in
+  // both single and All mode), not `currentProfile?.id` (null in All mode):
+  // the banner log used to never fire there either.
   useEffect(() => {
-    if (!currentProfile?.id) return;
+    if (!scope) return;
 
     // Bold banner so view transitions are easy to spot in the console
     const viewName = viewNameForPath(location.pathname);
@@ -92,16 +103,23 @@ export default function AppLayout() {
       log.banner(`Entering ${viewName} View`);
     }
 
-    // Exclude setup/profile routes and notification-opened pages from being saved as lastRoute
-    const excludedRoutes = ['/profiles/new', '/setup', '/profiles'];
+    // resolveLastRouteSaveTarget excludes setup/profile routes and
+    // notification-opened pages, and saves to the active aggregate's own
+    // bucket while aggregating rather than being silently dropped (refs #337)
+    // - see its own doc comment.
     const fromNotification = (location.state as Record<string, unknown>)?.fromNotification === true;
-    const shouldSave = !excludedRoutes.includes(location.pathname) && !fromNotification;
+    const saveTarget = resolveLastRouteSaveTarget(
+      location.pathname,
+      fromNotification,
+      scope.mode === 'all' ? scope.aggregateId : null,
+      currentProfile?.id
+    );
 
-    if (shouldSave) {
-      updateProfileSettings(currentProfile.id, { lastRoute: location.pathname });
-      log.app('Storing route', LogLevel.DEBUG, { route: location.pathname });
+    if (saveTarget) {
+      updateProfileSettings(saveTarget, { lastRoute: location.pathname });
+      log.app('Storing route', LogLevel.DEBUG, { route: location.pathname, bucket: saveTarget });
     }
-  }, [location.pathname, currentProfile?.id, updateProfileSettings]);
+  }, [location.pathname, location.state, scope, currentProfile?.id, updateProfileSettings]);
 
   // Apply global insomnia setting
   useInsomnia({ enabled: settings.insomnia });
@@ -122,11 +140,13 @@ export default function AppLayout() {
     }
   }, [isLocked]);
 
+  // Symmetric with useKioskLock, which already stores the lock against
+  // currentProfileId: an unlock that skipped All mode left insomnia on.
   const handleKioskUnlock = useCallback(() => {
-    if (currentProfile) {
-      updateProfileSettings(currentProfile.id, { insomnia: previousInsomniaState });
+    if (currentProfileId) {
+      updateProfileSettings(currentProfileId, { insomnia: previousInsomniaState });
     }
-  }, [currentProfile, previousInsomniaState, updateProfileSettings]);
+  }, [currentProfileId, previousInsomniaState, updateProfileSettings]);
 
 
   const expandedWidth = 180;
@@ -136,8 +156,8 @@ export default function AppLayout() {
   const toggleSidebar = () => {
     const next = !isCollapsed;
     setIsCollapsed(next);
-    if (currentProfile) {
-      updateProfileSettings(currentProfile.id, { sidebarWidth: next ? collapsedWidth : expandedWidth });
+    if (currentProfileId) {
+      updateProfileSettings(currentProfileId, { sidebarWidth: next ? collapsedWidth : expandedWidth });
     }
   };
 
@@ -174,7 +194,7 @@ export default function AppLayout() {
   }, [pendingCert, updateProfileSettings]);
 
   // Check for profile after all hooks are called to avoid hooks violation
-  if (!currentProfile) {
+  if (!scope) {
     if (location.pathname === '/profiles') {
       // Allow access to profiles page without a current profile
     } else {
@@ -248,8 +268,8 @@ export default function AppLayout() {
               variant="ghost"
               size="icon"
               onClick={() => {
-                if (currentProfile) {
-                  updateProfileSettings(currentProfile.id, {
+                if (currentProfileId) {
+                  updateProfileSettings(currentProfileId, {
                     montageShowToolbar: !settings.montageShowToolbar,
                   });
                 }

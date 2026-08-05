@@ -588,10 +588,15 @@ export function asProfileId(id: string): ProfileId {
 }
 
 /**
- * Sentinel profile id for the virtual "All Profiles" aggregate view. Never a
+ * Sentinel profile id for the retired "All Profiles" aggregate view. Never a
  * real server: it names no server, and services/sessions.ts's getSession
  * rejects it rather than resolving it to a profile. Never sent to a server.
- * Refs #337.
+ *
+ * LEGACY: no surface selects it any more - virtual profile groups replaced it,
+ * and switchProfile rejects it. It survives so the guards that keep an
+ * aggregate id out of session/token/notification paths still recognize a
+ * stored one, and so services/profile-initialization.ts can migrate it away on
+ * rehydrate. Nothing new should reference it. Refs #337.
  */
 export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
 
@@ -606,6 +611,51 @@ export const ALL_PROFILES_ID: ProfileId = asProfileId('__all_profiles__');
  * mistaken for the aggregate identity Phase 2 reads. Refs #337.
  */
 export const PROBE_PROFILE_ID: ProfileId = asProfileId('__probe__');
+
+/**
+ * Prefix every virtual-profile id carries. A virtual profile is a named group
+ * of real profiles that aggregates exactly like All Servers, scoped to its
+ * members; its id names no server either.
+ *
+ * The shape is deliberate. Service modules (services/pushNotifications.ts,
+ * stores/notifications.ts) have to answer "is this id an aggregate?" without
+ * reading the profile store, so the answer has to be derivable from the string
+ * alone - a plain UUID would force a store lookup, or a new gate, into four
+ * service modules. Refs #337.
+ */
+export const VIRTUAL_PROFILE_ID_PREFIX = '__virtual_';
+
+/**
+ * Mint an id for a new virtual profile. The only place a virtual id is
+ * created; every stored `VirtualProfile.id` traces back to this call.
+ */
+export function mintVirtualProfileId(): ProfileId {
+  return asProfileId(`${VIRTUAL_PROFILE_ID_PREFIX}${crypto.randomUUID()}`);
+}
+
+/** Whether `id` names a virtual profile (a stored group of real profiles). */
+export function isVirtualProfileId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(VIRTUAL_PROFILE_ID_PREFIX);
+}
+
+/**
+ * Whether `id` names any aggregate: the built-in All Servers sentinel or a
+ * virtual profile. Guards that must reject "no single server behind this id"
+ * ask this, not `=== ALL_PROFILES_ID`.
+ */
+export function isAggregateProfileId(id: string | null | undefined): boolean {
+  return id === ALL_PROFILES_ID || isVirtualProfileId(id);
+}
+
+/**
+ * A named group of real profiles. Membership is flat: `memberProfileIds` holds
+ * real profile ids only, never another virtual id.
+ */
+export interface VirtualProfile {
+  id: ProfileId;
+  name: string;
+  memberProfileIds: ProfileId[];
+}
 
 export interface Profile {
   id: ProfileId;
@@ -622,6 +672,8 @@ export interface Profile {
   timezone?: string;
   minStreamingPort?: number; // ZM_MIN_STREAMING_PORT from server config
   go2rtcUrl?: string; // ZM_GO2RTC_PATH from server config (full URL)
+  /** Excluded from selection and every All-mode aggregate (refs #337). Absent/undefined means enabled - no migration needed for existing persisted profiles. */
+  disabled?: boolean;
 }
 
 // Stream options types
@@ -647,11 +699,26 @@ export interface MonitorCardProps {
   newestEventAt?: string | null;
   objectFit?: React.CSSProperties['objectFit'] | 'flex';
   compact?: boolean;
+  /**
+   * Profile that owns this monitor. Set only in All mode (see
+   * useScopedMonitors); undefined in single mode means "the current
+   * profile". Threaded down to the streaming hooks so the tile streams from
+   * its own server, and used to switchProfile before any detail/events
+   * navigation off this card.
+   */
+  profileId?: ProfileId | null;
+  /** Owning profile's display name, rendered as a small chip. All mode only. */
+  profileChip?: string;
 }
 
 export interface EventCardProps {
   event: Event;
   monitorName: string;
+  /** All mode only: the owning profile, so the card routes to its /all/
+   *  deep route instead of switching profiles first (refs #337). */
+  profileId?: ProfileId;
+  /** All mode only: the owning profile's display name, for a chip. */
+  profileChip?: string;
   thumbnailUrls: string[];
   largeThumbnailUrls?: string[];
   objectFit?: React.CSSProperties['objectFit'];

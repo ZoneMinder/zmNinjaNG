@@ -5,26 +5,34 @@
  * tiles. A monitor appears on alarm and leaves once the dwell window from its
  * last alarm closes. See lib/monitor/live-activity.ts for why the dwell
  * window exists (it protects nph-zms, not just the eye).
+ *
+ * All mode aggregates every scope profile's alarm fanout instead of gating
+ * All mode out (refs #337, #341): single mode keeps its original
+ * useAlarmStates path unchanged below (bare monitor-id keys); All mode's
+ * data (useScopedAlarmStates fanout, watched-set cap, live-hint causes) is
+ * assembled by useLiveActivityAllMode, keyed by monitorCacheKey(profileId,
+ * monitorId) so two servers sharing a raw monitor id never collide. Both
+ * feed the SAME dwell/damping engine below (reduceActiveMonitors etc., which
+ * is generic over its state keys), so a single set of page state/effects
+ * serves both modes.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
-import { EyeClosed } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
 import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileStore } from '../stores/profile';
 import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAlarmStates } from '../hooks/useAlarmStates';
+import { useLiveActivityAllMode, type LiveActivityMonitorEntry } from '../hooks/useLiveActivityAllMode';
 import { useEventMontageGrid } from '../hooks/useEventMontageGrid';
 import { useMeasuredWidth } from '../hooks/useMeasuredWidth';
-import { getLiveActivityRowSpan } from '../lib/monitor/live-activity-layout';
-import { LIVE_ACTIVITY } from '../lib/zmninja-ng-constants';
 import { resolvePollIntervalMs, useNotificationStore } from '../stores/notifications';
 import {
   reduceActiveMonitors,
@@ -36,23 +44,25 @@ import {
 } from '../lib/monitor/live-activity';
 import { runViewTransition } from '../lib/view-transition';
 import type { MonitorAlarmState } from '../lib/monitor/alarm-state';
+import type { Profile, ProfileId } from '../api/types';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { LiveActivitySettingsDialog } from '../components/live-activity/LiveActivitySettingsDialog';
-import { LiveActivityTile } from '../components/live-activity/LiveActivityTile';
+import { LiveActivityGridBody } from '../components/live-activity/LiveActivityGridBody';
 import {
   LiveActivityHeader,
   LiveActivityFullscreenBar,
 } from '../components/live-activity/LiveActivityChrome';
-import { EmptyState } from '../components/ui/empty-state';
-import { ErrorBanner } from '../components/ui/query-state';
-import { Skeleton } from '../components/ui/skeleton';
-import { resolveQueryError } from '../lib/query/query-error';
 import { PageContainer } from '../components/common/PageContainer';
 
 export default function LiveActivity() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
-  const { currentProfile, settings } = useCurrentProfile();
+  const { currentProfile, settings, isAllMode } = useCurrentProfile();
+  // The raw store value: the real profile id in single mode, the active
+  // aggregate's id otherwise (where currentProfile above is null). View-level
+  // writes that must still work while aggregating - the grid column count, fullscreen, the
+  // settings dialog's own bucket - target this id rather than
+  // currentProfile?.id, same pattern Montage.tsx uses (refs #337).
+  const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const authSlice = useAuthSlice(currentProfile?.id ?? null);
   const isAuthenticated = authSlice.isAuthenticated;
   const accessToken = authSlice.accessToken;
@@ -60,6 +70,8 @@ export default function LiveActivity() {
   const bandwidth = useBandwidthSettings();
   const gridContainerRef = useRef<HTMLDivElement>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // ---- Single mode: unchanged from before All mode existed ----
 
   const { data, isLoading: monitorsLoading, error: monitorsError } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
@@ -96,21 +108,34 @@ export default function LiveActivity() {
   // off while mounted): useAlarmStates reports an empty `states` map while
   // disabled, and feeding that into reduceActiveMonitors below would drop
   // every resident monitor instantly with no dwell window, the exact tile
-  // churn the dwell window exists to prevent (refs #313).
+  // churn the dwell window exists to prevent (refs #313). watchedIds is
+  // already empty in All mode (the query above is disabled there), so this
+  // is a no-op fanout rather than a second gate.
   const { states, isLoading: alarmsLoading, error: alarmError } = useAlarmStates(watchedIds, {
     enabled: true,
     pollIntervalMs,
   });
 
-  // The damped display list. Held in state rather than derived during render
-  // because it depends on the previous list and on the current time.
+  const dwellMs = settings.liveActivityDwellSeconds * 1000;
+
+  // ---- Damped display list: fed by whichever mode is active ----
+  // Held in state rather than derived during render because it depends on
+  // the previous list and on the current time. Declared before
+  // useLiveActivityAllMode below: that hook reads `active` to exempt
+  // currently-resident monitors from its watched-set cap.
   const [active, setActive] = useState<ActiveMonitorEntry[]>([]);
   // Mirrors `active` so the updater below can read the previous list without
   // listing it as an effect dependency. `active` in the cooling effect's deps
   // would rearm the interval on every list change, and since an alarming
   // monitor's entry restamps Date.now() on each pass, that never settles.
   const activeRef = useRef<ActiveMonitorEntry[]>(active);
-  const dwellMs = settings.liveActivityDwellSeconds * 1000;
+
+  // ---- All mode: scoped monitors, per-profile ignore lists, capped fanout,
+  // and live-hint causes, all assembled in one hook (see its own doc
+  // comment for why this stays a separate fetch path from useAlarmStates
+  // above rather than one unified call).
+  const allMode = useLiveActivityAllMode(isAllMode, dwellMs, pollIntervalMs, active);
+
   // Clock for the per-tile elapsed labels. A plain number rather than a Date
   // so an unchanged tick cannot produce a new reference, and advanced by the
   // cooling interval below rather than by a second timer of its own.
@@ -144,6 +169,7 @@ export default function LiveActivity() {
   const recentCauses = useNotificationStore(
     useShallow((state) => {
       const causes = new Map<string, string>();
+      if (isAllMode) return causes;
       const events = currentProfile ? state.profileEvents[currentProfile.id] : undefined;
       if (!events?.length) return causes;
       const cutoff = Date.now() - dwellMs;
@@ -157,11 +183,15 @@ export default function LiveActivity() {
     })
   );
 
-  const hintedMonitorIds = useMemo(() => new Set(recentCauses.keys()), [recentCauses]);
+  // Whichever mode is active feeds the same dwell engine below.
+  const effectiveStates = isAllMode ? allMode.states : states;
+  const effectiveCauses = isAllMode ? allMode.recentCauses : recentCauses;
+
+  const hintedMonitorIds = useMemo(() => new Set(effectiveCauses.keys()), [effectiveCauses]);
 
   const hintedStates = useMemo(
-    () => applyLiveAlarmHints(states, hintedMonitorIds),
-    [states, hintedMonitorIds]
+    () => applyLiveAlarmHints(effectiveStates, hintedMonitorIds),
+    [effectiveStates, hintedMonitorIds]
   );
 
   // Runs the dwell policy and publishes the result. Identity-stable (no deps):
@@ -200,8 +230,8 @@ export default function LiveActivity() {
   );
 
   useEffect(() => {
-    applyStates(hintedStates, dwellMs, recentCauses);
-  }, [hintedStates, dwellMs, recentCauses, applyStates]);
+    applyStates(hintedStates, dwellMs, effectiveCauses);
+  }, [hintedStates, dwellMs, effectiveCauses, applyStates]);
 
   // Removal goes back through the reducer rather than being filtered out at
   // render time, so a dismissed tile unmounts for real and its stream is quit
@@ -209,9 +239,9 @@ export default function LiveActivity() {
   const handleDismiss = useCallback(
     (monitorId: string) => {
       dismissedRef.current = new Set(dismissedRef.current).add(monitorId);
-      applyStates(hintedStates, dwellMs, recentCauses);
+      applyStates(hintedStates, dwellMs, effectiveCauses);
     },
-    [hintedStates, dwellMs, recentCauses, applyStates]
+    [hintedStates, dwellMs, effectiveCauses, applyStates]
   );
 
   // A cooling monitor expires on a timer, not on a poll response, so the list
@@ -224,16 +254,32 @@ export default function LiveActivity() {
     if (active.length === 0) return;
     const timer = setInterval(() => {
       setNow(Date.now());
-      applyStates(hintedStates, dwellMs, recentCauses);
+      applyStates(hintedStates, dwellMs, effectiveCauses);
     }, 1000);
     return () => clearInterval(timer);
-  }, [active.length, hintedStates, dwellMs, recentCauses, applyStates]);
+  }, [active.length, hintedStates, dwellMs, effectiveCauses, applyStates]);
 
   const { visible, overflowCount } = capActiveMonitors(active, settings.liveActivityMaxTiles);
 
-  const monitorsById = useMemo(
-    () => new Map((data?.monitors ?? []).map((m) => [m.Monitor.Id, m])),
-    [data?.monitors]
+  // Tile lookup: single mode keyed by the bare monitor id (this page's own
+  // monitors query above); All mode keyed by monitorCacheKey, built by
+  // useLiveActivityAllMode so two profiles' monitor "3" never collide (refs
+  // #337, #341). Only one side is ever non-empty for a given render.
+  const monitorsById = useMemo(() => {
+    if (isAllMode) return allMode.monitorsById;
+    const map = new Map<string, LiveActivityMonitorEntry>();
+    for (const m of data?.monitors ?? []) {
+      map.set(m.Monitor.Id, { Monitor: m.Monitor, Monitor_Status: m.Monitor_Status });
+    }
+    return map;
+  }, [isAllMode, allMode.monitorsById, data?.monitors]);
+
+  // The tile's owning profile: its own server in All mode, the page's
+  // current profile in single mode - same resolver shape as Montage.tsx.
+  const resolveOwnerProfile = useCallback(
+    (profileId: ProfileId | undefined): Profile | null =>
+      profileId ? allMode.profilesById.get(profileId) ?? null : currentProfile,
+    [allMode.profilesById, currentProfile]
   );
 
   // Shares monitorGridCols with the Monitors page rather than a dedicated
@@ -241,9 +287,9 @@ export default function LiveActivity() {
   // simpler than two, and there is nothing page-specific about column count
   // the way there is for poll/dwell/tiles/ignore list.
   const handleGridChange = useCallback((cols: number) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, { monitorGridCols: cols });
-  }, [currentProfile, updateSettings]);
+    if (!currentProfileId) return;
+    updateSettings(currentProfileId, { monitorGridCols: cols });
+  }, [currentProfileId, updateSettings]);
 
   const {
     gridCols,
@@ -269,111 +315,64 @@ export default function LiveActivity() {
   // Its own settings key, not montageIsFullscreen: a shared flag would make
   // going fullscreen here put the Montage page in fullscreen too.
   const { isFullscreen, handleToggleFullscreen } = useFullscreenMode({
-    currentProfile,
+    profileId: currentProfileId,
     settings,
     settingKey: 'liveActivityIsFullscreen',
   });
 
-  const error = monitorsError ?? alarmError;
+  // Aggregating only: every scope profile plus its own full monitor list,
+  // for the settings dialog's ignore-list section (which edits a PICKED
+  // profile's own bucket via ProfilePicker, never the aggregate's - refs
+  // #337). Undefined in single mode, where the dialog keeps reading/writing
+  // `monitors`/`profileId` directly as it always has.
+  const scopeProfiles = useMemo(() => {
+    if (!isAllMode) return undefined;
+    return Array.from(allMode.profilesById.values()).map((profile) => ({
+      profile,
+      monitors: allMode.monitorsByProfile.get(profile.id) ?? [],
+    }));
+  }, [isAllMode, allMode.profilesById, allMode.monitorsByProfile]);
+
+  const watchedCount = isAllMode ? allMode.watchedCount : watchedIds.length;
+  const error = isAllMode
+    ? (allMode.profileErrors[0]?.error ?? allMode.alarmError)
+    : (monitorsError ?? alarmError);
+  const isLoadingFanout = isAllMode
+    ? (allMode.isMonitorsLoading || allMode.isAlarmsLoading)
+    : (monitorsLoading || alarmsLoading);
 
   // "All quiet" is a claim about the server, so it is only honest once the
   // page has heard from it. An unreachable server leaves visible empty and
-  // monitorsLoading false, and a failing alarm fanout dwells every tile out,
+  // isLoadingFanout false, and a failing alarm fanout dwells every tile out,
   // so without this gate an outage reads as a confident "nothing is
   // alarming" next to the error banner: the worst possible false negative
   // for a page whose whole job is answering that question.
   const isEmpty = visible.length === 0;
-  const showSkeleton = isEmpty && (monitorsLoading || alarmsLoading);
+  const showSkeleton = isEmpty && isLoadingFanout;
   const showEmptyState = isEmpty && !showSkeleton && !error;
 
   // The grid and everything that stands in for it, shared by both chrome
   // treatments below so fullscreen cannot drift from the normal page.
   const body = (
-    <>
-      {error && <ErrorBanner message={resolveQueryError(error, t)} />}
-
-      {showSkeleton && (
-        <div
-          // Same element ref as the real grid, so the width is already
-          // measured when the first tiles arrive and they are packed on their
-          // first frame rather than laying out once and then again.
-          ref={setGridElement}
-          className="grid"
-          style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))` }}
-          data-testid="live-activity-loading"
-        >
-          {Array.from({ length: gridCols * 2 }, (_, i) => (
-            <Skeleton key={i} className="aspect-video rounded-xl" />
-          ))}
-        </div>
-      )}
-
-      {showEmptyState && (
-        <div data-testid="live-activity-empty">
-          <EmptyState
-            icon={EyeClosed}
-            title={t('live_activity.all_quiet')}
-            description={t('live_activity.watching_count', { count: watchedIds.length })}
-          />
-        </div>
-      )}
-
-      {!isEmpty && (
-        <div
-          ref={setGridElement}
-          // items-start, so each tile keeps the height its camera's aspect
-          // ratio gives it and never stretches to fill the rows it spans.
-          // The default stretch would pull a tile up to the rounded-up span
-          // below, and since the video area inside a tile is pinned to its own
-          // ratio, that extra height would arrive as dead black space under
-          // the picture along with the elapsed label floating in it.
-          //
-          // Rows are one pixel tall and each tile spans its own height, so
-          // tiles never share a row and a short camera beside a tall one no
-          // longer leaves a hole under itself. Until the grid has been
-          // measured there are no spans to honour, so the row unit stays off
-          // and tiles keep their natural heights for that one frame.
-          className="grid items-start"
-          style={{
-            gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
-            gridAutoRows: gridWidth > 0 ? `${LIVE_ACTIVITY.rowUnitPx}px` : undefined,
-          }}
-        >
-          {visible.map((entry) => {
-            const monitorData = monitorsById.get(entry.monitorId);
-            if (!monitorData) return null;
-            return (
-              <LiveActivityTile
-                key={entry.monitorId}
-                entry={entry}
-                monitor={monitorData.Monitor}
-                status={monitorData.Monitor_Status}
-                currentProfile={currentProfile}
-                accessToken={accessToken}
-                navigate={navigate}
-                now={now}
-                // Recomputed per render, but it only ever changes with the
-                // grid width, the column count or the camera's own shape, so
-                // the one-second clock never moves it.
-                rowSpan={
-                  gridWidth > 0
-                    ? getLiveActivityRowSpan(monitorData.Monitor, gridWidth, gridCols)
-                    : undefined
-                }
-                onDismiss={handleDismiss}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      {overflowCount > 0 && (
-        <p className="text-sm text-muted-foreground mt-3" data-testid="live-activity-overflow">
-          {t('live_activity.overflow', { count: overflowCount })}
-        </p>
-      )}
-
-    </>
+    <LiveActivityGridBody
+      error={error}
+      showSkeleton={showSkeleton}
+      showEmptyState={showEmptyState}
+      isEmpty={isEmpty}
+      watchedCount={watchedCount}
+      gridCols={gridCols}
+      gridWidth={gridWidth}
+      setGridElement={setGridElement}
+      visible={visible}
+      monitorsById={monitorsById}
+      resolveOwnerProfile={resolveOwnerProfile}
+      accessToken={accessToken}
+      navigate={navigate}
+      now={now}
+      onDismiss={handleDismiss}
+      overflowCount={overflowCount}
+      watchOverflowCount={isAllMode ? allMode.watchOverflowCount : 0}
+    />
   );
 
   // Fullscreen drops the page chrome the way Montage does: the app frame is
@@ -407,12 +406,13 @@ export default function LiveActivity() {
         onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
-      {currentProfile && (
+      {currentProfileId && (
         <LiveActivitySettingsDialog
           open={isSettingsOpen}
           onOpenChange={setIsSettingsOpen}
-          profileId={currentProfile.id}
+          profileId={currentProfileId}
           monitors={data?.monitors ?? []}
+          scopeProfiles={scopeProfiles}
         />
       )}
 

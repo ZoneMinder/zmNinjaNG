@@ -36,7 +36,7 @@ export function useNotificationPushSetup({
     if (mode === 'direct') {
       useNotificationStore.setState({ currentProfileId: currentProfile.id });
       // Sync badge count with server after setting profile
-      useNotificationStore.getState()._updateBadge();
+      useNotificationStore.getState()._updateBadge(currentProfile.id);
     }
 
     const pushService = getPushService();

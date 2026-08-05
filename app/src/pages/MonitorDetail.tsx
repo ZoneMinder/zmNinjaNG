@@ -11,10 +11,12 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
-import { getCurrentSession } from '../services/sessions';
+import { getSession, tryGetCurrentSession } from '../services/sessions';
+import type { ApiClient } from '../api/client';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileById } from '../hooks/useCurrentProfile';
 import { useAuthSlice } from '../stores/auth';
+import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -48,8 +50,29 @@ import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { MonitorRecentEvents } from '../components/monitors/MonitorRecentEvents';
 import { useMainScrollRestoration } from '../hooks/useMainScrollRestoration';
 
+/**
+ * Resolves the API client for this page's owning profile: the /all/ route's
+ * profileId when present, else the current profile via tryGetCurrentSession
+ * (never throws - this page can render while All mode has no single current
+ * profile). Callers only invoke this once `enabled`/render guards confirm an
+ * owning profile actually exists, so the null branch is defensive, not
+ * expected in practice.
+ */
+function resolveClient(routeProfileId: ProfileId | undefined): ApiClient {
+  const session = routeProfileId ? getSession(routeProfileId) : tryGetCurrentSession();
+  if (!session) {
+    throw new Error('MonitorDetail: no session available for the owning profile');
+  }
+  return session.client;
+}
+
 export default function MonitorDetail() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id?: string; profileId?: string; monitorId?: string }>();
+  // Two route shapes render this page: single-mode `/monitors/:id` and the
+  // All-mode deep route `/all/monitors/:profileId/:monitorId` (refs #337).
+  // Only one half of each pair is ever defined, depending on which matched.
+  const id = params.id ?? params.monitorId;
+  const routeProfileId = params.profileId as ProfileId | undefined;
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
@@ -72,39 +95,46 @@ export default function MonitorDetail() {
   const canGoBack = referrer || window.history.length > 1;
   const goBack = () => referrer ? navigate(referrer) : canGoBack ? navigate(-1) : navigate('/monitors');
 
-  // Profile and settings
-  const { currentProfile, settings } = useCurrentProfile();
-  const accessToken = useAuthSlice(currentProfile?.id ?? null).accessToken;
+  // Profile and settings: routeProfileId when present (All-mode deep route),
+  // else the current profile - useProfileById already implements that
+  // fallback. ownerProfile stays null (same as today's !currentProfile) both
+  // when no profile is selected at all AND when routeProfileId names an
+  // unknown profile, so the existing error state below covers both cases
+  // without new branching (refs #337).
+  const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  const accessToken = useAuthSlice(ownerProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
+  const dataEnabled = !!id && !!ownerProfile;
 
   // Keep screen awake when Insomnia is enabled
   useInsomnia({ enabled: settings.insomnia });
 
   // Fetch monitor data
   const { data: monitor, isLoading, error, refetch } = useQuery({
-    queryKey: queryKeys.monitor(currentProfile?.id, id),
-    queryFn: () => getMonitor(getCurrentSession().client, id!),
-    enabled: !!id,
+    queryKey: queryKeys.monitor(ownerProfile?.id, id),
+    queryFn: () => getMonitor(resolveClient(routeProfileId), id!),
+    enabled: dataEnabled,
   });
 
   // Fetch control capabilities if monitor is controllable
   const { data: controlData } = useQuery({
-    queryKey: queryKeys.control(currentProfile?.id, monitor?.Monitor.ControlId),
-    queryFn: () => getControl(getCurrentSession().client, monitor!.Monitor.ControlId!),
-    enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
+    queryKey: queryKeys.control(ownerProfile?.id, monitor?.Monitor.ControlId),
+    queryFn: () => getControl(resolveClient(routeProfileId), monitor!.Monitor.ControlId!),
+    enabled: dataEnabled && !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
   });
 
   // Fetch zones when showZones is enabled
   const { data: zones = [], isLoading: isZonesLoading } = useQuery({
-    queryKey: queryKeys.zones(currentProfile?.id, id),
-    queryFn: () => getZones(getCurrentSession().client, id!),
-    enabled: !!id && showZones,
+    queryKey: queryKeys.zones(ownerProfile?.id, id),
+    queryFn: () => getZones(resolveClient(routeProfileId), id!),
+    enabled: dataEnabled && showZones,
   });
 
   // Custom hooks for extracted logic
   const { isSliding, enabledMonitors, hasPrev, hasNext, onSwipeLeft, onSwipeRight } = useMonitorNavigation({
     currentMonitorId: id,
     cycleSeconds: settings.monitorDetailCycleSeconds,
+    profileId: routeProfileId,
   });
 
   // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
@@ -116,14 +146,15 @@ export default function MonitorDetail() {
     onSwipeRight,
   });
 
-  const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId);
-  const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl || '';
+  const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
+  const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
 
   const { handlePTZCommand } = usePTZControl({
     portalUrl: resolvedPortalUrl,
     monitorId: monitor?.Monitor.Id || '',
     accessToken,
-    minStreamingPort: resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
+    minStreamingPort: resolveMinStreamingPort(ownerProfile?.minStreamingPort, settings.forceDisableMultiPort),
+    profileId: routeProfileId,
   });
 
   const {
@@ -137,16 +168,18 @@ export default function MonitorDetail() {
   } = useAlarmControl({
     monitorId: monitor?.Monitor.Id,
     apiBaseUrl,
+    profileId: routeProfileId,
   });
 
   const { isModeUpdating, handleModeChange } = useModeControl({
     monitorId: monitor?.Monitor.Id,
     currentFunction: monitor?.Monitor.Function,
     onSuccess: refetch,
+    profileId: routeProfileId,
   });
 
   // ZM version for feature detection
-  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
+  const zmVersion = useAuthSlice(ownerProfile?.id ?? null).version;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
   // Settings dialog save handler: batches all changes into one or more API calls
@@ -161,7 +194,7 @@ export default function MonitorDetail() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(getCurrentSession().client, monitor.Monitor.Id, params);
+        await updateMonitor(resolveClient(routeProfileId), monitor.Monitor.Id, params);
       }
       await refetch();
       toast.success(t('monitor_detail.capture_updated'));
@@ -171,7 +204,7 @@ export default function MonitorDetail() {
     } finally {
       setIsSavingSettings(false);
     }
-  }, [monitor?.Monitor.Id, refetch, t]);
+  }, [monitor?.Monitor.Id, routeProfileId, refetch, t]);
 
   // Computed values
   const orientedResolution = useMemo(
@@ -184,18 +217,19 @@ export default function MonitorDetail() {
     zoomPan.reset();
   }, [zoomPan]);
 
-  // Settings handlers
+  // Settings handlers - write to the OWNING profile's settings bucket, not
+  // whichever profile is globally current (refs #337).
   const handleFeedFitChange = (value: string) => {
-    if (!currentProfile) return;
-    updateSettings(currentProfile.id, {
+    if (!ownerProfile) return;
+    updateSettings(ownerProfile.id, {
       monitorDetailFeedFit: value as typeof settings.monitorDetailFeedFit,
     });
   };
 
   const handleCycleSecondsChange = (value: string) => {
-    if (!currentProfile) return;
+    if (!ownerProfile) return;
     const parsedValue = Number(value);
-    updateSettings(currentProfile.id, {
+    updateSettings(ownerProfile.id, {
       monitorDetailCycleSeconds: Number.isFinite(parsedValue) ? parsedValue : 0,
     });
   };
@@ -214,8 +248,10 @@ export default function MonitorDetail() {
     return <DetailPageSkeleton />;
   }
 
-  // Error state
-  if (error || !monitor || !currentProfile) {
+  // Error state. !ownerProfile covers both "no profile selected" (today's
+  // behavior) and an unknown /all/ route profileId (refs #337) - never crash,
+  // render the same banner either way.
+  if (error || !monitor || !ownerProfile) {
     return (
       <div className="p-8">
         <ErrorBanner icon={AlertTriangle} message={t('monitor_detail.load_error')} />
@@ -266,7 +302,7 @@ export default function MonitorDetail() {
                   monitorDotColor(getMonitorRunState(monitor.Monitor, monitor.Monitor_Status, zmVersion))
                 )}
               />
-              <h1 className="text-sm sm:text-base font-semibold">{monitor.Monitor.Name}</h1>
+              <h1 className="text-sm sm:text-base font-semibold" data-testid="monitor-detail-name">{monitor.Monitor.Name}</h1>
             </div>
             <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground ml-3">
               {is138Plus ? (
@@ -376,7 +412,8 @@ export default function MonitorDetail() {
               // (~60s) rebuilds the stream URL (refs #201).
               key={monitor.Monitor.Id}
               monitor={monitor.Monitor}
-              profile={currentProfile}
+              profile={ownerProfile}
+              profileId={routeProfileId ?? undefined}
               externalMediaRef={mediaRef}
               objectFit={isFullscreen ? 'contain' : settings.monitorDetailFeedFit}
               showControls={true}
@@ -498,7 +535,7 @@ export default function MonitorDetail() {
         {/* Recent events - Hidden in fullscreen. Sits below PTZ so the
             controls stay reachable without scrolling past the event list. */}
         {!isFullscreen && (
-          <MonitorRecentEvents monitor={monitor.Monitor} />
+          <MonitorRecentEvents monitor={monitor.Monitor} profileId={routeProfileId} />
         )}
 
         {/* Monitor Controls Card - Hidden in fullscreen */}
@@ -531,6 +568,7 @@ export default function MonitorDetail() {
         cycleSeconds={settings.monitorDetailCycleSeconds}
         onCycleSecondsChange={handleCycleSecondsChange}
         orientedResolution={orientedResolution}
+        profileId={ownerProfile.id}
       />
     </div>
   );

@@ -1,12 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
+import { useProfileStore } from '../profile';
+import { stopAllEventPollers } from '../../services/eventPoller';
+import { resetAllNotificationServices } from '../../services/notifications';
+import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
-import type { ZMAlarmEvent } from '../../types/notifications';
+import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
 
 const mockService = {
   connect: vi.fn().mockResolvedValue(undefined),
-  onStateChange: vi.fn(() => vi.fn()),
-  onEvent: vi.fn(() => vi.fn()),
+  onStateChange: vi.fn((_cb: (state: ConnectionState) => void) => vi.fn()),
+  onEvent: vi.fn((_cb: (event: ZMAlarmEvent) => void) => vi.fn()),
   setMonitorFilter: vi.fn().mockResolvedValue(undefined),
   updateBadgeCount: vi.fn().mockResolvedValue(undefined),
   registerPushToken: vi.fn().mockResolvedValue(undefined),
@@ -16,6 +20,7 @@ const mockService = {
 vi.mock('../../services/notifications', () => ({
   getNotificationService: vi.fn(() => mockService),
   resetNotificationService: vi.fn(),
+  resetAllNotificationServices: vi.fn(),
 }));
 
 const mockPollerStart = vi.fn().mockResolvedValue(undefined);
@@ -26,6 +31,7 @@ vi.mock('../../services/eventPoller', () => ({
     stop: vi.fn(),
     isRunning: vi.fn(() => false),
   })),
+  stopAllEventPollers: vi.fn(),
 }));
 
 vi.mock('../auth', () => ({
@@ -104,11 +110,10 @@ describe('Notification Store', () => {
     localStorage.clear();
     useNotificationStore.setState({
       profileSettings: {},
-      connectionState: 'disconnected',
-      isConnected: false,
+      connections: {},
       currentProfileId: null,
       profileEvents: {},
-      _cleanupFunctions: [],
+      _cleanupFunctions: {},
     });
     vi.clearAllMocks();
   });
@@ -122,7 +127,7 @@ describe('Notification Store', () => {
 
   it('updates profile settings and disconnects when disabling active profile', () => {
     useNotificationStore.setState({
-      isConnected: true,
+      connections: { [profileId]: 'connected' },
       currentProfileId: profileId,
     });
 
@@ -331,6 +336,258 @@ describe('Notification Store', () => {
     expect(providers.buildEventImageUrl(42, null)).not.toContain('token=');
 
     expect(providers.getKeepaliveIntervalMs()).toBe(60000);
+  });
+
+  describe('multi-profile connection lifecycle (refs #337)', () => {
+    const profileA = 'profile-A';
+    const profileB = 'profile-B';
+
+    beforeEach(() => {
+      useNotificationStore.getState().updateProfileSettings(profileA, { enabled: true, host: 'a.example.com' });
+      useNotificationStore.getState().updateProfileSettings(profileB, { enabled: true, host: 'b.example.com' });
+    });
+
+    it('connects two profiles independently; disconnecting one leaves the other connected', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+
+      // Simulate each connection's onStateChange callback firing 'connected'.
+      const stateCalls = mockService.onStateChange.mock.calls;
+      expect(stateCalls).toHaveLength(2);
+      stateCalls[0][0]('connected');
+      stateCalls[1][0]('connected');
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('connected');
+
+      useNotificationStore.getState().disconnect(profileA);
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('connected');
+    });
+
+    it('binds each connection\'s onEvent callback to its own profile id', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+
+      const eventCalls = mockService.onEvent.mock.calls;
+      expect(eventCalls).toHaveLength(2);
+
+      // Profile B's own callback fires - must land in profile B's history only.
+      eventCalls[1][0]({ ...baseEvent, EventId: 999 });
+
+      expect(useNotificationStore.getState().getEvents(profileB)).toHaveLength(1);
+      expect(useNotificationStore.getState().getEvents(profileA)).toHaveLength(0);
+    });
+
+    it('anchors currentProfileId only when profileId is the app\'s real current profile; All mode leaves it alone (refs #337 I4)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        // Single mode: the app's real current profile IS profileA.
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+        await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        expect(useNotificationStore.getState().currentProfileId).toBe(profileA);
+
+        // All mode: the app's real current profile is the ALL sentinel, not
+        // profileB - connecting profileB (a connector's own connect() call)
+        // must not overwrite the anchor with "whichever profile connected
+        // last".
+        useNotificationStore.setState({ currentProfileId: null });
+        useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+        await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+        expect(useNotificationStore.getState().currentProfileId).toBeNull();
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
+    it('disconnects itself if the app switched to a different real profile while connect() was in flight (refs #337 round 2 minor #2)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+
+        // The user switches to a different real profile while the
+        // handshake is still in flight. The switch-teardown effect (in
+        // useNotificationAutoConnect) already ran by this point and found
+        // profileA not yet connected, so nothing else will ever disconnect
+        // it once the handshake finally completes.
+        useProfileStore.setState({ currentProfileId: asProfileId(profileB) });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+        expect(useNotificationStore.getState().currentProfileId).not.toBe(profileA);
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
+    it('keeps a member\'s connection alive when a virtual profile becomes current mid-connect (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // Selecting a group that CONTAINS profileA is not "the user switched
+        // to a different real profile": a member's connection under an
+        // aggregate is intentional, exactly as under All Servers. Reading the
+        // group id as a real profile tears the socket down the moment the
+        // handshake completes, and the member's notifications never arrive.
+        const groupId = mintVirtualProfileId();
+        useProfileStore.setState({
+          virtualProfiles: [
+            { id: groupId, name: 'Upstairs', memberProfileIds: [asProfileId(profileA)] },
+          ],
+          currentProfileId: groupId,
+        });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('disconnects a NON-member whose connect was in flight when a virtual profile became current (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // The group EXCLUDES profileA, so nothing in the new scope owns this
+        // connection: the switch-teardown effect already ran and found it not
+        // yet connected. Exempting every aggregate id unconditionally would
+        // leave it streaming events for the rest of the session with no
+        // connector behind it.
+        const groupId = mintVirtualProfileId();
+        useProfileStore.setState({
+          virtualProfiles: [
+            { id: groupId, name: 'Downstairs', memberProfileIds: [asProfileId(profileB)] },
+          ],
+          currentProfileId: groupId,
+        });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('disconnects an in-flight connection when the group it belonged to is gone (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileA) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        // A virtual id with no group behind it (deleted in another tab, or
+        // hand-edited storage) has no members, so it owns nothing.
+        useProfileStore.setState({ virtualProfiles: [], currentProfileId: mintVirtualProfileId() });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null, virtualProfiles: [] });
+      }
+    });
+
+    it('keeps every profile\'s in-flight connection under All Servers, which spans them all (refs #337)', async () => {
+      const store = useNotificationStore.getState();
+      try {
+        useProfileStore.setState({ currentProfileId: asProfileId(profileB) });
+
+        let resolveConnect: () => void = () => {};
+        mockService.connect.mockImplementationOnce(
+          () => new Promise<void>((resolve) => { resolveConnect = resolve; })
+        );
+
+        const connectPromise = store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+        mockService.onStateChange.mock.calls[0][0]('connected');
+
+        useProfileStore.setState({ currentProfileId: ALL_PROFILES_ID });
+
+        resolveConnect();
+        await connectPromise;
+
+        expect(useNotificationStore.getState().connections[profileA]).toBe('connected');
+      } finally {
+        useProfileStore.setState({ currentProfileId: null });
+      }
+    });
+
+    it('_initialize cleans up a previous registration for the same profile before re-subscribing (refs #337 #10)', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+
+      const firstStateUnsub = mockService.onStateChange.mock.results[0].value;
+      const firstEventUnsub = mockService.onEvent.mock.results[0].value;
+      expect(firstStateUnsub).not.toHaveBeenCalled();
+
+      // A second _initialize for the same profile without an intervening
+      // disconnect (e.g. a retried connect()) must tear down the stale
+      // listeners first, not just overwrite the cleanup array and leak them
+      // (duplicate event/state delivery).
+      useNotificationStore.getState()._initialize(profileA);
+
+      expect(firstStateUnsub).toHaveBeenCalledTimes(1);
+      expect(firstEventUnsub).toHaveBeenCalledTimes(1);
+    });
+
+    it('disconnectAll disconnects every connected profile and sweeps pollers (refs #337 I5)', async () => {
+      const store = useNotificationStore.getState();
+      await store.connect(profileA, 'admin', 'secretA', 'http://a.local');
+      await store.connect(profileB, 'admin', 'secretB', 'http://b.local');
+      mockService.onStateChange.mock.calls[0][0]('connected');
+      mockService.onStateChange.mock.calls[1][0]('connected');
+      vi.mocked(stopAllEventPollers).mockClear();
+      vi.mocked(resetAllNotificationServices).mockClear();
+
+      useNotificationStore.getState().disconnectAll();
+
+      expect(useNotificationStore.getState().connections[profileA]).toBe('disconnected');
+      expect(useNotificationStore.getState().connections[profileB]).toBe('disconnected');
+      expect(stopAllEventPollers).toHaveBeenCalledTimes(1);
+      // Also sweeps the service registry directly - not just the profiles
+      // `connections` happens to know about (refs #337 round 2 minor #3).
+      expect(resetAllNotificationServices).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('startEventPoller wires store-derived deps into the poller', async () => {

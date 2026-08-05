@@ -83,6 +83,15 @@ describe('LiveActivityTile', () => {
     expect(onDismiss).toHaveBeenCalledWith('3');
   });
 
+  it("sanitizes a composite (All-mode) monitor key for viewTransitionName - a colon terminates a CSS custom-ident", () => {
+    const compositeEntry: ActiveMonitorEntry = { ...ENTRY, monitorId: 'p1:3' };
+    renderTile(EPISODE_START, compositeEntry);
+
+    const tile = screen.getByTestId('live-activity-tile');
+    expect(tile.style.viewTransitionName).toBe('live-activity-tile-p1-3');
+    expect(tile.style.viewTransitionName).not.toContain(':');
+  });
+
   it('reads how long the alarm episode has been running', () => {
     renderTile(EPISODE_START + 247_000);
 

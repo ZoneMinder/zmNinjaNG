@@ -253,12 +253,37 @@ class EventPollerService {
   }
 }
 
-// Singleton
-let eventPoller: EventPollerService | null = null;
+// Per-profile registry: every profile can run its own poller (refs #337).
+const eventPollers = new Map<string, EventPollerService>();
 
-export function getEventPoller(): EventPollerService {
-  if (!eventPoller) {
-    eventPoller = new EventPollerService();
+export function getEventPoller(profileId: string): EventPollerService {
+  let poller = eventPollers.get(profileId);
+  if (!poller) {
+    poller = new EventPollerService();
+    eventPollers.set(profileId, poller);
   }
-  return eventPoller;
+  return poller;
+}
+
+/** Stop every running poller. Used on full logout (refs #337). */
+export function stopAllEventPollers(): void {
+  for (const poller of eventPollers.values()) {
+    poller.stop();
+  }
+  eventPollers.clear();
+}
+
+/**
+ * Stop and evict this profile's poller. A no-op if it never had one -
+ * unlike `getEventPoller(id).stop()`, this never creates a phantom registry
+ * entry just to immediately stop a poller that was never started, which
+ * would otherwise orphan a never-referenced instance in the map on every
+ * teardown of a profile that only ever used ES mode (refs #337 I5).
+ */
+export function stopEventPoller(profileId: string): void {
+  const poller = eventPollers.get(profileId);
+  if (poller) {
+    poller.stop();
+    eventPollers.delete(profileId);
+  }
 }

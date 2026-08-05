@@ -17,23 +17,37 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { cn } from '../../lib/utils';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../stores/deleteSelection';
-import type { Event } from '../../api/types';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
+import type { Event, ProfileId } from '../../api/types';
 
 interface CompactEventRowProps {
   event: Event;
   thumbnailUrls: string[];
   aspectRatio: number;
   objectFit?: CSSProperties['objectFit'];
+  /** Owning profile for an /all/ deep route; defaults to the current profile. */
+  profileId?: ProfileId;
+  /**
+   * Owning profile for this row's delete-selection key - the row's own
+   * profileId in All mode, the current one otherwise, so one event selected
+   * from either surface is one selection key (refs #337).
+   *
+   * Passed down rather than re-derived here: the parent already resolves the
+   * owning profile, and a list of rows each subscribing to the profile store
+   * to recompute the id its parent is holding costs three subscriptions per
+   * row for nothing.
+   */
+  ownerProfileId?: ProfileId;
 }
 
-export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover' }: CompactEventRowProps) {
+export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit = 'cover', profileId, ownerProfileId }: CompactEventRowProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { fmtTime } = useDateTimeFormat();
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
-  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
+  const selectedForDelete = useDeleteSelectionStore((s) =>
+    s.selectedKeys.includes(eventSelectionKey(ownerProfileId, event.Id)));
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
   const detected = parseDetectedObjects(event.Notes);
   const DetIcon = detected.length ? getObjectClassIconFromList(detected.join(',')) : null;
@@ -46,7 +60,9 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       : `${durationSecs}s`;
   const open = () => {
     markViewed(event.Id);
-    navigate(`/events/${event.Id}`, { state: { from: `/monitors/${event.MonitorId}` } });
+    // All mode: deep route carries the owning profile (refs #337).
+    const path = profileId ? `/all/events/${profileId}/${event.Id}` : `/events/${event.Id}`;
+    navigate(path, { state: { from: `/monitors/${event.MonitorId}` } });
   };
 
   return (
@@ -103,7 +119,7 @@ export function CompactEventRow({ event, thumbnailUrls, aspectRatio, objectFit =
       >
         {durationLabel}
       </span>
-      <EventDeleteButton eventId={event.Id} size="sm" className="flex-shrink-0" />
+      <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} size="sm" className="flex-shrink-0" />
     </div>
   );
 }

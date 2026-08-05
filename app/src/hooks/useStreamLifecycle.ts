@@ -8,6 +8,8 @@
  * - CMD_QUIT on unmount (streaming mode only)
  * - CMD_QUIT when `enabled` goes false, so a disabled hook never leaves a live
  *   nph-zms process behind, and re-enabling mints a fresh key
+ * - CMD_QUIT when `viewMode` leaves 'streaming', for the same reason: every
+ *   other quit path is gated on streaming and would skip the key by then
  * - Image/media element abort on unmount to release browser connections
  * - cleanupParamsRef pattern to capture latest values for the unmount effect
  */
@@ -17,9 +19,10 @@ import { getZmsControlUrl } from '../lib/zm/url-builder';
 import { ZMS_COMMANDS } from '../lib/zm/zm-constants';
 import { httpGet } from '../lib/http';
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
-import { useMonitorStore } from '../stores/monitors';
+import { useMonitorStore, monitorCacheKey } from '../stores/monitors';
 import { registerActiveStream, unregisterActiveStream } from '../lib/monitor/active-streams';
 import { log, LogLevel } from '../lib/logger';
+import type { ProfileId } from '../api/types';
 
 /** Signature of a component-scoped log helper (e.g. log.monitor, log.dashboard). */
 type ComponentLogger = (message: string, level?: LogLevel, details?: unknown) => void;
@@ -27,6 +30,10 @@ type ComponentLogger = (message: string, level?: LogLevel, details?: unknown) =>
 /** Captured stream context used to send CMD_QUIT outside of render. */
 interface StreamCleanupParams {
   monitorId: string;
+  /** Composite profileId:monitorId key used for the connKeys store lookup
+   *  (refs #337) - distinct from monitorId, which stays the real ZM monitor
+   *  id used to build CMD_QUIT URLs. */
+  cacheKey: string;
   monitorName: string;
   connKey: number;
   portalUrl: string | undefined;
@@ -45,7 +52,7 @@ interface StreamCleanupParams {
 async function quitStreamForParams(
   params: StreamCleanupParams,
   logFn: ComponentLogger,
-  reason: 'unmount' | 'profile-switch' | 'disable',
+  reason: 'unmount' | 'profile-switch' | 'disable' | 'view-mode',
 ): Promise<void> {
   if (
     params.viewMode !== 'streaming' ||
@@ -77,8 +84,8 @@ async function quitStreamForParams(
   // concurrent mount's newer key intact: only the key this teardown quit is
   // cleared, never a newer one.
   const store = useMonitorStore.getState();
-  if (store.connKeys[params.monitorId] === params.connKey) {
-    store.clearConnKey(params.monitorId);
+  if (store.connKeys[params.cacheKey] === params.connKey) {
+    store.clearConnKey(params.cacheKey);
   }
 
   try {
@@ -117,6 +124,13 @@ export interface UseStreamLifecycleOptions {
    * it. Defaults to the built-in default when not supplied.
    */
   apiTimeoutSeconds?: number;
+  /**
+   * Profile that owns this monitorId, used only to scope the connKeys store
+   * lookup key (monitorCacheKey) so two profiles sharing a monitor id (two
+   * independent ZM servers) never collide on one connkey slot (refs #337).
+   * Omitted callers keep the pre-existing monitorId-only key.
+   */
+  profileId?: ProfileId | null;
 }
 
 export interface UseStreamLifecycleReturn {
@@ -159,11 +173,13 @@ export function useStreamLifecycle({
   enabled = true,
   minStreamingPort,
   apiTimeoutSeconds = API_REQUEST.defaultTimeoutSeconds,
+  profileId,
 }: UseStreamLifecycleOptions): UseStreamLifecycleReturn {
   const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
 
   // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
   const cmdQuitTimeoutMs = apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined;
+  const cacheKey = monitorCacheKey(profileId, monitorId || '');
 
   const [connKey, setConnKey] = useState(0);
 
@@ -176,6 +192,7 @@ export function useStreamLifecycle({
   const buildCleanupParams = useCallback(
     (key: number): StreamCleanupParams => ({
       monitorId: monitorId || '',
+      cacheKey,
       monitorName: monitorName || '',
       connKey: key,
       portalUrl,
@@ -184,7 +201,7 @@ export function useStreamLifecycle({
       minStreamingPort,
       cmdQuitTimeoutMs,
     }),
-    [monitorId, monitorName, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs],
+    [monitorId, cacheKey, monitorName, portalUrl, accessToken, viewMode, minStreamingPort, cmdQuitTimeoutMs],
   );
 
   // Store cleanup parameters in a ref so the teardowns, which run outside
@@ -197,6 +214,15 @@ export function useStreamLifecycle({
 
     // If we already have a connKey for this monitor, don't regenerate
     // (only regenerate when first enabled or monitor changes)
+    //
+    // Despite that second line, a monitorId change on a live hook returns here
+    // rather than minting for the new monitor, and the old monitor's key is
+    // left for the unmount path to quit against whatever the props say by
+    // then. Nothing in the app reaches it: every call site that swaps monitors
+    // remounts the player instead, keyed by monitor id, which was itself the
+    // fix for the feed lagging a monitor behind (see MonitorDetail's `key=`
+    // comment, refs #201). Left alone deliberately - changing it would move a
+    // teardown that the keyed remount already handles.
     if (connKey !== 0 && !isInitialMountRef.current) return;
 
     // Send CMD_QUIT for previous connKey before generating new one (skip on initial mount)
@@ -235,7 +261,7 @@ export function useStreamLifecycle({
     log.dedupe('connkey-regen', 3000, (suffix) =>
       logFn(`Regenerating connkey${suffix}`, LogLevel.DEBUG, { monitorId, monitorName }),
     );
-    const newKey = regenerateConnKey(monitorId);
+    const newKey = regenerateConnKey(cacheKey);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
     // Bind the key to the identity that minted it, here rather than waiting for
@@ -283,6 +309,73 @@ export function useStreamLifecycle({
     prevConnKeyRef.current = 0;
     setConnKey(0);
   }, [enabled, logFn]);
+
+  // View-mode teardown. A streaming connkey is a running nph-zms process on the
+  // server; a snapshot request is not. Flipping a live hook from streaming to
+  // snapshot therefore ends that process's usefulness while nothing else would
+  // ever close it: the unmount and disable teardowns both skip snapshot mode by
+  // the time they run, so the key was orphaned until ZM's own idle timeout. The
+  // Streaming Mode setting reaches this, and so does the All-mode idle
+  // downgrade (refs #337), which flips every tile at once.
+  //
+  // Both directions then mint a fresh key. The new mode needs one (a snapshot
+  // URL carries a connkey too), and reusing the quit key risks colliding with
+  // whatever server-side state it left behind.
+  const prevStreamIdentityRef = useRef({ viewMode, monitorId, enabled, minStreamingPort });
+  useEffect(() => {
+    const prev = prevStreamIdentityRef.current;
+    prevStreamIdentityRef.current = { viewMode, monitorId, enabled, minStreamingPort };
+    if (prev.viewMode === viewMode) return;
+    // Only a mode flip on an otherwise unchanged stream is this effect's to
+    // handle. When the enabled flag moved in the same commit, the disable
+    // teardown or the regeneration effect already owns that key. When the
+    // monitor moved, the key held here was opened against the previous
+    // monitor's URL and port while every prop now describes the new one, so
+    // there is nothing here that could quit it correctly; standing down at
+    // least avoids quitting the wrong monitor's stream. That leaves the old
+    // key to the unmount path, which is a pre-existing gap in the monitor-
+    // change path (the regeneration effect above returns early on a live hook
+    // and never mints for the new monitor either). It is unreachable from the
+    // app today because every call site that swaps monitors remounts instead,
+    // via a keyed element - see MonitorDetail's `key=` comment and refs #201.
+    //
+    // minStreamingPort is deliberately NOT part of this comparison: it is
+    // derived from the view mode, so it changes BECAUSE of the flip.
+    if (prev.monitorId !== monitorId || prev.enabled !== enabled) return;
+    // A disabled hook owns no stream: the disable teardown already quit its key
+    // and re-enabling mints a fresh one, so there is nothing to do here.
+    if (!enabled || !monitorId) return;
+
+    if (prev.viewMode === 'streaming') {
+      // Both values are forced back to what the key was opened under. The
+      // params effect above runs earlier in this same commit and has already
+      // rebuilt the ref for the NEW mode, where viewMode is 'snapshot' (which
+      // would make the quit a silent no-op) and minStreamingPort is undefined,
+      // because the caller only computes a port for streaming. A CMD_QUIT sent
+      // to the portal's default port on a multi-port install is answered by a
+      // server that knows nothing about this connkey: the request succeeds,
+      // the log says the stream closed, and the nph-zms process on the real
+      // port keeps running.
+      void quitStreamForParams(
+        {
+          ...cleanupParamsRef.current,
+          viewMode: 'streaming',
+          minStreamingPort: prev.minStreamingPort,
+        },
+        logFn,
+        'view-mode',
+      );
+    }
+
+    const newKey = regenerateConnKey(cacheKey);
+    setConnKey(newKey);
+    prevConnKeyRef.current = newKey;
+    cleanupParamsRef.current = buildCleanupParams(newKey);
+    // minStreamingPort is a dependency so the identity ref keeps the port the
+    // current stream was opened on, even when it changes without a flip (the
+    // force-disable-multi-port setting does that).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, monitorId, enabled, minStreamingPort]);
 
   // Capture the live media element on every render. The unmount cleanup runs as
   // a passive effect, by which point React has already nulled mediaRef, so we
@@ -372,7 +465,7 @@ export function useStreamLifecycle({
       sendCmdQuit(prevConnKeyRef.current);
     }
 
-    const newKey = regenerateConnKey(monitorId);
+    const newKey = regenerateConnKey(cacheKey);
     setConnKey(newKey);
     prevConnKeyRef.current = newKey;
     log.dedupe('connkey-force-regen', 3000, (suffix) =>
@@ -394,8 +487,8 @@ export function useStreamLifecycle({
     );
     if (monitorId) {
       const store = useMonitorStore.getState();
-      if (store.connKeys[monitorId] === key) {
-        store.clearConnKey(monitorId);
+      if (store.connKeys[cacheKey] === key) {
+        store.clearConnKey(cacheKey);
       }
     }
     prevConnKeyRef.current = 0;

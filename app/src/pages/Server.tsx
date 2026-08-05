@@ -7,9 +7,12 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
-import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useCurrentProfile, useProfileById } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAuthSlice } from '../stores/auth';
+import type { ProfileId } from '../api/types';
+import { ProfilePicker } from '../components/profile-picker';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -34,7 +37,7 @@ import { useTranslation } from 'react-i18next';
 import { getServers, getLoad, getDiskPercent, getDaemonCheck, getStorages } from '../api/server';
 import { getServerTimeZone } from '../api/time';
 import { getStates, changeState } from '../api/states';
-import { getCurrentSession } from '../services/sessions';
+import { getSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
 import { log, LogLevel } from '../lib/logger';
 import {
@@ -50,7 +53,15 @@ export default function Server() {
   const { t } = useTranslation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { currentProfile } = useCurrentProfile();
+  const { currentProfile: singleProfile } = useCurrentProfile();
+  const scope = useProfileScope();
+  const isAllMode = scope?.mode === 'all';
+  const [pickedProfileId, setPickedProfileId] = useState<ProfileId | undefined>(undefined);
+  const defaultPickedId = isAllMode ? (pickedProfileId ?? scope.profiles[0]?.id) : undefined;
+  const { profile: allModeProfile } = useProfileById(defaultPickedId);
+  // Single mode: the page's own current profile, byte-identical to before.
+  // All mode: the picked profile (defaults to the first one in scope).
+  const currentProfile = isAllMode ? allModeProfile : singleProfile;
   const bandwidth = useBandwidthSettings();
   const authSlice = useAuthSlice(currentProfile?.id ?? null);
   const version = authSlice.version;
@@ -61,14 +72,14 @@ export default function Server() {
   // Fetch server information
   const { data: servers, isLoading: serversLoading } = useQuery({
     queryKey: queryKeys.servers(currentProfile?.id),
-    queryFn: () => getServers(getCurrentSession().client),
+    queryFn: () => getServers(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch daemon status
   const { data: isDaemonRunning, isLoading: daemonLoading } = useQuery({
     queryKey: queryKeys.daemonCheck(currentProfile?.id),
-    queryFn: () => getDaemonCheck(getCurrentSession().client),
+    queryFn: () => getDaemonCheck(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.daemonCheckInterval,
   });
@@ -76,41 +87,41 @@ export default function Server() {
   // Fetch load average
   const { data: loadData, isLoading: loadLoading } = useQuery({
     queryKey: queryKeys.serverLoad(currentProfile?.id),
-    queryFn: () => getLoad(getCurrentSession().client),
+    queryFn: () => getLoad(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch disk usage
   const { data: diskData, isLoading: diskLoading } = useQuery({
     queryKey: queryKeys.diskUsage(currentProfile?.id),
-    queryFn: () => getDiskPercent(getCurrentSession().client),
+    queryFn: () => getDiskPercent(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch states
   const { data: states, isLoading: statesLoading } = useQuery({
     queryKey: queryKeys.states(currentProfile?.id),
-    queryFn: () => getStates(getCurrentSession().client),
+    queryFn: () => getStates(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch timezone
   const { data: timezone } = useQuery({
     queryKey: queryKeys.timezone(currentProfile?.id),
-    queryFn: () => getServerTimeZone(getCurrentSession().client),
+    queryFn: () => getServerTimeZone(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch storages
   const { data: storages } = useQuery({
     queryKey: queryKeys.storages(currentProfile?.id),
-    queryFn: () => getStorages(getCurrentSession().client),
+    queryFn: () => getStorages(getSession(currentProfile!.id).client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Mutation for state change
   const changeStateMutation = useMutation({
-    mutationFn: (stateName: string) => changeState(getCurrentSession().client, stateName),
+    mutationFn: (stateName: string) => changeState(getSession(currentProfile!.id).client, stateName),
     onSuccess: () => {
       toast({
         title: t('common.success'),
@@ -171,6 +182,14 @@ export default function Server() {
           data-testid="server-refresh-button"
         />
       </div>
+
+      {isAllMode && (
+        <ProfilePicker
+          profiles={scope?.profiles ?? []}
+          value={defaultPickedId}
+          onChange={setPickedProfileId}
+        />
+      )}
 
       {/* Version Information */}
       <Card>

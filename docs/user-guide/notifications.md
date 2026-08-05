@@ -54,6 +54,18 @@ When using Direct mode, additional settings are available:
 - **Polling interval** (desktop only): How often to check for new events (10s–120s)
 - **Only detected events**: Filter to only notify for events processed by object detection (zm_detect)
 
+## In a virtual profile group
+
+Each profile keeps its own notification setup - mode, host, monitor filters, everything on this page - even while aggregating in a {doc}`profiles` group. Notification Settings adds an overview above the usual controls, listing every profile's own mode and live connection status, and a profile picker to inspect or change one server's settings at a time.
+
+A single notifications setting named after the group, separate from any one profile's settings, controls how those per-server connections behave while aggregating:
+
+- **Live**: every server connects and shows toasts and sound as events arrive, same as single-profile mode.
+- **Muted**: every server stays connected and the badge and history keep updating, but toasts and sound are suppressed.
+- **Off**: no server connects while aggregating, so nothing updates until you switch this back on.
+
+In Live or Muted mode, events arriving close together from different servers coalesce into one summary toast instead of flooding the screen with one per event, within the **Notification grouping** window under **Aggregate performance** in {doc}`settings`, and toast/sound display still honors each server's own settings underneath the aggregate mode. On mobile, push notifications are unaffected: FCM already delivers every profile's events regardless of which one is active, so a group opens no extra connections there.
+
 ## Notification History
 
 zmNinjaNg keeps a history of the last 100 notifications received. Access it from the **View History** button on the Notification Settings page.

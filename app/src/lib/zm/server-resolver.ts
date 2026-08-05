@@ -8,6 +8,7 @@
  */
 
 import type { Server } from '../../api/server';
+import type { ProfileId } from '../../api/types';
 import { log, LogLevel } from '../logger';
 
 // ========== Types ==========
@@ -26,34 +27,81 @@ export type ServerUrlMap = Map<string, ServerUrls>;
 
 // ========== Module-level cache ==========
 
-let cachedServerMap: ServerUrlMap = new Map();
+/**
+ * Per-profile server maps, keyed by the profile whose bootstrap populated
+ * them. Was a single module-global map until refs #337: with one shared map,
+ * bootstrapping profile B overwrote profile A's routes entirely, so an All
+ * mode reader resolving one of A's ServerId monitors got B's host with A's
+ * (or no) token attached - a real cross-profile bleed, not just a cosmetic
+ * bug.
+ */
+const serverMapsByProfile = new Map<ProfileId, ServerUrlMap>();
+const EMPTY_SERVER_MAP: ServerUrlMap = new Map();
 /** Incremented on every setServerMap/clearServerMap so React hooks can react. */
 let serverMapVersion = 0;
-/** Listeners notified when the server map changes. */
+/** Listeners notified when any profile's server map changes. */
 const listeners = new Set<() => void>();
 
-export function setServerMap(map: ServerUrlMap): void {
-  cachedServerMap = map;
+export interface ServerResolverGate {
+  getCurrentProfileId(): ProfileId | null;
+}
+
+let resolverGate: ServerResolverGate = {
+  // Safe default before the store registers: no current profile, so an
+  // omitted profileId resolves to nothing rather than guessing.
+  getCurrentProfileId: () => null,
+};
+
+/** Registered by stores/profile.ts at app init (same gate pattern as
+ *  services/sessions.ts) so an omitted profileId can default to "current"
+ *  without this module statically importing the profile store. */
+export function registerServerResolverGate(gate: ServerResolverGate): void {
+  resolverGate = gate;
+}
+
+function effectiveProfileId(profileId?: ProfileId | null): ProfileId | null {
+  return profileId ?? resolverGate.getCurrentProfileId();
+}
+
+export function setServerMap(map: ServerUrlMap, profileId?: ProfileId | null): void {
+  const id = effectiveProfileId(profileId);
+  if (!id) return;
+  serverMapsByProfile.set(id, map);
   serverMapVersion++;
   listeners.forEach((fn) => fn());
 }
 
-export function getServerMap(): ServerUrlMap {
-  return cachedServerMap;
+/** Get one profile's server map (defaults to the current profile). */
+export function getServerMap(profileId?: ProfileId | null): ServerUrlMap {
+  const id = effectiveProfileId(profileId);
+  if (!id) return EMPTY_SERVER_MAP;
+  return serverMapsByProfile.get(id) ?? EMPTY_SERVER_MAP;
 }
 
 export function getServerMapVersion(): number {
   return serverMapVersion;
 }
 
-/** Subscribe to server map changes. Returns unsubscribe function. */
+/** Subscribe to server map changes (any profile). Returns unsubscribe function. */
 export function subscribeServerMap(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-export function clearServerMap(): void {
-  cachedServerMap = new Map();
+/** Clear one profile's server map (defaults to the current profile). Called
+ *  at the start of that profile's own bootstrap, and on dropSession/profile
+ *  delete - never clears another profile's map. */
+export function clearServerMap(profileId?: ProfileId | null): void {
+  const id = effectiveProfileId(profileId);
+  if (id) serverMapsByProfile.delete(id);
+  serverMapVersion++;
+  listeners.forEach((fn) => fn());
+}
+
+/** Clear every profile's server map. Used on full logout/reset (test
+ *  teardown, dropAllSessions) where no single profile is being targeted. */
+export function clearAllServerMaps(): void {
+  serverMapsByProfile.clear();
   serverMapVersion++;
   listeners.forEach((fn) => fn());
 }
@@ -151,18 +199,21 @@ export function resolveMonitorUrls(
 
 /**
  * Get portal base URL for a monitor's server.
- * Uses the cached server map. Returns the portal path with /index.php stripped.
- * Falls back to profilePortalUrl when the server is not found.
+ * Uses profileId's server map (defaults to the current profile). Returns the
+ * portal path with /index.php stripped. Falls back to profilePortalUrl when
+ * the server is not found.
  */
 export function getPortalUrlForMonitor(
   serverId: string | null | undefined,
   profilePortalUrl: string,
+  profileId?: ProfileId | null,
 ): string {
-  if (!serverId || serverId === '0' || cachedServerMap.size === 0) {
+  const map = getServerMap(profileId);
+  if (!serverId || serverId === '0' || map.size === 0) {
     return profilePortalUrl;
   }
 
-  const urls = cachedServerMap.get(serverId);
+  const urls = map.get(serverId);
   if (!urls) {
     return profilePortalUrl;
   }
@@ -177,11 +228,12 @@ export function getPortalUrlForEvent(
   monitorId: string,
   monitors: Array<{ Monitor: { Id: string; ServerId: string | null } }>,
   profilePortalUrl: string,
+  profileId?: ProfileId | null,
 ): string {
   const monitor = monitors.find((m) => m.Monitor.Id === monitorId);
   if (!monitor) {
     return profilePortalUrl;
   }
 
-  return getPortalUrlForMonitor(monitor.Monitor.ServerId, profilePortalUrl);
+  return getPortalUrlForMonitor(monitor.Monitor.ServerId, profilePortalUrl, profileId);
 }

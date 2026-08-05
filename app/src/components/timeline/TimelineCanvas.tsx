@@ -47,8 +47,9 @@ interface TimelineCanvasProps {
   viewportAction?: ViewportAction | null;
   onEventClick: (event: TimelineEvent) => void;
   onEventHover: (event: TimelineEvent | null, x: number, y: number) => void;
-  /** Called when a scrubber thumbnail is tapped. */
-  onScrubberEventTap: (eventId: string) => void;
+  /** Called when a scrubber thumbnail is tapped. All mode: profileId is the
+   *  owning profile straight off the tapped event (refs #337 Task 3). */
+  onScrubberEventTap: (eventId: string, profileId?: string) => void;
   /** Called when scrubber state changes (for save/restore). */
   onScrubberStateChange?: (state: ScrubberState | null) => void;
   /** Restore scrubber to this state on mount. */
@@ -377,6 +378,15 @@ const TimelineCanvasInner = ({
             <span className="text-xs font-medium text-foreground/80 truncate max-w-28">
               {monitor.name}
             </span>
+            {monitor.profileChip && (
+              <span
+                className="text-[9px] px-1 py-0 rounded bg-muted text-muted-foreground truncate max-w-[64px] shrink-0"
+                title={monitor.profileChip}
+                data-testid="timeline-monitor-profile-chip"
+              >
+                {monitor.profileChip}
+              </span>
+            )}
           </div>
         ))}
       </div>

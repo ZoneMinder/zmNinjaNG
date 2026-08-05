@@ -153,6 +153,32 @@ describe('useVisibilityResume', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  it('forgets an away-marker left behind when the subscription is turned off', () => {
+    // A montage tile that pauses while hidden disables this hook mid-away
+    // (refs #337). Re-enabling on return leaves the old marker in place unless
+    // the cleanup clears it, and the next quick flick then measures its gap
+    // from minutes ago and reconnects every tile.
+    const cb = vi.fn();
+    const { rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useVisibilityResume(cb, { enabled, minHiddenMs: 1500 }),
+      { initialProps: { enabled: true } },
+    );
+
+    setVisibility('hidden');
+    vi.advanceTimersByTime(60_000);
+    rerender({ enabled: false });
+    setVisibility('visible');
+    rerender({ enabled: true });
+
+    // A 500ms flick is exactly what minHiddenMs exists to ignore.
+    setVisibility('hidden');
+    vi.advanceTimersByTime(500);
+    setVisibility('visible');
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
   it('does not double-fire when minimize triggers both blur and visibilitychange on Electron', () => {
     mockIsElectron = true;
     const cb = vi.fn();

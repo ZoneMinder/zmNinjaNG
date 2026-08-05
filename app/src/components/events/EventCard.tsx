@@ -24,9 +24,10 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { resolveOwnMonitorIds } from '../../hooks/useScopedEvents';
 import { queryKeys } from '../../lib/query/query-keys';
 import { setEventArchived } from '../../api/events';
-import { getCurrentSession } from '../../services/sessions';
+import { getSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
 import { formatEventRelative, isWithinDays } from '../../lib/relative-time';
@@ -34,7 +35,7 @@ import { RELATIVE_TIME_LIST_WINDOW_DAYS } from '../../lib/zmninja-ng-constants';
 import { ReturnFlashArrow } from './ReturnFlashArrow';
 import { useReturnFlash } from '../../hooks/useReturnFlash';
 import { useReturnHighlightStore } from '../../stores/returnHighlight';
-import { useDeleteSelectionStore } from '../../stores/deleteSelection';
+import { useDeleteSelectionStore, eventSelectionKey } from '../../stores/deleteSelection';
 import { HintButton } from '../ui/button';
 
 /**
@@ -46,7 +47,7 @@ import { HintButton } from '../ui/button';
  * @param props.monitorName - Name of the monitor that recorded the event
  * @param props.thumbnailUrl - URL for the event thumbnail image
  */
-function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailUrls, objectFit = 'contain', thumbnailWidth, thumbnailHeight, tags, eventFilters }: EventCardProps) {
+function EventCardComponent({ event, monitorName, profileId, profileChip, thumbnailUrls, largeThumbnailUrls, objectFit = 'contain', thumbnailWidth, thumbnailHeight, tags, eventFilters }: EventCardProps) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const { fmtDate, fmtTime } = useDateTimeFormat();
@@ -54,11 +55,14 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
   const queryClient = useQueryClient();
   const showHover = settings.hoverPreview.eventsList;
   const toggleFavorite = useEventFavoritesStore((state) => state.toggleFavorite);
+  // Owning profile for this card's actions: the row's own profileId in All
+  // mode, the current profile in single mode (refs #337).
+  const ownerProfileId = profileId ?? currentProfile?.id;
 
   // Subscribe to the specific favorite state for this event
   // This ensures re-renders when favorite status changes
   const isFav = useEventFavoritesStore((state) =>
-    currentProfile ? state.isFavorited(currentProfile.id, event.Id) : false
+    ownerProfileId ? state.isFavorited(ownerProfileId, event.Id) : false
   );
 
   const isArchived = event.Archived === '1';
@@ -66,10 +70,25 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
 
   const markViewed = useReturnHighlightStore((s) => s.markViewed);
   const flash = useReturnFlash(event.Id);
-  const selectedForDelete = useDeleteSelectionStore((s) => s.selectedIds.includes(event.Id));
+  const selectedForDelete = useDeleteSelectionStore((s) =>
+    s.selectedKeys.includes(eventSelectionKey(ownerProfileId, event.Id)));
   const openEvent = () => {
     markViewed(event.Id);
-    navigate(`/events/${event.Id}`, { state: { from: '/events', eventFilters } });
+    // All mode: deep route carries the owning profile so EventDetail
+    // resolves its session from it instead of the (absent) current
+    // profile (refs #337).
+    const path = profileId ? `/all/events/${profileId}/${event.Id}` : `/events/${event.Id}`;
+    // The shared eventFilters object's monitorId can carry composite
+    // `${profileId}:${monitorId}` tokens from the All-mode camera filter
+    // (refs #337 I6) - riding that into nav state sends a bogus
+    // `MonitorId:profile-b:3` segment to getAdjacentEvent, silently
+    // breaking prev/next. Strip to this row's own bare ids before
+    // navigating; a bare (single-mode) monitorId passes through unchanged
+    // (round 2).
+    const navEventFilters = eventFilters && ownerProfileId
+      ? { ...eventFilters, monitorId: resolveOwnMonitorIds(eventFilters.monitorId, ownerProfileId) }
+      : eventFilters;
+    navigate(path, { state: { from: '/events', eventFilters: navEventFilters } });
   };
 
   const startTime = new Date(event.StartDateTime.replace(' ', 'T'));
@@ -80,21 +99,21 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
 
   const handleFavoriteClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card navigation
-    if (currentProfile) {
-      toggleFavorite(currentProfile.id, event.Id);
+    if (ownerProfileId) {
+      toggleFavorite(ownerProfileId, event.Id);
     }
   };
 
   const handleArchiveClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (isArchiving) return;
+    if (isArchiving || !ownerProfileId) return;
     const next = !isArchived;
     setIsArchiving(true);
     try {
-      await setEventArchived(getCurrentSession().client, event.Id, next);
+      await setEventArchived(getSession(ownerProfileId).client, event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfileId, event.Id) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {
@@ -142,6 +161,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                 alt={event.Name}
                 aspectRatio={aspectRatio}
                 event={event}
+                profileId={ownerProfileId}
               >
                 <EventThumbnail
                   urls={thumbnailUrls}
@@ -223,7 +243,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                     )}
                   />
                 </HintButton>
-                <EventDeleteButton eventId={event.Id} />
+                <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} />
                 {(() => {
                   const CauseIcon = getEventCauseIcon(event.Cause);
                   return (
@@ -243,6 +263,15 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
                   {monitorName}
                 </span>
               </div>
+              {profileChip && (
+                <span
+                  className="text-[10px] px-1.5 py-0 rounded bg-muted text-muted-foreground truncate max-w-[100px]"
+                  title={profileChip}
+                  data-testid="event-profile-chip"
+                >
+                  {profileChip}
+                </span>
+              )}
               <div className="flex items-center gap-1 sm:gap-1.5 bg-primary/10 rounded px-1.5 py-0.5">
                 <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
                 {fmtDate(startTime)}

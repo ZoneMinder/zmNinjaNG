@@ -14,14 +14,17 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore } from '../stores/notifications';
 import { useShallow } from 'zustand/react/shallow';
+import { Platform } from '../lib/platform';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
+import { useProfileScope } from '../hooks/useProfileScope';
 import { useProfileStore } from '../stores/profile';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { toast } from 'sonner';
 import { Bell } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { buildThumbnailChain } from '../lib/event/thumbnail-chain';
+import { playNotificationSound } from '../lib/event/notification-sound';
 import { EventThumbnail } from './events/EventThumbnail';
 import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
@@ -35,6 +38,8 @@ import { useNotificationAutoConnect } from '../hooks/useNotificationAutoConnect'
 import { useNotificationPushSetup } from '../hooks/useNotificationPushSetup';
 import { useNotificationDelivered } from '../hooks/useNotificationDelivered';
 import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
+import { useNotificationAllModeToasts } from '../hooks/useNotificationAllModeToasts';
+import { ProfileNotificationConnector } from './notifications/ProfileNotificationConnector';
 
 /**
  * NotificationHandler component.
@@ -44,6 +49,7 @@ import { useNotificationBadgeNudge } from '../hooks/useNotificationBadgeNudge';
 export function NotificationHandler() {
   const navigate = useNavigate();
   const { currentProfile, settings: profileSettings } = useCurrentProfile();
+  const scope = useProfileScope();
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
   const switchProfile = useProfileStore((state) => state.switchProfile);
   const { t } = useTranslation();
@@ -51,22 +57,35 @@ export function NotificationHandler() {
   const {
     getProfileSettings,
     isConnected,
-    connectionState,
+    isPreviousProfileConnected,
     currentProfileId,
     connect,
-    disconnect,
-    reconnect,
   } = useNotificationStore(
     useShallow((state) => ({
       getProfileSettings: state.getProfileSettings,
-      isConnected: state.isConnected,
-      connectionState: state.connectionState,
+      isConnected: currentProfile ? state.connections[currentProfile.id] === 'connected' : false,
+      // The anchor profile (state.currentProfileId) is whichever profile
+      // this hook was bound to BEFORE the current render - distinct from
+      // `isConnected` above, which is scoped to the NEW currentProfile
+      // after a switch (refs #337 C1).
+      isPreviousProfileConnected: state.currentProfileId
+        ? state.connections[state.currentProfileId] === 'connected'
+        : false,
       currentProfileId: state.currentProfileId,
       connect: state.connect,
-      disconnect: state.disconnect,
-      reconnect: state.reconnect,
     }))
   );
+
+  // disconnect() tears down whichever profile's connection is currently
+  // anchored (mirrors the pre-#337 singleton's "disconnect whatever's
+  // connected"); reconnect() always targets this component's own profile.
+  const disconnect = useCallback(() => {
+    const prevId = useNotificationStore.getState().currentProfileId;
+    if (prevId) useNotificationStore.getState().disconnect(prevId);
+  }, []);
+  const reconnect = useCallback((force?: boolean) => {
+    if (currentProfile) useNotificationStore.getState().reconnect(currentProfile.id, force);
+  }, [currentProfile]);
 
   // Events for the current profile, subscribed via selector so addEvent
   // re-renders this component. The store's websocket listener only calls
@@ -129,7 +148,7 @@ export function NotificationHandler() {
     currentProfile,
     settings,
     isConnected,
-    connectionState,
+    isPreviousProfileConnected,
     currentProfileId,
     connect,
     disconnect,
@@ -149,6 +168,11 @@ export function NotificationHandler() {
   // Refreshes the monitor/montage "new events" badge as soon as a
   // notification arrives, independent of the toast setting below.
   useNotificationBadgeNudge(currentProfile?.id, events);
+
+  // All-mode toast display (own-profile settings, burst coalescing, mute
+  // toggle). No-ops in single mode; the effect below stays the single/
+  // current-profile toast path, unchanged (refs #337).
+  useNotificationAllModeToasts();
 
   // Listen to navigation events from services (e.g., push notifications)
   useEffect(() => {
@@ -256,13 +280,35 @@ export function NotificationHandler() {
     }
   }, [events, settings?.showToasts, settings?.playSound, currentProfile?.id, t, navigate, accessToken, isAccessTokenFresh]);
 
-  // Render profile switch confirmation dialog when a cross-profile notification is tapped
+  // Render profile switch confirmation dialog when a cross-profile
+  // notification is tapped, plus one connector per All-mode profile so
+  // every enabled profile gets its own live connection while aggregating
+  // (refs #337). Single mode is untouched: `scope.mode` is 'single' there,
+  // so no connectors mount and this component's own hook calls above
+  // (bound to the real current profile) are the only connection.
+  //
+  // Desktop/web only (refs #337 I4): on mobile, FCM already delivers every
+  // profile's events server-side regardless of which one is foregrounded,
+  // so N extra websockets would only cost battery with no gap to close.
+  // Native keeps today's deterministic single-connection + FCM-anchor
+  // semantics unchanged.
+  //
+  // allModeNotifications === 'off' (refs #337): no connector mounts at all,
+  // so zero All-mode websockets/pollers exist and nothing accumulates from
+  // live paths. 'muted' still mounts every connector - only toast/sound
+  // display is suppressed, at the useNotificationAllModeToasts seam.
   return (
-    <ProfileSwitchDialog
-      pending={pendingSwitch}
-      onConfirm={handleConfirmSwitch}
-      onCancel={handleCancelSwitch}
-    />
+    <>
+      <ProfileSwitchDialog
+        pending={pendingSwitch}
+        onConfirm={handleConfirmSwitch}
+        onCancel={handleCancelSwitch}
+      />
+      {Platform.isDesktopOrWeb && scope?.mode === 'all' && scope.settings.allModeNotifications !== 'off' &&
+        scope.profiles.map((profile) => (
+          <ProfileNotificationConnector key={profile.id} profile={profile} />
+        ))}
+    </>
   );
 }
 
@@ -314,31 +360,4 @@ function ProfileSwitchDialog({
       </div>
     </div>
   );
-}
-
-/**
- * Plays a notification sound using the Web Audio API.
- * Generates a simple beep tone.
- */
-function playNotificationSound() {
-  try {
-    // Create a simple beep sound using Web Audio API
-    const audioContext = new (window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-
-    oscillator.frequency.value = 800; // 800 Hz tone
-    oscillator.type = 'sine';
-
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.3);
-  } catch (error) {
-    log.notifications('Failed to play notification sound', LogLevel.ERROR, error);
-  }
 }

@@ -73,6 +73,12 @@ Feature: Event Browsing and Management
   Scenario: Switch between list and montage views
     When I switch events view to montage
     Then I should see the events montage grid
+    # Both directions. The view is derived from the ?view param and the stored
+    # preference, so switching back has to clear the param as well as persist
+    # 'list' - leaving it set pins the page in montage while the toggle claims
+    # otherwise, and nothing else in the app clears it.
+    When I switch events view to list
+    Then I should see the events list
 
   @all
   Scenario: Favorite and unfavorite an event

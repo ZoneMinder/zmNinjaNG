@@ -5,6 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  pruneAllBucketMonitorIds,
   pruneProfileSettingsMonitorIds,
   pruneWidgetMonitorIds,
 } from '../prune-deleted-monitors';
@@ -72,6 +73,32 @@ describe('pruneProfileSettingsMonitorIds', () => {
   it('reports no change when a montage group holds only live monitors', () => {
     const patch = pruneProfileSettingsMonitorIds(
       { montageByGroup: { all: montageBucket({ hiddenMonitorIds: ['1'] }) } },
+      KNOWN
+    );
+
+    expect(patch).toBeNull();
+  });
+});
+
+describe('pruneAllBucketMonitorIds', () => {
+  it('leaves a bare id alone: it predates All mode and names no owning server', () => {
+    // The caller knows p1's monitors, and '99' is not among them - but nothing
+    // says this id was ever p1's, so deleting it would be a guess.
+    const patch = pruneAllBucketMonitorIds(
+      { montageByGroup: { all: montageBucket({ hiddenMonitorIds: ['99'] }) } },
+      'p1',
+      KNOWN
+    );
+
+    expect(patch).toBeNull();
+  });
+
+  it('does not treat a profile id that merely starts the same as its own', () => {
+    // 'p1' must not claim 'p10:99'. String prefixes are how ownership is read
+    // here, and the separator is what makes that safe.
+    const patch = pruneAllBucketMonitorIds(
+      { montageByGroup: { all: montageBucket({ hiddenMonitorIds: ['p10:99'] }) } },
+      'p1',
       KNOWN
     );
 
