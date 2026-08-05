@@ -40,6 +40,8 @@ import { getStates, changeState } from '../api/states';
 import { usePermissions } from '../hooks/usePermissions';
 import { canChangeRunState, canViewSystem } from '../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../hooks/useDeniedControl';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { AccountPermissionsCard } from '../components/settings/AccountPermissionsCard';
 import { getSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
@@ -135,9 +137,16 @@ export default function Server() {
       log.server('State/action applied', LogLevel.INFO, { action: effectiveAction });
     },
     onError: (error) => {
+      // System View can read the states but not change them, and an account
+      // that cannot read its own permissions is not gated in advance at all -
+      // so this refusal is the only thing that can explain itself (refs #344).
+      const refused = isPermissionDenied(error) && !!currentProfile;
+      if (refused) markPermissionDenied(currentProfile.id, 'run-state');
       toast({
         title: t('common.error'),
-        description: t('server.state_apply_failed'),
+        description: refused
+          ? t('server.run_state_permission_denied')
+          : t('server.state_apply_failed'),
         variant: 'destructive',
       });
       log.server('Failed to apply state/action', LogLevel.ERROR, error);
@@ -163,8 +172,9 @@ export default function Server() {
   // and the greyed button is what tells an administrator why it is inert
   // (refs #344).
   const { permissions } = usePermissions(currentProfile?.id);
+  const runStateRefused = useIsPermissionDenied(currentProfile?.id, 'run-state');
   const applyProps = useDeniedControl({
-    denied: canChangeRunState(permissions) === 'denied',
+    denied: canChangeRunState(permissions) === 'denied' || runStateRefused,
     message: t('server.run_state_permission_denied'),
     onClick: handleApply,
     className: 'flex items-center gap-2',

@@ -30,6 +30,8 @@ import { setEventArchived } from '../../api/events';
 import { usePermissions } from '../../hooks/usePermissions';
 import { canEditEvents } from '../../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../../hooks/useDeniedControl';
+import { isPermissionDenied } from '../../lib/permissions/permission-error';
+import { markPermissionDenied, useIsPermissionDenied } from '../../stores/permissions';
 import { getSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
@@ -108,6 +110,7 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
   };
 
   const { permissions } = usePermissions(ownerProfileId);
+  const archiveRefused = useIsPermissionDenied(ownerProfileId, 'events-edit');
 
   const handleArchiveClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -123,7 +126,16 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {
       log.eventCard('Archive toggle failed', LogLevel.ERROR, { eventId: event.Id, next, error: err });
-      toast.error(t('events.archive_failed'));
+      // An account too restricted to read its own permissions leaves this
+      // control ungated, so the refusal is the only thing that can explain
+      // itself. Spend it once: say what happened, and grey the control so the
+      // next press is not the same discovery (refs #344).
+      if (isPermissionDenied(err) && ownerProfileId) {
+        markPermissionDenied(ownerProfileId, 'events-edit');
+        toast.error(t('events.archive_permission_denied'));
+      } else {
+        toast.error(t('events.archive_failed'));
+      }
     } finally {
       setIsArchiving(false);
     }
@@ -132,7 +144,7 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
   // Archiving needs Events: Edit. The control stays live and greyed so it can
   // still say why it does nothing (refs #344).
   const archiveProps = useDeniedControl({
-    denied: canEditEvents(permissions) === 'denied',
+    denied: canEditEvents(permissions) === 'denied' || archiveRefused,
     message: t('events.archive_permission_denied'),
     onClick: handleArchiveClick,
     title: isArchived ? t('events.unarchive') : t('events.archive'),

@@ -8,6 +8,8 @@ import { getSession } from '../../services/sessions';
 import { eventSelectionKey } from '../../stores/deleteSelection';
 import { asProfileId } from '../../api/types';
 import { toast } from 'sonner';
+import { createHttpError } from '../../lib/http/types';
+import { usePermissionDenialStore, denialKey } from '../../stores/permissions';
 
 const P1 = asProfileId('p1');
 const P2 = asProfileId('p2');
@@ -222,5 +224,53 @@ describe('useBulkDeleteEvents - All mode', () => {
     expect(deleteEvent).not.toHaveBeenCalled();
     // Nothing survived, so there is no count worth reporting.
     expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
+  });
+});
+
+/**
+ * A refused delete has to be told apart from a failed one (refs #344).
+ *
+ * allSettled only counts, so before this the 401 that means "your account may
+ * not" and the timeout that means "try again" produced the same sentence, and
+ * the user could queue the same events forever.
+ */
+describe('useBulkDeleteEvents when ZoneMinder refuses', () => {
+  const privilegeRefusal = createHttpError(
+    401,
+    'Unauthorized',
+    { success: false, data: { name: 'Insufficient Privileges' } },
+    {},
+  );
+
+  beforeEach(() => {
+    usePermissionDenialStore.setState({ denied: {} });
+  });
+
+  it('names the permission rather than reporting a generic failure', async () => {
+    vi.mocked(deleteEvent).mockRejectedValue(privilegeRefusal);
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents(['1']); });
+
+    expect(toast.error).toHaveBeenCalledWith('events.delete_permission_denied:');
+  });
+
+  it('latches the profile so the controls grey afterwards', async () => {
+    vi.mocked(deleteEvent).mockRejectedValue(privilegeRefusal);
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents(['1']); });
+
+    expect(usePermissionDenialStore.getState().denied[denialKey(P1, 'events-edit')]).toBe(true);
+  });
+
+  it('leaves the generic message and no latch for an ordinary failure', async () => {
+    vi.mocked(deleteEvent).mockRejectedValue(new Error('Failed to fetch'));
+
+    const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
+    await act(async () => { await result.current.deleteEvents(['1']); });
+
+    expect(toast.error).toHaveBeenCalledWith('events.delete_failed:');
+    expect(usePermissionDenialStore.getState().denied).toEqual({});
   });
 });

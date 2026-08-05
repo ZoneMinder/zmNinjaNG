@@ -12,6 +12,7 @@ import { HintButton } from '../ui/button';
 import { usePermissions } from '../../hooks/usePermissions';
 import { canEditEvents } from '../../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../../hooks/useDeniedControl';
+import { useIsPermissionDenied } from '../../stores/permissions';
 
 interface EventDeleteButtonProps {
   eventId: string;
@@ -32,8 +33,9 @@ export function EventDeleteButton({ eventId, profileId, size = 'md', className }
   // Deleting needs Events: Edit. Greyed rather than hidden, so an
   // administrator can see which permission their account is missing (refs #344).
   const { permissions } = usePermissions(profileId);
+  const deleteRefused = useIsPermissionDenied(profileId, 'events-edit');
   const deniedProps = useDeniedControl({
-    denied: canEditEvents(permissions) === 'denied',
+    denied: canEditEvents(permissions) === 'denied' || deleteRefused,
     message: t('events.delete_permission_denied'),
     onClick: (e) => {
       e.stopPropagation();
