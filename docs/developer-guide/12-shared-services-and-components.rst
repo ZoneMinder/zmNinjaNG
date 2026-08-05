@@ -1237,7 +1237,8 @@ two-tier: an aggregate keeps its own bucket, stored under the group's own id,
 separate from every individual profile's.
 
 Page-level controls get that for free, because ``useCurrentProfile`` already
-keys off ``currentProfileId`` and so resolves to the ALL bucket in All mode.
+keys off ``currentProfileId`` and so resolves to the aggregate's own bucket
+while aggregating.
 The stream path does not. A montage tile owned by profile B passes
 ``profileId: B`` down the URL chain (``useServerUrls``, ``useFreshAccessToken``,
 ``useProfileById``) so its stream resolves against B's server, and reading its
@@ -1248,7 +1249,7 @@ toggle and the Settings page's aggregate Streaming Mode row governing nothing.
 
    import { useViewPrefs } from '../hooks/useViewPrefs';
 
-   // Owning profile in single mode; the ALL bucket while aggregating.
+   // Owning profile in single mode; the aggregate's bucket while aggregating.
    const { viewMode, showAnalysisFrames } = useViewPrefs(profileId);
 
 The split is by what a setting describes. ``viewMode`` and
@@ -1256,11 +1257,11 @@ The split is by what a setting describes. ``viewMode`` and
 owns them. Timeouts, multi-port and bandwidth describe the server, so they
 stay with the owning profile - ``useMonitorStream`` reads both, from
 ``useProfileById`` and from here. Resolution keys off the app's mode, not the
-route, so the ``/all/monitors/:profileId/:id`` deep route follows the ALL
-bucket like every other All-mode surface.
+route, so the ``/all/monitors/:profileId/:id`` deep route follows the
+aggregate's bucket like every other all-mode surface.
 
-Streaming Mode is a tri-state while aggregating, and it gets its own ALL-bucket
-setting, ``allModeViewMode`` (``'per-server' | 'streaming' | 'snapshot'``),
+Streaming Mode is a tri-state while aggregating, and it gets its own setting in
+that bucket, ``allModeViewMode`` (``'per-server' | 'streaming' | 'snapshot'``),
 rather than reusing ``viewMode``. Its default, ``'per-server'``, sends each tile
 back to its owning profile, so entering All mode never changes how anything
 streams until the user asks. ``AllServersStreamingSection`` on the Settings page

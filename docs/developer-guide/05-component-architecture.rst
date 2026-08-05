@@ -872,15 +872,15 @@ profile, because a delete has to go to the server the event lives on:
    }
 
 That grouping is the fix for a crash, not a refactor. The hook used to resolve
-one client up front with ``getCurrentSession()``. In All mode the current
-profile is the ``ALL_PROFILES_ID`` sentinel, which has no session, so
+one client up front with ``getCurrentSession()``. While aggregating, the
+current id is an aggregate, which has no session, so
 ``getSession`` threw. The call sat inside a ``try``/``finally`` with no
 ``catch``, so confirming a bulk delete produced an unhandled rejection: no
 toast, nothing deleted, the selection still there. Each profile's
 ``getSession`` call is now wrapped, and a profile that cannot produce a client
 counts its events as failed rather than taking the whole batch down. The
-Sessions contract (``AGENTS.project.md``) states the rule directly: never
-``getCurrentSession`` where the sentinel can be current.
+Aggregation contract (``AGENTS.project.md``) states the rule directly: never
+``getCurrentSession`` where an aggregate can be current.
 
 Per profile it calls the API layer's ``deleteEvent`` (imported as
 ``apiDeleteEvent`` to avoid a name clash) for every id through
@@ -1108,7 +1108,7 @@ window, and the three connection knobs. Settings.tsx renders it only while
 ``AllServersStreamingSection``, because these bound the aggregate rather than
 the server picked below.
 
-Each row's value lives in the ``ALL_PROFILES_ID`` settings bucket and its
+Each row's value lives in the current aggregate's settings bucket and its
 default is the constant its consumer used to hardcode, so
 ``DEFAULT_SETTINGS.allModeMaxStreams`` is ``MONTAGE_GRID.allModeMaxStreams``
 and resetting a row writes that constant back. The editable range comes from

@@ -2870,7 +2870,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    ``MonitorCard``'s ``goToDetail`` navigates straight to
    ``/all/monitors/:profileId/:monitorId`` when the card carries a
    ``profileId``, instead of Flow 21's switch-then-navigate; ``MonitorDetail``
-   resolves its session from the route param, so the profile switcher still
+   resolves its session from the route param, so the profile switcher
    still names the group the whole time - the outcome the deep-link e2e scenario
    asserts.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
