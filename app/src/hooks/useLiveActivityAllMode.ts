@@ -82,9 +82,10 @@ export function useLiveActivityAllMode(
     [scope?.profiles]
   );
 
-  // Both guardrails below are user settings living in the ALL bucket, which is
-  // exactly what `scope.settings` resolves to while aggregating (Settings >
-  // All Servers performance). The fallback only covers "no scope at all",
+  // Both guardrails below are user settings living in the active aggregate's
+  // bucket, which is exactly what `scope.settings` resolves to while
+  // aggregating (its performance section in Settings). The fallback only
+  // covers "no scope at all",
   // where nothing fans out anyway and the numbers are unused; it exists so the
   // arithmetic stays defined rather than to describe a real configuration.
   const allModeSettings = scope?.settings ?? DEFAULT_SETTINGS;

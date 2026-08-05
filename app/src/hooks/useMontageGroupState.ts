@@ -30,10 +30,11 @@ export interface UseMontageGroupStateReturn {
 export function useMontageGroupState(): UseMontageGroupStateReturn {
   const { settings } = useCurrentProfile();
   const { selectedGroupId } = useGroupFilter();
-  // Write target: the real profile id in single mode, the ALL sentinel in All
-  // mode (currentProfile is null there). Montage layout is a view preference,
-  // so the ALL bucket owns it - the same bucket `settings` above already
-  // reads from, keeping read and write on one key (refs #337).
+  // Write target: the real profile id in single mode, the active aggregate's
+  // id while aggregating (currentProfile is null there). Montage layout is a
+  // view preference, so the aggregate's own bucket owns it - the same bucket
+  // `settings` above already reads from, keeping read and write on one key
+  // (refs #337).
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateMontageGroupLayout = useSettingsStore(
     (state) => state.updateMontageGroupLayout

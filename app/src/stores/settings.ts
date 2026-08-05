@@ -143,55 +143,55 @@ export interface ProfileSettings {
   monitorsFeedFit: MonitorsLayoutMode; // Layout mode for monitor list
   monitorsViewMode: MonitorsViewMode; // List or grid view
   /** All mode only: section the Monitors grid by owning server instead of a
-   *  flat list. Stored under the ALL settings bucket. */
+   *  flat list. Stored under the active aggregate's own settings bucket. */
   monitorsGroupByServer: boolean;
   /** All mode only: profiles to include in the aggregated Events list.
-   *  null = every profile in scope (default). Stored under the ALL
-   *  settings bucket. */
+   *  null = every profile in scope (default). Stored under the active
+   *  aggregate's own settings bucket. */
   eventsServerFilter: ProfileId[] | null;
-  /** All mode only: 'live' runs every scope profile's connection and shows
-   *  toasts/sound; 'muted' keeps every connection running but suppresses
-   *  toasts/sound (badge counts and history still update); 'off' tears down
-   *  every All-mode connection so nothing live runs. Stored under the ALL
-   *  settings bucket (refs #337). */
+  /** Aggregating only: 'live' runs every scope profile's connection and
+   *  shows toasts/sound; 'muted' keeps every connection running but
+   *  suppresses toasts/sound (badge counts and history still update); 'off'
+   *  tears down every aggregate connection so nothing live runs. Stored under
+   *  the active aggregate's own settings bucket (refs #337). */
   allModeNotifications: AllModeNotifications;
   /** All mode only: which Streaming Mode aggregated tiles follow.
    *  'per-server' (the default) leaves every tile on its OWNING profile's
    *  viewMode, so switching into All mode never changes how anything streams;
    *  'streaming'/'snapshot' impose one mode on every tile from every server.
    *
-   *  A key of its own rather than reusing `viewMode` in the ALL bucket: that
-   *  would need "unset" to mean per-server, and the first write of ANY key to
-   *  a bucket materializes the whole DEFAULT_SETTINGS shape, so unset is not a
-   *  state the ALL bucket can stay in. Stored under the ALL settings bucket
-   *  (refs #337). */
+   *  A key of its own rather than reusing `viewMode` in the aggregate's
+   *  bucket: that would need "unset" to mean per-server, and the first write
+   *  of ANY key to a bucket materializes the whole DEFAULT_SETTINGS shape, so
+   *  unset is not a state any bucket can stay in. Stored under the active
+   *  aggregate's own settings bucket (refs #337). */
   allModeViewMode: AllModeViewMode;
   /** All mode only: how many montage tiles (== live streams) render across
    *  every profile's monitors combined before the rest collapse into an
    *  overflow notice. Single mode is uncapped and ignores this. Stored under
-   *  the ALL settings bucket (refs #337). */
+   *  the active aggregate's own settings bucket (refs #337). */
   allModeMaxStreams: number;
   /** All mode only: how many (profile, monitor) pairs the Live Activity page
    *  watches at once, drawn round-robin so one busy server cannot crowd out
-   *  the rest. Stored under the ALL settings bucket (refs #337). */
+   *  the rest. Stored under the active aggregate's own settings bucket (refs #337). */
   allModeMaxWatched: number;
   /** All mode only: floor under the Live Activity alarm poll interval, in
    *  seconds. It CLAMPS the bandwidth-derived interval rather than replacing
-   *  it, so a slower configured poll stays slower. Stored under the ALL
-   *  settings bucket (refs #337). */
+   *  it, so a slower configured poll stays slower. Stored under the active
+   *  aggregate's own settings bucket (refs #337). */
   allModePollFloorSeconds: number;
   /** All mode only: how long, in seconds, events from different servers keep
    *  collapsing into one summary toast instead of one toast each. Stored
-   *  under the ALL settings bucket (refs #337). */
+   *  under the active aggregate's own settings bucket (refs #337). */
   allModeBurstSeconds: number;
   /** All mode only: whether aggregated tiles stream at reduced frame rate and
-   *  scale. Stored under the ALL settings bucket (refs #337). */
+   *  scale. Stored under the active aggregate's own settings bucket (refs #337). */
   allModeStreamTuning: AllModeStreamTuning;
   /** All mode only: whether streams stop while the app is in the background or
-   *  the tab is hidden. Stored under the ALL settings bucket (refs #337). */
+   *  the tab is hidden. Stored under the active aggregate's own settings bucket (refs #337). */
   allModePauseHidden: boolean;
   /** All mode only: minutes of no interaction before aggregated streams stand
-   *  down. 0 means never. Stored under the ALL settings bucket (refs #337). */
+   *  down. 0 means never. Stored under the active aggregate's own settings bucket (refs #337). */
   allModeIdleMinutes: number;
   /** All mode only: whether montage tiles scrolled out of view stop streaming
    *  until they come back. Applies to the tiles the stream budget already

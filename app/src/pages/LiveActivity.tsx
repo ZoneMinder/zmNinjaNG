@@ -320,9 +320,9 @@ export default function LiveActivity() {
     settingKey: 'liveActivityIsFullscreen',
   });
 
-  // All mode only: every scope profile plus its own full monitor list, for
-  // the settings dialog's ignore-list section (which edits a PICKED
-  // profile's own bucket via ProfilePicker, never the ALL bucket - refs
+  // Aggregating only: every scope profile plus its own full monitor list,
+  // for the settings dialog's ignore-list section (which edits a PICKED
+  // profile's own bucket via ProfilePicker, never the aggregate's - refs
   // #337). Undefined in single mode, where the dialog keeps reading/writing
   // `monitors`/`profileId` directly as it always has.
   const scopeProfiles = useMemo(() => {

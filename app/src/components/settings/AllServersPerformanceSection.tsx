@@ -4,7 +4,7 @@
  * Rendered only while aggregating, above the per-server profile picker, for
  * the same reason AllServersStreamingSection is: every knob here governs the
  * aggregate as a whole, not the profile picked below it. They all live in the
- * ALL settings bucket (refs #337).
+ * active aggregate's own settings bucket (refs #337).
  *
  * These values used to be constants nobody could reach. How many servers a
  * person aggregates, and how much their network and their servers will take,

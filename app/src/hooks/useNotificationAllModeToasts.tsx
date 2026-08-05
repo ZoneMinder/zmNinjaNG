@@ -166,8 +166,8 @@ export function useNotificationAllModeToasts(): void {
 
     burstRef.current.push(...newlyArrived);
     if (!timerRef.current) {
-      // Seconds in the ALL bucket, milliseconds here: the settings row asks
-      // for a unit a person thinks in, setTimeout wants the other one.
+      // Seconds in the aggregate's bucket, milliseconds here: the settings
+      // row asks for a unit a person thinks in, setTimeout wants the other.
       timerRef.current = setTimeout(flushBurst, scope.settings.allModeBurstSeconds * 1000);
     }
   }, [profileEvents, scope, getProfileSettings, flushBurst]);

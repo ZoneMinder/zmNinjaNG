@@ -117,8 +117,9 @@ const areLayoutsEqual = (a: Layout[], b: Layout[]): boolean => {
 interface UseMontageGridOptions {
   monitors: MontageTileMonitorData[];
   /** Profile id every layout write targets: the real profile in single mode,
-   *  the ALL sentinel in All mode, where the ALL bucket owns the layout the
-   *  way it owns every other view preference (refs #337). */
+   *  the active aggregate's id while aggregating, where that aggregate's own
+   *  bucket owns the layout the way it owns every other view preference
+   *  (refs #337). */
   profileId: ProfileId | null;
   settings: ProfileSettings;
   isEditMode: boolean;

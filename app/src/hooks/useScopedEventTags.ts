@@ -44,7 +44,8 @@ export interface UseScopedTagsReturn {
    * two servers - but users think in names ("person"), and a "person" tag on
    * one server means the same thing as a "person" tag on another. The name is
    * therefore the aggregate token: it is what the popover selects, what the
-   * ALL settings bucket persists, and what `resolveOwnTagIds` maps back to
+   * aggregate's own settings bucket persists, and what `resolveOwnTagIds`
+   * maps back to
    * each profile's real ids before a query runs (refs #337, audit D4). Same
    * shape as the All-mode monitor filter's composite tokens.
    */
