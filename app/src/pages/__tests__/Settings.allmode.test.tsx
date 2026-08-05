@@ -188,6 +188,9 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       ).toBeInTheDocument();
     });
 
+    // The legacy half of the label: only the retired All Servers sentinel has
+    // no stored name, so this arm covers a pre-migration frame. The live case
+    // is "names the group in both aggregate section headers" below (refs #337).
     it('names All Servers in its label', () => {
       render(<Settings />);
 
