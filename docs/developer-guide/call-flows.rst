@@ -2876,12 +2876,12 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
    · → :doc:`05-component-architecture`
 
-#. **A push notification resolves to a real profile even while All mode has
-   none current.** ``resolveProfileForNotification`` special-cases
-   ``currentProfileId === ALL_PROFILES_ID``: when the notification's own
+#. **A push notification resolves to a real profile even while an aggregate
+   has none current.** ``resolveProfileForNotification`` special-cases an
+   aggregate id via ``isAggregateProfileId``: when the notification's own
    profile is known, it returns that profile as the target with
    ``isCrossProfile: false`` - no switch-confirmation dialog, because there is
-   no "wrong" profile to switch away from in All mode.
+   no "wrong" profile to switch away from while aggregating.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L52>`__
    · → :doc:`12-shared-services-and-components`
 

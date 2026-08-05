@@ -1267,10 +1267,10 @@ back to its owning profile, so entering All mode never changes how anything
 streams until the user asks. ``AllServersStreamingSection`` on the Settings page
 is what writes it.
 
-The obvious alternative - read the ALL bucket's own ``viewMode`` and treat
-"never written" as per-server - does not work, and the reason is worth
+The obvious alternative - read the aggregate bucket's own ``viewMode`` and
+treat "never written" as per-server - does not work, and the reason is worth
 remembering: ``updateProfileSettings`` seeds a fresh bucket with the whole
-``DEFAULT_SETTINGS`` shape, so the first write of ANY key (in All mode,
+``DEFAULT_SETTINGS`` shape, so the first write of ANY key (while aggregating,
 ``lastRoute`` on the very first navigation) materializes ``viewMode:
 'snapshot'`` alongside it. Absence is not a state a bucket stays in, and an
 e2e run caught exactly that: a montage that had merely been navigated to
