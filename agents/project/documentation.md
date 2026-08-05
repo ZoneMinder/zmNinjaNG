@@ -39,3 +39,28 @@ Connect each artifact to its user-visible behavior and relevant flow. Examples m
 - Em-dashes and headline-style headings are gated by the unit suite (`app/src/tests/no-em-dash.test.ts`, `app/src/tests/agents-contracts.test.ts`); run `npm test` before committing a new or rewritten chapter.
 - Developer docs cite AGENTS.md rule IDs or AGENTS.project.md contract names instead of copying process rules.
 
+
+## Reports and analysis files (learned 2026-08-05, refs #337)
+
+Retrospectives, analyses, and reports under `docs/superpowers/` ARE
+documentation; every rule above applies to them. The all-profiles
+retrospective needed three maintainer-driven rewrites to learn what
+this section now states:
+
+- Headings state their contents plainly ("Fixing bulk delete in All
+  mode"), never tease them ("The retirement: an override, a migration,
+  and a second death"). If a heading would work as a news headline,
+  rewrite it.
+- Never invent shorthand and use it as if the reader knows it. Either
+  avoid the term or define it once, early, then reuse it ("proven red
+  means the new test was run against the pre-fix code and shown to
+  fail there"). A sentence the maintainer must decode is a defect, not
+  a style choice.
+- Depth over compression. When a sentence packs three facts into
+  subordinate clauses, split it and spell each fact out. The measure of
+  a report is whether a reader outside the session can follow every
+  sentence on first read - not its length in either direction.
+- No superlatives or ranking commentary ("the best catch of the day",
+  "the strongest evidence"). State what happened; let the reader rank.
+- Claims cite their commit (link, verified to exist before citing) and
+  quoted outputs come from the record, never reconstructed.
