@@ -1083,6 +1083,41 @@ profile:
 
    const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
+Naming the active aggregate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+There are two kinds of aggregate and they are named differently. All Servers
+is a sentinel id with nothing stored behind it, so its label is localized
+(``profiles.all_servers``); a virtual profile is a stored group and its label
+is the name the user gave it. Nothing should branch on that in a component.
+
+While a surface is describing the aggregate it is already in, take the name
+off the scope:
+
+.. code:: tsx
+
+   const scope = useProfileScope();
+   const aggregateName =
+     (scope?.mode === 'all' ? scope.aggregateName : null) ?? t('profiles.all_servers');
+
+``aggregateName`` is ``null`` for All Servers, which is why the localized
+label is the fallback rather than a value the hook invents. Settings uses this
+for its aggregate section headings.
+
+When a surface names an aggregate it is *not* in, the scope cannot answer:
+the profile switcher and the Profiles page both announce the aggregate they
+are switching to, before the switch. Use ``useAggregateLabel``
+(``src/hooks/useAggregateLabel.ts``), which resolves any aggregate id:
+
+.. code:: tsx
+
+   const aggregateLabel = useAggregateLabel();
+   const name = aggregateLabel(profileId); // group name, or "All Servers"
+
+An id with no group behind it (deleted in another tab, hand-edited storage)
+falls back to ``profiles.select_profile`` rather than "All Servers", matching
+``useProfileScope``, which collapses that id to no scope at all.
+
 Loading and error states
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

@@ -59,11 +59,11 @@ Path: subscriptions select every reactive field they read, with `useShallow` for
 Never: mutating objects returned by `getState`; whole-store subscriptions; minting objects inside a selector - `useShallow` never stabilizes them and the render loops.
 Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes need a real-store regression test (testing playbook).
 
-### Aggregation (All Servers mode)
+### Aggregation (All Servers and groups)
 Owns: surfaces fanning out over multiple profiles.
-Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
-Never: bare monitor/event ids as aggregate keys; `getCurrentSession` where the ALL sentinel can be current; server-scoped prefs read from the ALL bucket.
-Gate: review; mechanizing the Never checks is a tracked follow-up.
+Path: scope from `useProfileScope` only (filters disabled profiles; single mode is a one-element array); an aggregate id is the ALL sentinel or a virtual profile id, tested with `isAggregateProfileId`; fan out via `useQueries` with `combine` (`useScopedMonitors` is the template); aggregate-keyed state uses `monitorCacheKey` composites, raw ZM ids collide across servers; stagger via `staggeredRefetchInterval`.
+Never: bare monitor/event ids as aggregate keys; `=== ALL_PROFILES_ID` where a group aggregates too; `getCurrentSession` where an aggregate can be current; server-scoped prefs read from an aggregate bucket.
+Gate: review; mechanizing these is a tracked follow-up.
 
 ### Notifications
 Owns: live notification connections and attribution.
@@ -92,12 +92,12 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ### Localization
 Owns: all user-facing text.
 Path: locale files under `app/src/locales/` (de, en, es, fr, zh); every locale updates together; both pickers list every locale.
-Never: hardcoded user-facing strings; a string added to one locale only.
+Never: hardcoded user-facing strings.
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Native
 Owns: everything touching Capacitor or platform APIs.
-Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored, and trust is global once any profile enables self-signed (deliberate; see the TLS trust-scope decision in the all-profiles design spec).
+Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored, and trust is global once any profile enables self-signed (deliberate; see the all-profiles design spec).
 Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without stored fingerprint (breaks self-signed onboarding).
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
@@ -132,9 +132,7 @@ Per commit, run what the change touches (docs-only edits: the doc gates in
 `src/tests/`; code: its unit tests). `npm run gates` runs the full set
 before push or PR; `npm run build` already type-checks, so no separate
 `tsc -b` pass. The three lint configs (`lint:a11y`, `lint:correctness`,
-`lint:ratchet`) are the blocking ones; `npm run lint` stays advisory. The
-e2e command applies to behavior-changing UI, navigation, and workflow
-changes.
+`lint:ratchet`) are the blocking ones; `npm run lint` stays advisory.
 The ratchet baseline lives at `app/.lint-baseline.json`; lower it with
 `npm run lint:ratchet -- --update`. State completed checks in handoff.
 

@@ -118,7 +118,7 @@ Changing the Streaming Mode toggle overrides the default for that profile.
 
 #### In All Servers mode
 
-While aggregating, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate **All Servers Streaming Mode** row appears at the top of the page. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile from every server for as long as you are aggregating; neither touches any profile's own setting.
+While aggregating, the Streaming Mode toggle in this section belongs to the server picked below it, and a separate aggregate Streaming Mode row appears at the top of the page. The row is named after whatever you are aggregating: **All Servers Streaming Mode** in All Servers mode, or the group's name when a group is current. It has three options: **Per server** (the default, each server's tiles follow that server's own toggle), **Streaming**, and **Snapshot**. The last two impose one choice on every tile in the aggregate for as long as you are aggregating; neither touches any profile's own setting, and neither carries between one aggregate and another.
 
 (connection-limits-by-platform)=
 
@@ -198,10 +198,11 @@ Manage the PIN used to lock and unlock kiosk mode. See {doc}`kiosk` for full det
 
 ## All Servers performance
 
-This section only appears while you are in All Servers mode, above the server
-picker, because every row in it governs the combined view rather than one
-server. Each row shows the value it ships with, and grows a reset button once
-you change it.
+This section only appears while you are aggregating, above the server picker,
+because every row in it governs the combined view rather than one server. Its
+heading names the aggregate it belongs to: All Servers, or the group you are
+currently in, whose values are its own. Each row shows the value it ships
+with, and grows a reset button once you change it.
 
 Aggregating several servers multiplies work that one server does once: every
 tile is a separate live connection, and every watched camera is a separate
