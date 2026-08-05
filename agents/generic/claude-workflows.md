@@ -148,3 +148,11 @@ named fleet.
   the gates their change class implicates (settings-shape consumers,
   locale parity, word budget). ~25 full runs in one day was habit, not
   requirement.
+- One checkout, many agents: the branch can change UNDER you between
+  your edit and your commit (a concurrent agent's checkout switches the
+  whole worktree). `git commit` lands on whatever branch is current at
+  that moment, and `git reset --hard` recovery destroys the other
+  agent's staged work. Verify `git branch --show-current` immediately
+  before every commit, and make out-of-band commits (docs, orchestrator
+  fixes) from a temporary `git worktree` on the target branch instead
+  of the shared checkout.
