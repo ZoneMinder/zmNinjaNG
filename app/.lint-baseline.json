@@ -1,6 +1,6 @@
 {
   "@typescript-eslint/no-empty-object-type": 3,
-  "@typescript-eslint/no-explicit-any": 100,
+  "@typescript-eslint/no-explicit-any": 99,
   "@typescript-eslint/no-this-alias": 1,
   "no-restricted-syntax": 4,
   "react-hooks/exhaustive-deps": 32,
