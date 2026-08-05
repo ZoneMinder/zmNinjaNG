@@ -1,8 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { EventCard } from '../EventCard';
+import { setEventArchived } from '../../../api/events';
+import { asProfileId } from '../../../api/types';
+import { toast } from 'sonner';
+import { createHttpError } from '../../../lib/http/types';
+import { usePermissionDenialStore } from '../../../stores/permissions';
 
 const navigate = vi.fn();
 
@@ -18,6 +23,17 @@ vi.mock('../../../hooks/usePermissions', () => ({
     permissions: mockEventsPermission === undefined ? undefined : { events: mockEventsPermission },
     isLoading: false,
   }),
+}));
+
+vi.mock('../../../api/events', () => ({ setEventArchived: vi.fn() }));
+
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
+
+// Partial: the profile store registers its own gate against this module on
+// import, so the real exports have to survive the mock.
+vi.mock('../../../services/sessions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../services/sessions')>()),
+  getSession: () => ({ client: {} }),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -40,6 +56,7 @@ vi.mock('../../../lib/logger', () => ({
     api: vi.fn(),
     auth: vi.fn(),
     profile: vi.fn(),
+    eventCard: vi.fn(),
   },
   LogLevel: {
     DEBUG: 0,
@@ -89,9 +106,13 @@ function makeEvent(overrides: Partial<typeof baseEvent>) {
   return { ...baseEvent, ...overrides };
 }
 
-function renderEventCard(eventOverrides: Partial<typeof baseEvent> = {}) {
+function renderEventCard(
+  eventOverrides: Partial<typeof baseEvent> = {},
+  props: Record<string, unknown> = {},
+) {
   return renderWithClient(
     <EventCard
+      {...props}
       event={makeEvent(eventOverrides)}
       monitorName="Front Door"
       thumbnailUrls={['https://example.test/thumb.jpg']}
@@ -346,6 +367,64 @@ describe('EventCard without permission to archive', () => {
   it('leaves it alone while the permission is unknown', () => {
     renderEventCard({});
 
+    expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
+  });
+});
+
+/**
+ * When the account is too restricted to be gated in advance (refs #344).
+ *
+ * An account that cannot read its own permissions - System='None', which is
+ * every account below System View - leaves canEditEvents at 'unknown', so the
+ * archive control is deliberately left alone. The refusal is then the only
+ * thing that can teach anyone anything, so it has to be spent well: say what
+ * actually happened, and do not make the user discover it twice.
+ */
+describe('EventCard when ZoneMinder refuses the archive', () => {
+  const privilegeRefusal = createHttpError(
+    401,
+    'Unauthorized',
+    { success: false, data: { name: 'Insufficient Privileges' } },
+    {},
+  );
+
+  beforeEach(() => {
+    mockEventsPermission = undefined;
+    usePermissionDenialStore.setState({ denied: {} });
+    vi.mocked(setEventArchived).mockReset();
+  });
+
+  it('names the permission instead of blaming the archive', async () => {
+    vi.mocked(setEventArchived).mockRejectedValue(privilegeRefusal);
+
+    renderEventCard({}, { profileId: asProfileId('p1') });
+    fireEvent.click(screen.getByTestId('event-archive-button'));
+
+    await waitFor(() =>
+      expect(vi.mocked(toast.error)).toHaveBeenCalledWith('events.archive_permission_denied'),
+    );
+  });
+
+  it('greys the control afterwards so the refusal is spent once', async () => {
+    vi.mocked(setEventArchived).mockRejectedValue(privilegeRefusal);
+
+    renderEventCard({}, { profileId: asProfileId('p1') });
+    fireEvent.click(screen.getByTestId('event-archive-button'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('event-archive-button')).toHaveAttribute('aria-disabled', 'true'),
+    );
+  });
+
+  it('leaves the control alone when the failure was not about permission', async () => {
+    // A timeout says nothing about the account, and greying on it would take
+    // archiving away from someone who has it.
+    vi.mocked(setEventArchived).mockRejectedValue(new Error('Failed to fetch'));
+
+    renderEventCard({}, { profileId: asProfileId('p1') });
+    fireEvent.click(screen.getByTestId('event-archive-button'));
+
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalledWith('events.archive_failed'));
     expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
   });
 });

@@ -21,6 +21,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { deleteEvent as apiDeleteEvent } from '../api/events';
 import { getSession } from '../services/sessions';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { markPermissionDenied } from '../stores/permissions';
 import type { EventData, EventsResponse, ProfileId } from '../api/types';
 import { queryKeys } from '../lib/query/query-keys';
 import { parseEventSelectionKey } from '../stores/deleteSelection';
@@ -82,6 +84,10 @@ export function useBulkDeleteEvents(profileId?: ProfileId): {
       }
 
       const deletedKeys: string[] = [];
+      // allSettled counts failures but says nothing about why. A privilege
+      // refusal has to be told apart from a timeout: it is the only failure
+      // worth naming, and the only one worth remembering (refs #344).
+      let refusedByPermission = false;
       await Promise.all(
         [...byProfile].map(async ([owner, events]) => {
           let client;
@@ -96,6 +102,10 @@ export function useBulkDeleteEvents(profileId?: ProfileId): {
           const results = await Promise.allSettled(events.map((e) => apiDeleteEvent(client, e.eventId)));
           const deleted = events.filter((_, i) => results[i].status === 'fulfilled');
           failed += events.length - deleted.length;
+          if (results.some((r) => r.status === 'rejected' && isPermissionDenied(r.reason))) {
+            refusedByPermission = true;
+            markPermissionDenied(owner, 'events-edit');
+          }
           deletedKeys.push(...deleted.map((e) => e.key));
           if (deleted.length === 0) return;
 
@@ -132,7 +142,9 @@ export function useBulkDeleteEvents(profileId?: ProfileId): {
         toast.error(
           deletedKeys.length > 0
             ? t('events.delete_partial', { count: deletedKeys.length, failed })
-            : t('events.delete_failed')
+            : refusedByPermission
+              ? t('events.delete_permission_denied')
+              : t('events.delete_failed')
         );
       } else {
         toast.success(t('events.delete_selected_success', { count: deletedKeys.length }));

@@ -17,7 +17,12 @@ import { create } from 'zustand';
 import type { ProfileId } from '../api/types';
 
 /** The actions a refusal can latch. One per surface that writes. */
-export type PermissionSurface = 'monitor-settings' | 'events-edit' | 'run-state' | 'ptz';
+/**
+ * PTZ is deliberately absent: `ajax/control.php` has no else branch, so a
+ * denied command answers 200 with no body. There is no refusal to catch, which
+ * is why that pad is gated proactively or not at all.
+ */
+export type PermissionSurface = 'monitor-settings' | 'events-edit' | 'run-state';
 
 interface PermissionDenialState {
   /** `${profileId}:${surface}` or `${profileId}:${surface}:${targetId}`. */

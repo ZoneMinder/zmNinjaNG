@@ -12,6 +12,8 @@ import { getEvent, getEventVideoUrl, getEventImageUrl, setEventArchived } from '
 import { usePermissions } from '../hooks/usePermissions';
 import { canEditEvents } from '../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../hooks/useDeniedControl';
+import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
 import { eventHasAlarmFrame } from '../lib/event/thumbnail-chain';
@@ -107,6 +109,9 @@ export default function EventDetail() {
   // existing error state below covers both cases without new branching
   // (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  // A primitive, so the archive callback depends on the id rather than on the
+  // profile object identity.
+  const ownerProfileId = ownerProfile?.id;
   const dataEnabled = !!id && !!ownerProfile;
   const { data: event, isLoading, error } = useQuery({
     queryKey: queryKeys.event(ownerProfile?.id, id),
@@ -223,23 +228,31 @@ export default function EventDetail() {
     try {
       await setEventArchived(resolveClient(routeProfileId), event.Event.Id, next);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfile?.id, event.Event.Id) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfile?.id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfileId, event.Event.Id) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) }),
       ]);
       toast.success(next ? t('events.archived_success') : t('events.unarchived_success'));
     } catch (err) {
       log.eventDetail('Archive toggle failed', LogLevel.ERROR, { eventId: event.Event.Id, next, error: err });
-      toast.error(t('events.archive_failed'));
+      // The account may be too restricted to have been gated in advance, in
+      // which case this refusal is the only explanation anyone gets (refs #344).
+      if (isPermissionDenied(err) && ownerProfileId) {
+        markPermissionDenied(ownerProfileId, 'events-edit');
+        toast.error(t('events.archive_permission_denied'));
+      } else {
+        toast.error(t('events.archive_failed'));
+      }
     } finally {
       setIsArchiving(false);
     }
-  }, [event, isArchived, isArchiving, routeProfileId, ownerProfile?.id, queryClient, t]);
+  }, [event, isArchived, isArchiving, routeProfileId, ownerProfileId, queryClient, t]);
 
   // Archiving needs Events: Edit. Greyed and still live, so hover, hold and tap
   // all say which permission is missing (refs #344).
-  const { permissions } = usePermissions(ownerProfile?.id);
+  const { permissions } = usePermissions(ownerProfileId);
+  const archiveRefused = useIsPermissionDenied(ownerProfileId, 'events-edit');
   const archiveProps = useDeniedControl({
-    denied: canEditEvents(permissions) === 'denied',
+    denied: canEditEvents(permissions) === 'denied' || archiveRefused,
     message: t('events.archive_permission_denied'),
     onClick: handleArchiveToggle,
     title: isArchived ? t('event_detail.unarchive') : t('event_detail.archive'),
