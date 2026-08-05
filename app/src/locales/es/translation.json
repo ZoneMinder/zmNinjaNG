@@ -1049,7 +1049,23 @@
     "disable": "Deshabilitar",
     "enable": "Habilitar",
     "disabled": "Deshabilitado",
-    "cannot_disable_active": "No se puede deshabilitar el perfil activo. Cambia de perfil primero."
+    "cannot_disable_active": "No se puede deshabilitar el perfil activo. Cambia de perfil primero.",
+    "new_group": "Nuevo grupo",
+    "group_create_title": "Nuevo grupo",
+    "group_edit_title": "Editar grupo",
+    "group_dialog_desc": "Elige los servidores que reúne este grupo.",
+    "group_name": "Nombre del grupo",
+    "group_members": "Servidores de este grupo",
+    "group_name_required": "Escribe un nombre para el grupo",
+    "group_name_taken": "Ese nombre ya está en uso",
+    "group_members_required": "Elige al menos un servidor",
+    "group_member_count_one": "{{count}} servidor",
+    "group_member_count_other": "{{count}} servidores",
+    "group_resource_note": "Agregar varios servidores puede exigir muchos recursos",
+    "delete_group_confirm_title": "¿Eliminar grupo?",
+    "delete_group_confirm_desc": "¿Eliminar el grupo \"{{name}}\"? Sus servidores no se eliminan.",
+    "delete_group_success": "Grupo eliminado",
+    "delete_group_error": "No se pudo eliminar el grupo"
   },
   "profile_picker": {
     "label": "Perfil"

@@ -1049,7 +1049,23 @@
     "disable": "Désactiver",
     "enable": "Activer",
     "disabled": "Désactivé",
-    "cannot_disable_active": "Impossible de désactiver le profil actif. Changez de profil d'abord."
+    "cannot_disable_active": "Impossible de désactiver le profil actif. Changez de profil d'abord.",
+    "new_group": "Nouveau groupe",
+    "group_create_title": "Nouveau groupe",
+    "group_edit_title": "Modifier le groupe",
+    "group_dialog_desc": "Choisissez les serveurs réunis par ce groupe.",
+    "group_name": "Nom du groupe",
+    "group_members": "Serveurs de ce groupe",
+    "group_name_required": "Donnez un nom au groupe",
+    "group_name_taken": "Ce nom est déjà utilisé",
+    "group_members_required": "Choisissez au moins un serveur",
+    "group_member_count_one": "{{count}} serveur",
+    "group_member_count_other": "{{count}} serveurs",
+    "group_resource_note": "Agréger plusieurs serveurs peut être coûteux en ressources",
+    "delete_group_confirm_title": "Supprimer le groupe ?",
+    "delete_group_confirm_desc": "Supprimer le groupe « {{name}} » ? Ses serveurs sont conservés.",
+    "delete_group_success": "Groupe supprimé",
+    "delete_group_error": "Échec de la suppression du groupe"
   },
   "profile_picker": {
     "label": "Profil"

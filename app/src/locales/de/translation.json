@@ -1049,7 +1049,23 @@
     "disable": "Deaktivieren",
     "enable": "Aktivieren",
     "disabled": "Deaktiviert",
-    "cannot_disable_active": "Aktives Profil kann nicht deaktiviert werden. Zuerst Profil wechseln."
+    "cannot_disable_active": "Aktives Profil kann nicht deaktiviert werden. Zuerst Profil wechseln.",
+    "new_group": "Neue Gruppe",
+    "group_create_title": "Neue Gruppe",
+    "group_edit_title": "Gruppe bearbeiten",
+    "group_dialog_desc": "Wähle die Server, die diese Gruppe zusammenfasst.",
+    "group_name": "Gruppenname",
+    "group_members": "Server in dieser Gruppe",
+    "group_name_required": "Gib der Gruppe einen Namen",
+    "group_name_taken": "Dieser Name ist bereits vergeben",
+    "group_members_required": "Wähle mindestens einen Server",
+    "group_member_count_one": "{{count}} Server",
+    "group_member_count_other": "{{count}} Server",
+    "group_resource_note": "Mehrere Server zu aggregieren kann ressourcenintensiv sein",
+    "delete_group_confirm_title": "Gruppe löschen?",
+    "delete_group_confirm_desc": "Gruppe \"{{name}}\" löschen? Ihre Server bleiben erhalten.",
+    "delete_group_success": "Gruppe gelöscht",
+    "delete_group_error": "Gruppe konnte nicht gelöscht werden"
   },
   "profile_picker": {
     "label": "Profil"

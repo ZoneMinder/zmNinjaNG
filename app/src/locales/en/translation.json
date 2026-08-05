@@ -1049,7 +1049,23 @@
     "disable": "Disable",
     "enable": "Enable",
     "disabled": "Disabled",
-    "cannot_disable_active": "Can't disable the active profile. Switch profiles first."
+    "cannot_disable_active": "Can't disable the active profile. Switch profiles first.",
+    "new_group": "New group",
+    "group_create_title": "New group",
+    "group_edit_title": "Edit group",
+    "group_dialog_desc": "Pick the servers this group brings together.",
+    "group_name": "Group name",
+    "group_members": "Servers in this group",
+    "group_name_required": "Enter a name for this group",
+    "group_name_taken": "That name is already in use",
+    "group_members_required": "Pick at least one server",
+    "group_member_count_one": "{{count}} server",
+    "group_member_count_other": "{{count}} servers",
+    "group_resource_note": "Aggregating several servers can be resource-heavy",
+    "delete_group_confirm_title": "Delete group?",
+    "delete_group_confirm_desc": "Delete the group \"{{name}}\"? Its servers are not deleted.",
+    "delete_group_success": "Group deleted",
+    "delete_group_error": "Failed to delete group"
   },
   "profile_picker": {
     "label": "Profile"

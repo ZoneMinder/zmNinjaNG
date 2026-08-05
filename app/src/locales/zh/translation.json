@@ -1049,7 +1049,23 @@
     "disable": "禁用",
     "enable": "启用",
     "disabled": "已禁用",
-    "cannot_disable_active": "无法禁用当前使用的配置文件，请先切换配置文件。"
+    "cannot_disable_active": "无法禁用当前使用的配置文件，请先切换配置文件。",
+    "new_group": "新建分组",
+    "group_create_title": "新建分组",
+    "group_edit_title": "编辑分组",
+    "group_dialog_desc": "选择此分组包含的服务器。",
+    "group_name": "分组名称",
+    "group_members": "分组内的服务器",
+    "group_name_required": "请为分组输入名称",
+    "group_name_taken": "该名称已被使用",
+    "group_members_required": "请至少选择一个服务器",
+    "group_member_count_one": "{{count}} 个服务器",
+    "group_member_count_other": "{{count}} 个服务器",
+    "group_resource_note": "聚合多个服务器可能会消耗较多资源",
+    "delete_group_confirm_title": "删除分组？",
+    "delete_group_confirm_desc": "删除分组“{{name}}”？其中的服务器不会被删除。",
+    "delete_group_success": "分组已删除",
+    "delete_group_error": "删除分组失败"
   },
   "profile_picker": {
     "label": "配置"
