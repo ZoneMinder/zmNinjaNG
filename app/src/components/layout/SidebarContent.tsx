@@ -70,9 +70,10 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   const { unreadCount: developerNoticeUnread } = useDeveloperNotices();
   const showDeveloperNotices = useDeveloperNoticeStore((s) => s.showNotices);
   // View-level preferences below (insomnia, nav order, the montage toolbar)
-  // come from useCurrentProfile: it reads reactively and resolves to the ALL
-  // bucket in All mode, where currentProfile is null. Their write target is
-  // currentProfileId, the same key that bucket lives under (refs #337).
+  // come from useCurrentProfile: it reads reactively and resolves to the
+  // active aggregate's bucket while aggregating, where currentProfile is
+  // null. Their write target is currentProfileId, the same key that bucket
+  // lives under, whichever aggregate it names (refs #337).
   const { currentProfile, settings: profileSettings } = useCurrentProfile();
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const connectionState = useNotificationStore((state) => state.connections[currentProfile?.id ?? ''] ?? 'disconnected');

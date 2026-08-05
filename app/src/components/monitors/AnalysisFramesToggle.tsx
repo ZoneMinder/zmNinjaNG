@@ -33,12 +33,13 @@ interface AnalysisFramesToggleProps {
 export function AnalysisFramesToggle({ className, alwaysStreaming = false }: AnalysisFramesToggleProps) {
   const { t } = useTranslation();
   const { settings } = useCurrentProfile();
-  // Write target: the real profile in single mode, the ALL bucket sentinel in
-  // All mode, matching the bucket `settings` above already reads (refs #337).
+  // Write target: the real profile in single mode, the active aggregate's id
+  // while aggregating, matching the bucket `settings` above already reads
+  // (refs #337).
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
-  // Not settings.viewMode: in All mode under "Per server" the ALL bucket
+  // Not settings.viewMode: under "Per server" the active aggregate's bucket
   // imposes no Streaming Mode, and reading its own would disable a control
   // that still governs every streaming server's tiles (refs #337).
   const pageViewMode = usePageViewMode();

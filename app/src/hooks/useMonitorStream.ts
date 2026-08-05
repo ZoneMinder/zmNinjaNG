@@ -89,9 +89,9 @@ export function useMonitorStream({
   profileId,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
   const { profile: currentProfile, settings } = useProfileById(profileId);
-  // Streaming Mode and analysis frames are view preferences, so the ALL
-  // bucket governs them while aggregating even though every other setting
-  // here still comes from the server that owns this monitor (refs #337).
+  // Streaming Mode and analysis frames are view preferences, so the active
+  // aggregate's bucket governs them while aggregating even though every other
+  // setting here still comes from the server that owns this monitor (#337).
   const viewPrefs = useViewPrefs(profileId);
   const bandwidth = useBandwidthSettings();
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);

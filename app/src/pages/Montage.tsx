@@ -64,8 +64,8 @@ export default function Montage() {
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
   const authSlice = useAuthSlice(currentProfile?.id ?? null);
   const accessToken = authSlice.accessToken;
-  // Settings-update target: the real profile id in single mode, the ALL
-  // bucket sentinel in All mode (currentProfile stays null there) - same
+  // Settings-update target: the real profile id in single mode, the active
+  // aggregate's id while aggregating (currentProfile stays null there) - same
   // resolution Monitors.tsx uses for its server-grouping toggle.
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
@@ -108,7 +108,8 @@ export default function Montage() {
 
   // Hidden tiles, keyed exactly like the tiles themselves (tileIdFor): bare
   // monitor ids in single mode - so lists stored before All mode existed keep
-  // working - and composite profileId:monitorId ids in the ALL bucket, where
+  // working - and composite profileId:monitorId ids in the aggregate's own
+  // bucket, where
   // two servers sharing a raw monitor id would otherwise hide each other's
   // tile (refs #337).
   const hiddenSet = useMemo(
@@ -166,7 +167,8 @@ export default function Montage() {
   // enabled monitor could open dozens of simultaneous streams across
   // independent servers at once.
   //
-  // The limit comes from the ALL bucket (Settings > All Servers performance),
+  // The limit comes from the active aggregate's bucket (its performance
+  // section in Settings),
   // which `settings` already is while aggregating; it is only read inside the
   // isAllMode branch, so a single profile's own copy of the key never applies
   // to anything. mergeProfileSettings has already clamped it.
@@ -444,9 +446,10 @@ export default function Montage() {
     updateGroupLayout({ savedLayouts: saved });
   };
 
-  // Hiding a tile needs no per-server persistence: the ids are composite in
-  // All mode, so the whole list lives in the ALL bucket, and bare ids keep
-  // going to the real profile in single mode (refs #337).
+  // Hiding a tile needs no per-server persistence: the ids are composite
+  // while aggregating, so the whole list lives in the active aggregate's own
+  // bucket, and bare ids keep going to the real profile in single mode
+  // (refs #337).
   const handleToggleMonitorVisibility = useCallback(
     (id: string) => {
       const current = bucket.hiddenMonitorIds;
@@ -571,7 +574,8 @@ export default function Montage() {
                   aria-label={t('monitors.group_by_server')}
                   onClick={() => {
                     if (!currentProfileId) return;
-                    // ALL bucket setting (currentProfile null in All mode) -
+                    // Aggregate-bucket setting (currentProfile is null while
+                    // aggregating) -
                     // reuses Monitors.tsx's server-grouping toggle rather than
                     // a new montage-only field (refs #337, Phase 4 Task 1).
                     updateSettings(currentProfileId, {

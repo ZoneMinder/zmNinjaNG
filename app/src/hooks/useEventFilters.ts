@@ -165,14 +165,15 @@ export function useEventFilters(): UseEventFiltersReturn {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const { settings } = useCurrentProfile();
-  // Filters persist against currentProfileId, not the current profile: All
-  // mode has no current profile, only the ALL sentinel, and that sentinel is
-  // the bucket `settings` already resolves to. Keying the writes off
-  // currentProfile instead left every All-mode selection unpersisted and the
-  // restore below dead (refs #337). All-mode monitor selections are composite
-  // `${profileId}:${monitorId}` tokens, so what round-trips through the ALL
-  // bucket is the same token EventsFilterPopover produces and
-  // resolveOwnMonitorIds resolves; single mode stores bare ids as before.
+  // Filters persist against currentProfileId, not the current profile: while
+  // aggregating there is no current profile, only the active aggregate's id,
+  // and that id is the bucket `settings` already resolves to. Keying the
+  // writes off currentProfile instead left every aggregate selection
+  // unpersisted and the restore below dead (refs #337). Aggregate monitor
+  // selections are composite `${profileId}:${monitorId}` tokens, so what
+  // round-trips through that bucket is the same token EventsFilterPopover
+  // produces and resolveOwnMonitorIds resolves; single mode stores bare ids
+  // as before.
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
 
   // Local filter state. The `_set*` setters below are raw React setters: they

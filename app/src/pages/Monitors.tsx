@@ -52,8 +52,9 @@ export default function Monitors() {
   const [showPropertiesDialog, setShowPropertiesDialog] = useState(false);
 
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
-  // Settings-update target: the real profile id in single mode, or the ALL
-  // bucket sentinel in All mode (currentProfile stays null there).
+  // Settings-update target: the real profile id in single mode, or the
+  // active aggregate's id while aggregating (currentProfile stays null
+  // there), whichever aggregate that is.
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const scope = useProfileScope();

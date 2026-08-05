@@ -56,9 +56,10 @@ export default function Events() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
-  // Settings-update target: the real profile id in single mode, or the ALL
-  // bucket sentinel in All mode (currentProfile stays null there) - same
-  // pattern Monitors.tsx uses so view-level toggles persist in both modes.
+  // Settings-update target: the real profile id in single mode, or the
+  // active aggregate's id while aggregating (currentProfile stays null there)
+  // - same pattern Monitors.tsx uses so view-level toggles persist in both
+  // modes.
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const scope = useProfileScope();
   const totalScopeProfiles = scope?.profiles.length ?? 0;
@@ -439,9 +440,9 @@ export default function Events() {
   const restoreScrollRef = useScrollRestoration(location.key, !isLoading && allEvents.length > 0);
 
   // Use grid management hook (only active when in montage mode). Settings
-  // writes below target currentProfileId (the ALL bucket sentinel in All
-  // mode, the real profile id in single mode) so view-level toggles persist
-  // in both modes, same as Monitors.tsx.
+  // writes below target currentProfileId (the active aggregate's id while
+  // aggregating, the real profile id in single mode) so view-level toggles
+  // persist in both modes, same as Monitors.tsx.
   const gridControls = useEventMontageGrid({
     initialCols: eventCols,
     containerRef: parentRef,
