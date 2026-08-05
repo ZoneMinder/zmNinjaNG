@@ -3050,6 +3050,125 @@ land in the wrong bucket.
 Flow 21 covers the scope these connectors fan out over; Flow 7 is the
 single-profile mechanics each one repeats N times over.
 
+Flow 24: Opening a monitor's settings on a restricted account
+-------------------------------------------------------------
+
+ZoneMinder accounts are not all administrators, and the app has to work out
+what this one may do without an endpoint that answers the question. The
+counterintuitive part: the request that fails tells you as much as the one that
+succeeds. ``/users.json`` is gated on ``System() != 'None'``, so a 401 there
+proves the account has no system access, which is exactly the fact the gear
+needs.
+
+.. mermaid::
+
+   sequenceDiagram
+       autonumber
+       participant UI as MonitorDetail
+       participant Hook as usePermissions
+       participant Api as api/users.ts
+       participant ZM as ZoneMinder
+       participant Dialog as MonitorSettingsDialog
+
+       UI->>Hook: usePermissions(ownerProfile.id)
+       Hook->>Api: fetchAccountPermissions(client, username)
+       Api->>ZM: GET /users.json
+       ZM-->>Api: 401 Insufficient Privileges
+       Api-->>Hook: SYSTEM_NONE_PERMISSIONS
+       UI->>Dialog: onSave omitted, restrictedReason="account"
+       Dialog-->>UI: read-only panel, no camera fields
+
+#. **The page asks about the owning profile, not the current one.**
+   ``usePermissions`` takes an explicit id because an aggregate has no account:
+   in All mode the monitor on screen belongs to one real profile, and that is
+   whose permissions decide what its controls do.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/usePermissions.ts>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The probe runs once per profile.** The query uses an infinite
+   ``staleTime``: permissions change when an administrator edits the account,
+   which this app can neither observe nor cause. React Query's cache makes
+   every later consumer a cache read rather than a request.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/usePermissions.ts>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **A profile with no username never asks.** That server has
+   ``ZM_OPT_USE_AUTH`` off, where ZoneMinder short-circuits every check on
+   ``!$user``, so the answer is ``UNRESTRICTED_PERMISSIONS`` with no request.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/users.ts>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The refusal is parsed, not just counted.** ``isPermissionDenied`` matches
+   ZoneMinder's "Insufficient Privileges" body rather than the bare 401 status,
+   because the same status also means "log in again" and the two need opposite
+   handling.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/permissions/permission-error.ts>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **A privilege 401 skips token recovery.** In ``api/client.ts`` the retry
+   path is what a stale session needs and what a refusal cannot use: a refusal
+   survives any number of fresh tokens, so refreshing one only spends a refresh
+   and a retry before failing identically.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts>`__
+   · → :doc:`07-api-and-data-fetching`
+
+#. **The verdict is three-valued.** ``canEditMonitorSettings`` answers
+   ``allowed``, ``denied`` or ``unknown``, and only ``denied`` may take
+   anything away. ``System='None'`` with ``Monitors='Edit'`` is a legal
+   account, so guessing on ``unknown`` would remove an editor from someone
+   entitled to it.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/permissions/zm-permissions.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **The page withholds the callback rather than passing a flag.** Denied,
+   ``MonitorDetail`` omits ``onSave``, and the dialog's existing
+   ``editable = !!onSave`` does the rest. No new state, and the read-only path
+   cannot drift from the "no save handler" path because they are the same path.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx>`__
+   · → :doc:`04-pages-and-views`
+
+#. **The restricted panel keeps what was never ZoneMinder's.** Force-ZMS, the
+   per-monitor Go2RTC override and the cycle interval are profile settings, not
+   monitor columns, and they are the stream troubleshooting knobs a restricted
+   user needs most. The camera's address, username and password are what goes.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitor-detail/MonitorRestrictedSettings.tsx>`__
+   · → :doc:`05-component-architecture`
+
+#. **A save can still be refused, and the refusal is remembered.** ZoneMinder
+   also keeps per-monitor permission rows (``editableMonitor`` in
+   ``web/includes/auth.php``) that override the account columns and appear
+   nowhere in the API, so ``System='Edit'`` does not guarantee a save. The
+   catch latches that monitor through ``markPermissionDenied``, and the dialog
+   turns read-only with a note naming the monitor rather than the account.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/permissions.ts>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **The latch is deliberately not persisted.** Granting a permission on the
+   server should take effect on the next launch with no cache to bust.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/permissions.ts>`__
+   · → :doc:`03-state-management-zustand`
+
+#. **Buttons elsewhere grey instead of vanishing, and stay clickable.**
+   ``useDeniedControl`` returns ``aria-disabled`` rather than ``disabled``: a
+   disabled button dispatches no pointer events, so ``useLongPressHint`` never
+   fires and browsers suppress ``title`` too. It would grey out and explain
+   nothing.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useDeniedControl.ts>`__
+   · → :doc:`12-shared-services-and-components`
+
+#. **One capability has no failing request to catch.** ``zms.cpp`` checks
+   ``Stream`` independently of ``Monitors``, and a denied stream is an image
+   that never loads. ``LiveMonitorPlayer`` is the single gate for every stream
+   surface, so the probe is what turns a permanently blank tile into a
+   sentence.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
+   · → :doc:`05-component-architecture`
+
+Absent here: any attempt to discover permissions before login, and any check
+that hides a surface on ``unknown``. Flow 6 covers the token lifecycle this
+flow deliberately steps around; Flow 17 is the PTZ path whose pad the
+``Control`` column removes.
+
 These flows touch most of the moving parts of the app. When you need to change
 something, find the nearest scene, open its ``source`` link to land on the exact
 code, and follow the ``→`` link for the chapter that explains that layer.

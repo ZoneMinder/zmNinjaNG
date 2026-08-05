@@ -49,6 +49,7 @@ GET     ``/host/getTimeZone.json``                                  Server timez
 GET     ``/configs.json``                                           All ZoneMinder config entries                                             ``server.ts``
 GET     ``/configs/viewByName/<key>.json``                          Single config value (ZM_PATH_ZMS, ZM_GO2RTC_PATH, ZM_MIN_STREAMING_PORT)  ``auth.ts``, ``server.ts``
 GET     ``/groups.json``                                            List monitor groups                                                       ``groups.ts``
+GET     ``/users.json``                                             Permissions of the account this profile signs in as                       ``users.ts``
 GET     ``/states.json``                                            List run states                                                           ``states.ts``
 POST    ``/states/change/<stateName>.json``                         Switch to a run state                                                     ``states.ts``
 GET     ``/notifications.json``                                     List push notification registrations                                      ``notifications.ts``
@@ -1553,6 +1554,57 @@ filter monitors in the Monitors and Montage views.
 
 ``useGroups`` wraps this with ``queryKeys.groups(profileId)`` and a 5-minute
 ``staleTime``.
+
+Account Permissions API (``api/users.ts``)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ZoneMinder has no endpoint for "what may the current user do". The permission
+columns live on the Users row, and ``UsersController`` gates ``/users.json`` on
+``System() != 'None'``, so an account can read its own permissions only when it
+already has some system access. ``fetchAccountPermissions`` works with that
+shape rather than around it:
+
+.. code:: tsx
+
+   import { fetchAccountPermissions } from '../api/users';
+
+   // Matches the row whose Username equals the profile's, case-insensitively.
+   const permissions = await fetchAccountPermissions(client, profile.username);
+
+Three results, each meaning something different:
+
+- The account's columns, when the list came back and contained its row.
+- ``SYSTEM_NONE_PERMISSIONS`` when the server answered 401. That refusal is
+  itself an answer: it proves ``System`` is ``'None'``, and leaves every other
+  column unknown.
+- ``undefined`` when the list came back without a matching row, which happens
+  if ZoneMinder maps the token to a name the profile does not store. Gating a
+  session on somebody else's row would be worse than knowing nothing.
+
+A profile with no username talks to a server with ``ZM_OPT_USE_AUTH`` off,
+where ZoneMinder short-circuits every check on ``!$user``. That returns
+``UNRESTRICTED_PERMISSIONS`` without a request.
+
+Transport failures reject, so the query retries them. A privilege refusal does
+not: retrying spends requests to be told the same thing.
+
+Every consumer asks ``lib/permissions/zm-permissions.ts`` for a verdict rather
+than reading a column, and every verdict has three values:
+
+.. code:: tsx
+
+   import { canViewStream } from '../lib/permissions/zm-permissions';
+
+   canViewStream(permissions); // 'allowed' | 'denied' | 'unknown'
+
+Only ``denied`` may hide or grey a control. ``unknown`` has to leave the
+surface exactly as it was, because ``System='None'`` with ``Monitors='Edit'``
+is a legal ZoneMinder account: guessing there takes a feature away from someone
+who has it. ``usePermissions(profileId)`` wraps the fetch with
+``queryKeys.accountPermissions(profileId)`` and an infinite ``staleTime``. It
+takes an explicit profile id because an aggregate has no account of its own;
+in All mode each monitor and event belongs to a real profile, and that owner's
+permissions are the ones that decide what its controls can do.
 
 Event Tags API (``api/tags.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
