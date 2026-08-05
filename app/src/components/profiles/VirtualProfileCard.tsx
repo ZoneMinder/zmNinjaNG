@@ -18,6 +18,9 @@ interface VirtualProfileCardProps {
   isActive: boolean;
   /** A switch to this group is in flight. */
   isSwitching: boolean;
+  /** Members this group can actually aggregate: `countActiveMembers`. Zero
+   *  makes the card unswitchable, never unmanageable. */
+  activeMemberCount: number;
   onSwitch: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -27,6 +30,7 @@ export function VirtualProfileCard({
   group,
   isActive,
   isSwitching,
+  activeMemberCount,
   onSwitch,
   onEdit,
   onDelete,
@@ -36,23 +40,28 @@ export function VirtualProfileCard({
   // picked. A disabled member drops out of the aggregate on its own (scope
   // resolution filters it) and comes back when it is re-enabled.
   const memberCount = group.memberProfileIds.length;
+  // With nothing left to aggregate, switching lands on empty screens with no
+  // explanation, so the switch goes and the subtitle says why. Edit and delete
+  // stay live: they are the only way out of the state.
+  const canSwitch = activeMemberCount > 0;
 
   return (
     <div
-      className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/15 transition-colors cursor-pointer mt-3 ${isActive ? 'ring-1 ring-blue-500' : ''}`}
+      className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 transition-colors mt-3 ${canSwitch ? 'cursor-pointer hover:bg-blue-500/15' : 'opacity-70'} ${isActive ? 'ring-1 ring-blue-500' : ''}`}
       data-testid={`profile-card-virtual-${group.id}`}
-      onClick={onSwitch}
+      onClick={() => canSwitch && onSwitch()}
       onKeyDown={(e) => {
         // Only the card's own keys. Enter and Space on the buttons inside it
         // bubble up here, and preventDefault would cancel the activation the
         // button was about to perform, switching profiles instead of editing.
         if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
+        if (canSwitch && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onSwitch();
         }
       }}
       role="button"
+      aria-disabled={!canSwitch}
       tabIndex={0}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -65,7 +74,9 @@ export function VirtualProfileCard({
             {group.name}
           </div>
           <p className="text-xs text-muted-foreground truncate">
-            {t('profiles.group_member_count', { count: memberCount })}
+            {canSwitch
+              ? t('profiles.group_member_count', { count: memberCount })
+              : t('profiles.group_no_active_members')}
           </p>
           <p
             className="text-xs text-muted-foreground/80 truncate"

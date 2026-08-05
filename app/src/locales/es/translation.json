@@ -1065,7 +1065,8 @@
     "delete_group_confirm_title": "¿Eliminar grupo?",
     "delete_group_confirm_desc": "¿Eliminar el grupo \"{{name}}\"? Sus servidores no se eliminan.",
     "delete_group_success": "Grupo eliminado",
-    "delete_group_error": "No se pudo eliminar el grupo"
+    "delete_group_error": "No se pudo eliminar el grupo",
+    "group_no_active_members": "Ningún servidor activo en este grupo"
   },
   "profile_picker": {
     "label": "Perfil"

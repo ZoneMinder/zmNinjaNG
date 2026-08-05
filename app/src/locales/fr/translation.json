@@ -1065,7 +1065,8 @@
     "delete_group_confirm_title": "Supprimer le groupe ?",
     "delete_group_confirm_desc": "Supprimer le groupe « {{name}} » ? Ses serveurs sont conservés.",
     "delete_group_success": "Groupe supprimé",
-    "delete_group_error": "Échec de la suppression du groupe"
+    "delete_group_error": "Échec de la suppression du groupe",
+    "group_no_active_members": "Aucun serveur actif dans ce groupe"
   },
   "profile_picker": {
     "label": "Profil"

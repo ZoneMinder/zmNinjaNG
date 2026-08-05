@@ -58,6 +58,8 @@ Each group gets its own card below the All Servers card, showing how many server
 
 Disabling a member profile drops it out of the group for as long as it stays disabled, exactly as it drops out of All Servers mode; re-enabling it brings it back. Deleting a profile removes it from every group that held it.
 
+A group can end up with nothing left to combine, if every server in it is disabled. It cannot be switched to in that state, since it would only show you empty screens, and its card says so in place of the server count. The card's edit and delete icons keep working, so you can add a server back to the group, or remove the group.
+
 Every group keeps its own settings, and nothing is shared between them. A group does not inherit the All Servers settings and does not write to them: set a group's Streaming Mode to **Streaming** and All Servers stays on whatever you left it on, and so does every other group. Which servers you can pick from a screen's profile picker follows the group too, since those pickers list the servers in scope.
 
 The notification bell follows the same scope. While a group is current, its badge counts and its history list only the group's own servers; a server outside the group keeps receiving and storing its notifications, but you will not see them until you switch to a profile or group that includes it.

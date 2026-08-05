@@ -41,6 +41,7 @@ import { Badge } from '../components/ui/badge';
 import type { Profile, VirtualProfile } from '../api/types';
 import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
 import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
+import { countActiveMembers } from '../lib/profile/virtual-profile';
 import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
@@ -559,6 +560,7 @@ export default function Profiles() {
                   group={group}
                   isActive={currentProfileId === group.id}
                   isSwitching={switchingProfileId === group.id}
+                  activeMemberCount={countActiveMembers(group, profiles)}
                   onSwitch={() => handleSwitchProfile(group.id)}
                   onEdit={() => setGroupDialog({ group })}
                   onDelete={() => setGroupPendingDelete(group)}

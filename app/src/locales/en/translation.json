@@ -1065,7 +1065,8 @@
     "delete_group_confirm_title": "Delete group?",
     "delete_group_confirm_desc": "Delete the group \"{{name}}\"? Its servers are not deleted.",
     "delete_group_success": "Group deleted",
-    "delete_group_error": "Failed to delete group"
+    "delete_group_error": "Failed to delete group",
+    "group_no_active_members": "No enabled servers in this group"
   },
   "profile_picker": {
     "label": "Profile"

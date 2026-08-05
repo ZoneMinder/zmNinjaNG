@@ -1065,7 +1065,8 @@
     "delete_group_confirm_title": "Gruppe löschen?",
     "delete_group_confirm_desc": "Gruppe \"{{name}}\" löschen? Ihre Server bleiben erhalten.",
     "delete_group_success": "Gruppe gelöscht",
-    "delete_group_error": "Gruppe konnte nicht gelöscht werden"
+    "delete_group_error": "Gruppe konnte nicht gelöscht werden",
+    "group_no_active_members": "Keine aktiven Server in dieser Gruppe"
   },
   "profile_picker": {
     "label": "Profil"

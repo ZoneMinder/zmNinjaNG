@@ -196,6 +196,24 @@ describe('ProfileSwitcher', () => {
       expect(screen.getByTestId('profile-switcher-all-active')).toBeInTheDocument();
     });
 
+    // A group can still be listed while holding nothing selectable, when the
+    // other profiles keep the >= 2 gate open. Switching to it would land on
+    // empty screens, so the entry is there but disabled.
+    it('disables a group whose members are all unselectable', () => {
+      const profileC = { id: 'profile-c', name: 'Shed', portalUrl: 'https://c.example.com' };
+      setProfiles([profileA, profileB, { ...profileC, disabled: true }]);
+      mockProfileState.virtualProfiles = [
+        { id: group, name: 'Backyard', memberProfileIds: ['profile-c'] },
+      ];
+
+      render(<ProfileSwitcher />);
+      const entry = screen.getByTestId(`profile-switcher-virtual-${group}`);
+      expect(entry).toBeDisabled();
+
+      fireEvent.click(entry);
+      expect(switchProfileMock).not.toHaveBeenCalled();
+    });
+
     // Same gate as the All Servers item: one selectable server aggregates
     // nothing, whichever aggregate is named.
     it('hides groups once fewer than 2 profiles are selectable', () => {

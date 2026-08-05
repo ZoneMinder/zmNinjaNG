@@ -24,6 +24,7 @@ import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react'
 import { toast } from 'sonner';
 import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
 import { useAggregateLabel } from '../hooks/useAggregateLabel';
+import { countActiveMembers } from '../lib/profile/virtual-profile';
 
 import { useTranslation } from 'react-i18next';
 
@@ -179,6 +180,9 @@ export function ProfileSwitcher() {
             <DropdownMenuItem
               key={group.id}
               onClick={() => handleSwitch(group.id)}
+              // A group with nothing left to aggregate would switch into
+              // empty screens; the Profiles page card is where it gets fixed.
+              disabled={countActiveMembers(group, profiles) === 0}
               className="flex items-center justify-between cursor-pointer"
               data-testid={`profile-switcher-virtual-${group.id}`}
             >

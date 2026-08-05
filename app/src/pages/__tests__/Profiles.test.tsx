@@ -380,6 +380,24 @@ describe('Profiles Page', () => {
       expect(switchProfileMock).not.toHaveBeenCalled();
     });
 
+    // The page owns the effective count, so this is the wiring test: disable
+    // the group's only member and the card must stop offering the switch.
+    it('will not switch to a group whose only member is disabled', async () => {
+      const user = userEvent.setup();
+      const disabledOffice = { ...OFFICE, disabled: true };
+      useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
+      await user.click(card);
+
+      expect(switchProfileMock).not.toHaveBeenCalled();
+      expect(card).toHaveTextContent('profiles.group_no_active_members');
+      // Still fixable: edit and delete are the way out.
+      expect(screen.getByTestId(`profile-virtual-edit-${GROUP.id}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`)).toBeInTheDocument();
+    });
+
     it('reports a failed group delete instead of closing silently', async () => {
       const user = userEvent.setup();
       const { toast: sonnerToast } = await import('sonner');

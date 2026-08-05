@@ -77,12 +77,15 @@ Then('I should see the {string} profile card', async ({ page }, name: string) =>
  */
 Then('every monitor profile chip should name {string}', async ({ page }, name: string) => {
   const chips = page.getByTestId('monitor-profile-chip');
-  await expect.poll(async () => chips.count(), {
-    timeout: testConfig.timeouts.pageLoad,
-  }).toBeGreaterThan(0);
-  const cards = await page.getByTestId('monitor-card').count();
-  expect(await chips.count()).toBe(cards);
-  expect(await chips.allInnerTexts()).toEqual(Array(cards).fill(name));
+  const cards = page.getByTestId('monitor-card');
+  // One poll over both counts and the chip texts: reading them separately
+  // after the poll settles samples a grid that can still be rendering, and
+  // a chip mounts a beat after the card it sits on.
+  await expect.poll(async () => {
+    const cardCount = await cards.count();
+    const texts = await chips.allInnerTexts();
+    return cardCount > 0 && texts.length === cardCount && texts.every((text) => text === name);
+  }, { timeout: testConfig.timeouts.pageLoad }).toBeTruthy();
 });
 
 // Same select the All Servers steps drive - it belongs to whichever aggregate

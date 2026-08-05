@@ -1065,7 +1065,8 @@
     "delete_group_confirm_title": "删除分组？",
     "delete_group_confirm_desc": "删除分组“{{name}}”？其中的服务器不会被删除。",
     "delete_group_success": "分组已删除",
-    "delete_group_error": "删除分组失败"
+    "delete_group_error": "删除分组失败",
+    "group_no_active_members": "该分组中没有启用的服务器"
   },
   "profile_picker": {
     "label": "配置"
