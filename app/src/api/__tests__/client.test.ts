@@ -297,6 +297,29 @@ describe('API Client', () => {
       expect(recoverFromAuthFailure).toHaveBeenCalledTimes(1);
       expect(vi.mocked(httpRequest)).toHaveBeenCalledTimes(1);
     });
+
+    // A permission refusal survives any number of fresh tokens, so refreshing
+    // one only spends two extra requests before failing anyway (refs #344).
+    it('does not refresh the token when ZoneMinder refused on privileges', async () => {
+      const recoverFromAuthFailure = vi.fn(async () => true);
+      const gates = mockGates({
+        auth: { isAuthenticated: () => true, recoverFromAuthFailure },
+      });
+
+      vi.mocked(httpRequest).mockRejectedValue({
+        status: 401,
+        statusText: 'Unauthorized',
+        message: 'Unauthorized',
+        data: { success: false, data: { name: 'Insufficient Privileges' } },
+      } as never);
+
+      const client = createApiClient('https://zm.example.com/api', gates);
+      await expect(client.postForm('/monitors/1.json', new URLSearchParams({ 'Monitor[MaxFPS]': '5' })))
+        .rejects.toMatchObject({ status: 401 });
+
+      expect(recoverFromAuthFailure).not.toHaveBeenCalled();
+      expect(vi.mocked(httpRequest)).toHaveBeenCalledTimes(1);
+    });
   });
 
   // End-to-end through the real auth store gates (api/store-gates.ts): the

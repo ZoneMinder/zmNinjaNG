@@ -41,6 +41,7 @@
     "selected": "Ausgewählt",
     "unknown_error": "Unbekannter Fehler",
     "auth_required": "Authentifizierung erforderlich",
+    "permission_denied": "Dein ZoneMinder-Konto hat dafür keine Berechtigung.",
     "cannot_reach_host": "Keine Verbindung zu {{host}}. Adresse in den Einstellungen prüfen oder ob der Server läuft.",
     "running": "Läuft",
     "stopped": "Gestoppt",

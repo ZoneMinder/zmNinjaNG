@@ -537,6 +537,35 @@ export type ZMLog = z.infer<typeof ZMLogSchema>;
 export type ZMLogData = z.infer<typeof ZMLogDataSchema>;
 export type ZMLogsResponse = z.infer<typeof ZMLogsResponseSchema>;
 
+// User types
+//
+// Only `Username` is required: the permission columns are what this app came
+// for, but a ZoneMinder version that renames or drops one must degrade to
+// "unknown permission" rather than fail the whole response (refs #344).
+export const ZMUserSchema = z.object(
+  withFieldCatch({
+  Id: z.coerce.string().optional(),
+  Username: z.string(),
+  System: z.string().optional(),
+  Monitors: z.string().optional(),
+  Stream: z.string().optional(),
+  Events: z.string().optional(),
+  Control: z.string().optional(),
+  Groups: z.string().optional(),
+  }, ['Username']),
+);
+
+export const ZMUserDataSchema = z.object({
+  User: ZMUserSchema,
+});
+
+export const ZMUsersResponseSchema = z.object({
+  users: tolerantArray(ZMUserDataSchema, 'user').optional(),
+});
+
+export type ZMUser = z.infer<typeof ZMUserSchema>;
+export type ZMUsersResponse = z.infer<typeof ZMUsersResponseSchema>;
+
 // State types
 export const StateSchema = z.object(
   withFieldCatch({

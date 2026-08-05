@@ -41,6 +41,7 @@
     "selected": "Sélectionné",
     "unknown_error": "Erreur inconnue",
     "auth_required": "Authentification requise",
+    "permission_denied": "Votre compte ZoneMinder n'a pas la permission requise.",
     "cannot_reach_host": "Impossible de joindre {{host}}. Vérifiez l’adresse dans les Réglages ou que le serveur est démarré.",
     "running": "En cours d'exécution",
     "stopped": "Arrêté",

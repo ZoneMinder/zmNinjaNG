@@ -41,6 +41,7 @@
     "selected": "Selected",
     "unknown_error": "Unknown error",
     "auth_required": "Authentication required",
+    "permission_denied": "Your ZoneMinder account doesn't have permission for this.",
     "cannot_reach_host": "Can't reach {{host}}. Check the address in Settings, or that the server is running.",
     "done": "Done",
     "default": "Default",

@@ -41,6 +41,7 @@
     "selected": "已选择",
     "unknown_error": "未知错误",
     "auth_required": "需要身份验证",
+    "permission_denied": "你的 ZoneMinder 账户没有此权限。",
     "cannot_reach_host": "无法连接 {{host}}。请检查设置中的地址，或确认服务器正在运行。",
     "running": "运行中",
     "stopped": "已停止",
