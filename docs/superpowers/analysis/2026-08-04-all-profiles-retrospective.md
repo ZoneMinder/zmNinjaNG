@@ -1,5 +1,12 @@
 # All Profiles to virtual profile groups: a retrospective on the agent workflow
 
+This report is the evidence companion to the
+[agent development model](../../developer-guide/14-agent-development-model.rst)
+chapter of the developer guide. That chapter describes how this
+repository develops with AI agents; this report records what actually
+happened during four days of putting that model under load, defect by
+defect, including the parts that cost time.
+
 Written 2026-08-04 by the orchestrating agent, at the maintainer's
 request; rewritten and extended 2026-08-05 after the maintainer asked for
 substantially more depth and after two further programs ran under the
