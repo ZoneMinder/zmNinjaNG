@@ -153,7 +153,8 @@
     "fit_scale_down": "Scale down",
     "view_events": "Events",
     "group_by_server": "Group by server",
-    "stream_permission_denied": "No streaming permission for this account."
+    "stream_permission_denied": "No streaming permission for this account.",
+    "no_monitor_permission": "This account has no monitor permissions."
   },
   "events": {
     "title": "Events",
@@ -255,7 +256,8 @@
     "show_all_servers": "Show all servers",
     "failed_to_load": "Failed to load events: {{error}}",
     "delete_permission_denied": "Deleting events needs Events: Edit permission.",
-    "archive_permission_denied": "Archiving events needs Events: Edit permission."
+    "archive_permission_denied": "Archiving events needs Events: Edit permission.",
+    "no_event_permission": "This account has no event permissions."
   },
   "event_detail": {
     "event_id": "Event ID",
@@ -1238,7 +1240,16 @@
     "storage_used": "Used",
     "storage_total": "Total",
     "no_storage": "No storage info",
-    "run_state_permission_denied": "Changing the run state needs System: Edit permission."
+    "run_state_permission_denied": "Changing the run state needs System: Edit permission.",
+    "permissions_title": "Account permissions",
+    "permissions_desc": "What this ZoneMinder account is allowed to do.",
+    "permission_system": "System",
+    "permission_monitors": "Monitors",
+    "permission_stream": "Stream",
+    "permission_events": "Events",
+    "permission_control": "Control",
+    "permission_groups": "Groups",
+    "permission_unknown": "Not determined"
   },
   "eventMontage": {
     "grid_layout_applied": "Grid layout applied: {{cols}} columns",

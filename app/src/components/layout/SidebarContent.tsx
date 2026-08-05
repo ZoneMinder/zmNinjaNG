@@ -9,6 +9,8 @@ import { useProfileStore } from '../../stores/profile';
 import { useNotificationStore } from '../../stores/notifications';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { usePermissions } from '../../hooks/usePermissions';
+import { canViewSystem } from '../../lib/permissions/zm-permissions';
 import { Button } from '../ui/button';
 import { ModeToggle } from '../mode-toggle';
 import { ProfileSwitcher } from '../profile-switcher';
@@ -75,6 +77,8 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
   // null. Their write target is currentProfileId, the same key that bucket
   // lives under, whichever aggregate it names (refs #337).
   const { currentProfile, settings: profileSettings } = useCurrentProfile();
+  const { permissions } = usePermissions(currentProfile?.id);
+  const logsDenied = canViewSystem(permissions) === 'denied';
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   const connectionState = useNotificationStore((state) => state.connections[currentProfile?.id ?? ''] ?? 'disconnected');
   const getProfileSettings = useNotificationStore((state) => state.getProfileSettings);
@@ -114,7 +118,12 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
     { path: '/profiles', label: t('sidebar.profiles'), icon: Users },
     { path: '/settings', label: t('sidebar.settings'), icon: Settings },
     { path: '/server', label: t('sidebar.server'), icon: Server },
-    { path: '/logs', label: t('sidebar.logs'), icon: FileText },
+    // logs.json refuses an account below System View outright, so the entry
+    // would only ever lead to a permission error. Nothing to explain in a nav
+    // item, so it goes rather than greys (refs #344).
+    ...(logsDenied
+      ? []
+      : [{ path: '/logs', label: t('sidebar.logs'), icon: FileText }]),
     // The developer-notice entry hides entirely when notices are turned off.
     ...(showDeveloperNotices
       ? [{ path: '/developer-notice', label: t('sidebar.developer_notice'), icon: Megaphone }]
@@ -132,8 +141,11 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
     });
     // `defaultNavItems` is rebuilt every render; `t` covers label refresh on language change.
     // `showDeveloperNotices` gates whether the developer-notice item is present.
+    // `logsDenied` does the same for Logs, and arrives after the permission
+    // probe settles - without it here the entry would linger until the next
+    // unrelated re-render (refs #344).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [savedOrder, t, showDeveloperNotices]);
+  }, [savedOrder, t, showDeveloperNotices, logsDenied]);
 
   const [isReordering, setIsReordering] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);

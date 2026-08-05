@@ -153,7 +153,8 @@
     "fit_scale_down": "缩小",
     "view_events": "事件",
     "group_by_server": "按服务器分组",
-    "stream_permission_denied": "此账户没有视频流权限。"
+    "stream_permission_denied": "此账户没有视频流权限。",
+    "no_monitor_permission": "此账户没有监视器权限。"
   },
   "events": {
     "title": "事件",
@@ -255,7 +256,8 @@
     "show_all_servers": "显示所有服务器",
     "failed_to_load": "加载事件失败：{{error}}",
     "delete_permission_denied": "删除事件需要 Events: Edit 权限。",
-    "archive_permission_denied": "归档事件需要 Events: Edit 权限。"
+    "archive_permission_denied": "归档事件需要 Events: Edit 权限。",
+    "no_event_permission": "此账户没有事件权限。"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -1238,7 +1240,16 @@
     "storage_used": "已用",
     "storage_total": "总共",
     "no_storage": "无存储信息",
-    "run_state_permission_denied": "更改运行状态需要 System: Edit 权限。"
+    "run_state_permission_denied": "更改运行状态需要 System: Edit 权限。",
+    "permissions_title": "账户权限",
+    "permissions_desc": "此 ZoneMinder 账户可执行的操作。",
+    "permission_system": "系统",
+    "permission_monitors": "监视器",
+    "permission_stream": "视频流",
+    "permission_events": "事件",
+    "permission_control": "云台控制",
+    "permission_groups": "分组",
+    "permission_unknown": "未确定"
   },
   "eventMontage": {
     "grid_layout_applied": "网格布局应用: {{cols}} 列",

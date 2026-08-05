@@ -16,6 +16,12 @@ import { useDeveloperNoticeStore } from '../../../stores/developerNotices';
 import { ALL_PROFILES_ID, asProfileId } from '../../../api/types';
 import type { Profile } from '../../../api/types';
 
+// The permission probe is a React Query call; these suites render without a
+// provider and are not about permissions (refs #344).
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: undefined, isLoading: false }),
+}));
+
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
 
 vi.mock('../../../hooks/useDeveloperNotices', () => ({

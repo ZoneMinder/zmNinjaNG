@@ -135,6 +135,16 @@ export function canUseControl(permissions: ZmPermissions | undefined): Permissio
   return atLeast(permissions?.control, 'View');
 }
 
+/**
+ * Whether any monitor is visible at all.
+ *
+ * At `'None'` ZoneMinder returns an empty list rather than an error, so without
+ * this the app would report a server with no cameras on it.
+ */
+export function canViewMonitors(permissions: ZmPermissions | undefined): PermissionVerdict {
+  return atLeast(permissions?.monitors, 'View');
+}
+
 /** Whether `groups.json` will answer. Independent of monitor access. */
 export function canViewGroups(permissions: ZmPermissions | undefined): PermissionVerdict {
   return atLeast(permissions?.groups, 'View');

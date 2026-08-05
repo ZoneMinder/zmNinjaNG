@@ -27,7 +27,7 @@ import { MonitorCard } from '../components/monitors/MonitorCard';
 import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { usePermissions } from '../hooks/usePermissions';
-import { canEditMonitorSettings } from '../lib/permissions/zm-permissions';
+import { canEditMonitorSettings, canViewMonitors } from '../lib/permissions/zm-permissions';
 import { isPermissionDenied } from '../lib/permissions/permission-error';
 import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
@@ -191,6 +191,12 @@ export default function Monitors() {
       setIsSavingSettings(false);
     }
   }, [selectedMonitor, settingsProfileId, refetchProfile, t]);
+
+  // An account with Monitors='None' gets an empty list from ZoneMinder, not an
+  // error - so without this the page would blame the server for having no
+  // cameras (refs #344).
+  const { permissions: currentPermissions } = usePermissions(currentProfile?.id);
+  const monitorsDenied = canViewMonitors(currentPermissions) === 'denied';
 
   // Unknown permissions stay optimistic; only a denial removes the editor.
   const { permissions: settingsPermissions } = usePermissions(settingsProfileId);
@@ -435,7 +441,13 @@ export default function Monitors() {
           <div data-testid={allFailed ? 'monitors-all-failed-state' : 'monitors-empty-state'}>
             <EmptyState
               icon={Video}
-              title={t(allFailed ? 'monitors.all_failed_title' : 'monitors.no_cameras')}
+              title={t(
+                allFailed
+                  ? 'monitors.all_failed_title'
+                  : monitorsDenied
+                    ? 'monitors.no_monitor_permission'
+                    : 'monitors.no_cameras',
+              )}
               className="p-8 text-center border rounded-lg bg-muted/20 text-muted-foreground"
             />
           </div>

@@ -40,6 +40,7 @@ import { getStates, changeState } from '../api/states';
 import { usePermissions } from '../hooks/usePermissions';
 import { canChangeRunState, canViewSystem } from '../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../hooks/useDeniedControl';
+import { AccountPermissionsCard } from '../components/settings/AccountPermissionsCard';
 import { getSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
 import { log, LogLevel } from '../lib/logger';
@@ -531,6 +532,8 @@ export default function Server() {
       )}
 
       {/* ZoneMinder Control */}
+      <AccountPermissionsCard profileId={currentProfile?.id} />
+
       {/* ZoneMinder control. states.json needs System View, so an account
           without it has nothing to show here rather than an empty picker
           (refs #344). */}

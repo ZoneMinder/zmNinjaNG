@@ -153,7 +153,8 @@
     "fit_scale_down": "Verkleinern",
     "view_events": "Ereignisse",
     "group_by_server": "Nach Server gruppieren",
-    "stream_permission_denied": "Dieses Konto hat keine Streaming-Berechtigung."
+    "stream_permission_denied": "Dieses Konto hat keine Streaming-Berechtigung.",
+    "no_monitor_permission": "Dieses Konto hat keine Monitor-Berechtigungen."
   },
   "events": {
     "title": "Ereignisse",
@@ -255,7 +256,8 @@
     "show_all_servers": "Alle Server anzeigen",
     "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}",
     "delete_permission_denied": "Zum Löschen von Ereignissen wird Events: Edit benötigt.",
-    "archive_permission_denied": "Zum Archivieren von Ereignissen wird Events: Edit benötigt."
+    "archive_permission_denied": "Zum Archivieren von Ereignissen wird Events: Edit benötigt.",
+    "no_event_permission": "Dieses Konto hat keine Ereignis-Berechtigungen."
   },
   "event_detail": {
     "event_id": "Ereignis ID",
@@ -1238,7 +1240,16 @@
     "storage_used": "Belegt",
     "storage_total": "Gesamt",
     "no_storage": "Kein Speicherinfo",
-    "run_state_permission_denied": "Zum Ändern des Laufzustands wird System: Edit benötigt."
+    "run_state_permission_denied": "Zum Ändern des Laufzustands wird System: Edit benötigt.",
+    "permissions_title": "Kontoberechtigungen",
+    "permissions_desc": "Was dieses ZoneMinder-Konto darf.",
+    "permission_system": "System",
+    "permission_monitors": "Monitore",
+    "permission_stream": "Stream",
+    "permission_events": "Ereignisse",
+    "permission_control": "Steuerung",
+    "permission_groups": "Gruppen",
+    "permission_unknown": "Nicht ermittelt"
   },
   "eventMontage": {
     "grid_layout_applied": "Rasterlayout angewendet: {{cols}} Spalten",

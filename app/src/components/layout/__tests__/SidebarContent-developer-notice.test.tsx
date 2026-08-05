@@ -5,6 +5,12 @@ import { SidebarContent } from '../SidebarContent';
 import { useDeveloperNoticeStore } from '../../../stores/developerNotices';
 
 // The logo is a png asset; give it a stub so the import resolves in jsdom.
+// The permission probe is a React Query call; these suites render without a
+// provider and are not about permissions (refs #344).
+vi.mock('../../../hooks/usePermissions', () => ({
+  usePermissions: () => ({ permissions: undefined, isLoading: false }),
+}));
+
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
 
 // Side-effecting hooks the sidebar pulls in; stub them to keep the render pure.

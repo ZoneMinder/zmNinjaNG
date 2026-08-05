@@ -22,6 +22,8 @@ import { useTimelineFilters } from '../hooks/useTimelineFilters';
 import { useTimelineData } from '../hooks/useTimelineData';
 import { useScopedTimelineEvents, type ScopedTimelineEvent } from '../hooks/useScopedTimelineEvents';
 import { useProfileScope } from '../hooks/useProfileScope';
+import { usePermissions } from '../hooks/usePermissions';
+import { canViewEvents } from '../lib/permissions/zm-permissions';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useScopedEventTagMapping, type ScopedEventRef } from '../hooks/useScopedEventTags';
 import { monitorCacheKey } from '../stores/monitors';
@@ -116,6 +118,13 @@ export default function Timeline() {
   // queries via `enabled` so only the active mode's hook actually fetches.
   const scope = useProfileScope();
   const isAllMode = scope?.mode === 'all';
+
+  // Single mode only: in All mode the events come from several accounts, and
+  // one verdict cannot speak for all of them (refs #344).
+  const { permissions: scopePermissions } = usePermissions(
+    scope?.mode === 'single' ? scope.profile.id : null,
+  );
+  const eventsDenied = canViewEvents(scopePermissions) === 'denied';
   const totalScopeProfiles = scope?.profiles.length ?? 0;
 
   const single = useTimelineData({
@@ -456,8 +465,14 @@ export default function Timeline() {
             <div className="h-[600px] flex items-center justify-center" data-testid="timeline-empty-state">
               <EmptyState
                 icon={Clock}
-                title={detectionCategory !== 'all' ? t('timeline.no_events_in_range') : t('timeline.no_events_found')}
-                description={t('timeline.adjust_filters')}
+                title={
+                  eventsDenied
+                    ? t('events.no_event_permission')
+                    : detectionCategory !== 'all'
+                      ? t('timeline.no_events_in_range')
+                      : t('timeline.no_events_found')
+                }
+                description={eventsDenied ? undefined : t('timeline.adjust_filters')}
               />
             </div>
           ) : (

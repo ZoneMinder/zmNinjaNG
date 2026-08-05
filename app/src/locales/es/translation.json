@@ -153,7 +153,8 @@
     "fit_scale_down": "Reducir",
     "view_events": "Eventos",
     "group_by_server": "Agrupar por servidor",
-    "stream_permission_denied": "Esta cuenta no tiene permiso de streaming."
+    "stream_permission_denied": "Esta cuenta no tiene permiso de streaming.",
+    "no_monitor_permission": "Esta cuenta no tiene permisos de monitores."
   },
   "events": {
     "title": "Eventos",
@@ -255,7 +256,8 @@
     "show_all_servers": "Mostrar todos los servidores",
     "failed_to_load": "No se pudieron cargar los eventos: {{error}}",
     "delete_permission_denied": "Eliminar eventos requiere el permiso Events: Edit.",
-    "archive_permission_denied": "Archivar eventos requiere el permiso Events: Edit."
+    "archive_permission_denied": "Archivar eventos requiere el permiso Events: Edit.",
+    "no_event_permission": "Esta cuenta no tiene permisos de eventos."
   },
   "event_detail": {
     "event_id": "ID de Evento",
@@ -1238,7 +1240,16 @@
     "storage_used": "Usado",
     "storage_total": "Total",
     "no_storage": "Sin almacenamiento",
-    "run_state_permission_denied": "Cambiar el estado de ejecución requiere el permiso System: Edit."
+    "run_state_permission_denied": "Cambiar el estado de ejecución requiere el permiso System: Edit.",
+    "permissions_title": "Permisos de la cuenta",
+    "permissions_desc": "Lo que esta cuenta de ZoneMinder puede hacer.",
+    "permission_system": "Sistema",
+    "permission_monitors": "Monitores",
+    "permission_stream": "Streaming",
+    "permission_events": "Eventos",
+    "permission_control": "Control",
+    "permission_groups": "Grupos",
+    "permission_unknown": "Sin determinar"
   },
   "eventMontage": {
     "grid_layout_applied": "Diseño de cuadrícula aplicado: {{cols}} columnas",
