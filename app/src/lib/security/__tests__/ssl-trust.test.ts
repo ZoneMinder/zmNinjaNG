@@ -1,21 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { asProfileId } from '../../../api/types';
+import type { Profile, ProfileId } from '../../../api/types';
+import type { ProfileSettings } from '../../../stores/settings';
+import { collectTrustEntries } from '../ssl-trust';
 
-const mockEnable = vi.fn().mockResolvedValue(undefined);
-const mockDisable = vi.fn().mockResolvedValue(undefined);
-const mockSetTrustedFingerprint = vi.fn().mockResolvedValue(undefined);
-const mockGetServerCertFingerprint = vi.fn();
+// vi.mock factories below are hoisted above these imports; vi.hoisted keeps
+// the mock fns they reference from hitting the temporal dead zone.
+const { mockEnable, mockDisable, mockSetTrustedFingerprints, mockGetServerCertFingerprint, mockLogSslTrust } =
+  vi.hoisted(() => ({
+    mockEnable: vi.fn().mockResolvedValue(undefined),
+    mockDisable: vi.fn().mockResolvedValue(undefined),
+    mockSetTrustedFingerprints: vi.fn().mockResolvedValue(undefined),
+    mockGetServerCertFingerprint: vi.fn(),
+    mockLogSslTrust: vi.fn(),
+  }));
 
 vi.mock('../../../plugins/ssl-trust', () => ({
   SSLTrust: {
     enable: mockEnable,
     disable: mockDisable,
     isEnabled: vi.fn().mockResolvedValue({ enabled: false }),
-    setTrustedFingerprint: mockSetTrustedFingerprint,
+    setTrustedFingerprints: mockSetTrustedFingerprints,
     getServerCertFingerprint: mockGetServerCertFingerprint,
   },
 }));
 
-const mockLogSslTrust = vi.fn();
 vi.mock('../../logger', () => ({
   log: {
     sslTrust: mockLogSslTrust,
@@ -28,102 +37,221 @@ vi.mock('../../logger', () => ({
   },
 }));
 
-describe('applySSLTrustSetting', () => {
+const profile = (id: string, urls: Partial<Profile>): Profile =>
+  ({
+    id: asProfileId(id),
+    name: id,
+    portalUrl: '',
+    apiUrl: '',
+    cgiUrl: '',
+    isDefault: false,
+    createdAt: 0,
+    ...urls,
+  }) as Profile;
+
+describe('collectTrustEntries', () => {
+  it('emits one entry per distinct host of each trusting profile', () => {
+    const profiles = [
+      profile('a', {
+        portalUrl: 'https://cam-a.local',
+        apiUrl: 'https://cam-a.local/zm/api',
+        cgiUrl: 'https://cam-a.local/cgi-bin',
+      }),
+      profile('b', {
+        portalUrl: 'https://cam-b.local:8443',
+        apiUrl: 'https://api-b.local/zm/api',
+        cgiUrl: 'https://cam-b.local:8443/cgi-bin',
+      }),
+    ];
+    const settings = (id: ProfileId) =>
+      ({
+        allowSelfSignedCerts: true,
+        trustedCertFingerprint: id === asProfileId('a') ? 'AA:11' : 'BB:22',
+      }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries(profiles, settings);
+    expect(enabled).toBe(true);
+    expect(entries).toContainEqual({ host: 'cam-a.local', fingerprint: 'AA:11' });
+    expect(entries).toContainEqual({ host: 'cam-b.local', fingerprint: 'BB:22' });
+    expect(entries).toContainEqual({ host: 'api-b.local', fingerprint: 'BB:22' });
+    expect(entries.filter((e) => e.host === 'cam-a.local')).toHaveLength(1); // deduped
+  });
+
+  it('excludes profiles with trust off or no stored fingerprint, disabled when none trust', () => {
+    const profiles = [profile('a', { portalUrl: 'https://cam-a.local' })];
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    expect(collectTrustEntries(profiles, off)).toEqual({ enabled: false, entries: [] });
+  });
+
+  it('is enabled with no entries when trust is on but no fingerprint is stored yet (TOFU accept-all)', () => {
+    const profiles = [profile('a', { portalUrl: 'https://cam-a.local' })];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: null }) as ProfileSettings;
+    expect(collectTrustEntries(profiles, settings)).toEqual({ enabled: true, entries: [] });
+  });
+
+  it('skips unparseable or empty URLs', () => {
+    const profiles = [
+      profile('a', { portalUrl: 'not-a-url', apiUrl: '', cgiUrl: 'https://cam-a.local/cgi-bin' }),
+    ];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    expect(collectTrustEntries(profiles, settings)).toEqual({
+      enabled: true,
+      entries: [{ host: 'cam-a.local', fingerprint: 'AA:11' }],
+    });
+  });
+
+  it('last write wins and logs a WARN when two profiles claim the same host', () => {
+    const profiles = [
+      profile('a', { portalUrl: 'https://shared.local' }),
+      profile('b', { portalUrl: 'https://shared.local' }),
+    ];
+    const settings = (id: ProfileId) =>
+      ({
+        allowSelfSignedCerts: true,
+        trustedCertFingerprint: id === asProfileId('a') ? 'AA:11' : 'BB:22',
+      }) as ProfileSettings;
+    const { entries } = collectTrustEntries(profiles, settings);
+    expect(entries).toEqual([{ host: 'shared.local', fingerprint: 'BB:22' }]);
+    expect(mockLogSslTrust).toHaveBeenCalledWith(expect.stringContaining('shared.local'), 2);
+  });
+
+  it('normalizes mixed-case hosts and strips IPv6 brackets so they match native lookups', () => {
+    const profiles = [
+      profile('a', { portalUrl: 'https://CAM-A.Local', apiUrl: 'https://[::1]:8443/zm/api' }),
+    ];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    const { entries } = collectTrustEntries(profiles, settings);
+    expect(entries).toContainEqual({ host: 'cam-a.local', fingerprint: 'AA:11' });
+    expect(entries).toContainEqual({ host: '::1', fingerprint: 'AA:11' });
+  });
+
+  it('candidate enables trust when no saved profile does', () => {
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: null }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries([], off, {
+      urls: ['https://new.local'],
+      fingerprint: null,
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([]);
+  });
+
+  it('candidate with a null fingerprint contributes no entry for its hosts', () => {
+    const off = () => ({ allowSelfSignedCerts: false, trustedCertFingerprint: null }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries([], off, {
+      urls: ['https://new.local', 'https://new.local/api'],
+      fingerprint: null,
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([]);
+  });
+
+  it("candidate overrides a saved profile's fingerprint for the same host", () => {
+    const profiles = [profile('a', { portalUrl: 'https://shared.local' })];
+    const settings = () => ({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' }) as ProfileSettings;
+    const { enabled, entries } = collectTrustEntries(profiles, settings, {
+      urls: ['https://shared.local'],
+      fingerprint: 'ZZ:99',
+      enabled: true,
+    });
+    expect(enabled).toBe(true);
+    expect(entries).toEqual([{ host: 'shared.local', fingerprint: 'ZZ:99' }]);
+    expect(mockLogSslTrust).toHaveBeenCalledWith(expect.stringContaining('shared.local'), 2);
+  });
+});
+
+describe('applyTrustedCertificates', () => {
+  const mockGetProfileSettings = vi.fn();
+
+  function mockStores(profiles: Profile[]) {
+    vi.doMock('../../../stores/profile', () => ({
+      useProfileStore: { getState: () => ({ profiles }) },
+    }));
+    vi.doMock('../../../stores/settings', () => ({
+      useSettingsStore: { getState: () => ({ getProfileSettings: mockGetProfileSettings }) },
+    }));
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    mockGetProfileSettings.mockReset();
   });
 
-  it('should call SSLTrust.enable() when enabled on native', async () => {
+  it('enables native trust with the collected entries when any profile trusts', async () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: true },
     }));
+    mockStores([profile('a', { portalUrl: 'https://cam-a.local' })]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' });
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await applySSLTrustSetting(true);
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates();
 
     expect(mockEnable).toHaveBeenCalled();
+    expect(mockSetTrustedFingerprints).toHaveBeenCalledWith({
+      entries: [{ host: 'cam-a.local', fingerprint: 'AA:11' }],
+    });
     expect(mockDisable).not.toHaveBeenCalled();
   });
 
-  it('should call SSLTrust.disable() when disabled on native', async () => {
+  it('disables native trust when no profile trusts', async () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: true },
     }));
+    mockStores([profile('a', {})]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: false, trustedCertFingerprint: null });
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await applySSLTrustSetting(false);
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates();
 
     expect(mockDisable).toHaveBeenCalled();
     expect(mockEnable).not.toHaveBeenCalled();
   });
 
-  it('should call electronSsl.setTrustSelfSigned with the enabled flag on Electron', async () => {
+  it('forwards only the enabled boolean to Electron', async () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: false, isElectron: true },
     }));
-
+    mockStores([profile('a', {})]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' });
     const setTrustSelfSigned = vi.fn().mockResolvedValue(true);
     vi.stubGlobal('window', { electronSsl: { setTrustSelfSigned } });
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates();
 
-    await applySSLTrustSetting(true);
     expect(setTrustSelfSigned).toHaveBeenCalledWith(true);
-
-    await applySSLTrustSetting(false);
-    expect(setTrustSelfSigned).toHaveBeenCalledWith(false);
-
     expect(mockEnable).not.toHaveBeenCalled();
     expect(mockDisable).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });
 
-  it('should be a no-op on web platforms', async () => {
+  it('is a no-op on web platforms', async () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: false, isElectron: false },
     }));
+    mockStores([profile('a', {})]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' });
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await applySSLTrustSetting(true);
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates();
 
     expect(mockEnable).not.toHaveBeenCalled();
     expect(mockDisable).not.toHaveBeenCalled();
-  });
-
-  it('passes the fingerprint through to setTrustedFingerprint when pinning on native', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: true },
-    }));
-
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await applySSLTrustSetting(true, 'AA:BB:CC:DD');
-
-    expect(mockEnable).toHaveBeenCalled();
-    expect(mockSetTrustedFingerprint).toHaveBeenCalledWith({ fingerprint: 'AA:BB:CC:DD' });
-  });
-
-  it('accepts-any (passes null fingerprint) when no pin is stored yet, per TOFU rule', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: true },
-    }));
-
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await applySSLTrustSetting(true);
-
-    expect(mockEnable).toHaveBeenCalled();
-    expect(mockSetTrustedFingerprint).toHaveBeenCalledWith({ fingerprint: null });
   });
 
   it('swallows a native enable() rejection instead of throwing', async () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: true },
     }));
+    mockStores([profile('a', { portalUrl: 'https://cam-a.local' })]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' });
     mockEnable.mockRejectedValueOnce(new Error('plugin unavailable'));
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await expect(applySSLTrustSetting(true)).resolves.toBeUndefined();
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await expect(applyTrustedCertificates()).resolves.toBeUndefined();
     expect(mockLogSslTrust).toHaveBeenCalledWith(
       'Failed to apply SSL trust setting',
       expect.anything(),
@@ -135,11 +263,13 @@ describe('applySSLTrustSetting', () => {
     vi.doMock('../../platform', () => ({
       Platform: { isNative: false, isElectron: true },
     }));
+    mockStores([profile('a', {})]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:11' });
     const setTrustSelfSigned = vi.fn().mockRejectedValue(new Error('ipc failure'));
     vi.stubGlobal('window', { electronSsl: { setTrustSelfSigned } });
 
-    const { applySSLTrustSetting } = await import('../ssl-trust');
-    await expect(applySSLTrustSetting(true)).resolves.toBeUndefined();
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await expect(applyTrustedCertificates()).resolves.toBeUndefined();
     expect(mockLogSslTrust).toHaveBeenCalledWith(
       'Failed to apply Electron SSL trust setting',
       expect.anything(),
@@ -147,6 +277,21 @@ describe('applySSLTrustSetting', () => {
     );
 
     vi.unstubAllGlobals();
+  });
+
+  it('enables native trust from a candidate even when no saved profile trusts yet', async () => {
+    vi.doMock('../../platform', () => ({
+      Platform: { isNative: true },
+    }));
+    mockStores([]);
+    mockGetProfileSettings.mockReturnValue({ allowSelfSignedCerts: false, trustedCertFingerprint: null });
+
+    const { applyTrustedCertificates } = await import('../ssl-trust');
+    await applyTrustedCertificates({ urls: ['https://new.local'], fingerprint: null, enabled: true });
+
+    expect(mockEnable).toHaveBeenCalled();
+    expect(mockSetTrustedFingerprints).toHaveBeenCalledWith({ entries: [] });
+    expect(mockDisable).not.toHaveBeenCalled();
   });
 });
 
@@ -199,61 +344,6 @@ describe('getServerCertFingerprint', () => {
     expect(result).toBeNull();
     expect(mockLogSslTrust).toHaveBeenCalledWith(
       'Failed to fetch server certificate fingerprint',
-      expect.anything(),
-      expect.objectContaining({ error: expect.any(Error) })
-    );
-  });
-});
-
-describe('setTrustedFingerprint', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.resetModules();
-  });
-
-  it('is a no-op on non-native platforms', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: false },
-    }));
-
-    const { setTrustedFingerprint } = await import('../ssl-trust');
-    await setTrustedFingerprint('AA:BB:CC:DD');
-
-    expect(mockSetTrustedFingerprint).not.toHaveBeenCalled();
-  });
-
-  it('pins a new fingerprint on native (accept/trust path)', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: true },
-    }));
-
-    const { setTrustedFingerprint } = await import('../ssl-trust');
-    await setTrustedFingerprint('AA:BB:CC:DD');
-
-    expect(mockSetTrustedFingerprint).toHaveBeenCalledWith({ fingerprint: 'AA:BB:CC:DD' });
-  });
-
-  it('can clear a pinned fingerprint by passing null (rejection path)', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: true },
-    }));
-
-    const { setTrustedFingerprint } = await import('../ssl-trust');
-    await setTrustedFingerprint(null);
-
-    expect(mockSetTrustedFingerprint).toHaveBeenCalledWith({ fingerprint: null });
-  });
-
-  it('swallows a native rejection instead of throwing', async () => {
-    vi.doMock('../../platform', () => ({
-      Platform: { isNative: true },
-    }));
-    mockSetTrustedFingerprint.mockRejectedValueOnce(new Error('plugin write failed'));
-
-    const { setTrustedFingerprint } = await import('../ssl-trust');
-    await expect(setTrustedFingerprint('AA:BB')).resolves.toBeUndefined();
-    expect(mockLogSslTrust).toHaveBeenCalledWith(
-      'Failed to set trusted fingerprint',
       expect.anything(),
       expect.objectContaining({ error: expect.any(Error) })
     );

@@ -14,6 +14,8 @@
  * with no list to maintain.
  */
 import { getEvents } from '../../api/events';
+import { getSession } from '../../services/sessions';
+import { asProfileId } from '../../api/types';
 import { parseDetectedObjects } from '../event/event-detection';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
@@ -48,7 +50,7 @@ export async function getObjectLabels(profileId: string): Promise<string[]> {
   if (hit && Date.now() - hit.at < ASSISTANT.objectLabelCacheMs) return hit.labels;
 
   try {
-    const res = await getEvents({
+    const res = await getEvents(getSession(asProfileId(profileId)).client, asProfileId(profileId), {
       limit: ASSISTANT.objectLabelSampleSize,
       sort: 'StartDateTime',
       direction: 'desc',

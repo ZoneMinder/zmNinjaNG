@@ -12,10 +12,11 @@
 import { useEffect, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { getMonitorEventsSince } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useMonitorSeenStore } from '../stores/monitorSeen';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useBandwidthSettings } from './useBandwidthSettings';
 
 interface MonitorNewEvents {
@@ -25,7 +26,7 @@ interface MonitorNewEvents {
 
 export function useMonitorNewEvents(monitorIds: string[]): MonitorNewEvents {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const bandwidth = useBandwidthSettings();
 
   const profileId = currentProfile?.id;
@@ -42,7 +43,7 @@ export function useMonitorNewEvents(monitorIds: string[]): MonitorNewEvents {
       const since = watermarks[monitorId] ?? null;
       return {
         queryKey: queryKeys.monitorEventsSince(profileId, monitorId, since),
-        queryFn: () => getMonitorEventsSince(monitorId, since),
+        queryFn: () => getMonitorEventsSince(getCurrentSession().client, monitorId, since),
         enabled: !!profileId && isAuthenticated,
         refetchInterval: bandwidth.monitorNewEventsInterval,
       };

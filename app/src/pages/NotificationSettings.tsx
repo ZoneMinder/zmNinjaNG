@@ -13,7 +13,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useProfileStore } from '../stores/profile';
 import { getMonitors } from '../api/monitors';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
@@ -35,6 +35,7 @@ import { Platform } from '../lib/platform';
 import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
+import { getCurrentSession } from '../services/sessions';
 import { getEventPoller } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -47,7 +48,7 @@ export default function NotificationSettings() {
   const navigate = useNavigate();
   const { currentProfile } = useCurrentProfile();
   const getDecryptedPassword = useProfileStore((state) => state.getDecryptedPassword);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const updateProfileSettings = useNotificationStore((s) => s.updateProfileSettings);
   const setMonitorFilter = useNotificationStore((s) => s.setMonitorFilter);
@@ -70,7 +71,7 @@ export default function NotificationSettings() {
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -83,7 +84,7 @@ export default function NotificationSettings() {
   useEffect(() => {
     if (!currentProfile || !isAuthenticated) return;
 
-    checkNotificationsApiSupport()
+    checkNotificationsApiSupport(getCurrentSession().client)
       .then((supported) => {
         setDirectModeAvailable(supported);
         log.notificationSettings('ZM Notifications API support check', LogLevel.INFO, { supported });

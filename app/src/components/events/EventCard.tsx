@@ -26,6 +26,7 @@ import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { queryKeys } from '../../lib/query/query-keys';
 import { setEventArchived } from '../../api/events';
+import { getCurrentSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
 import { TagChipList } from './TagChip';
 import { formatEventRelative, isWithinDays } from '../../lib/relative-time';
@@ -90,7 +91,7 @@ function EventCardComponent({ event, monitorName, thumbnailUrls, largeThumbnailU
     const next = !isArchived;
     setIsArchiving(true);
     try {
-      await setEventArchived(event.Id, next);
+      await setEventArchived(getCurrentSession().client, event.Id, next);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.events(currentProfile?.id) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.event(currentProfile?.id, event.Id) }),

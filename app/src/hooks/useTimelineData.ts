@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getEvents } from '../api/events';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import type { EventData } from '../api/types';
 import { filterEnabledMonitors } from '../lib/monitor/filters';
 import { formatForServer } from '../lib/time';
@@ -57,7 +58,7 @@ export function useTimelineData({
   // Fetch monitors
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfileId),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
   });
 
   // Get enabled monitors
@@ -95,7 +96,7 @@ export function useTimelineData({
           monitorsToQuery,
           TIMELINE.fanoutConcurrency,
           (id) =>
-            getEvents({
+            getEvents(getCurrentSession().client, getCurrentSession().profileId, {
               startDateTime,
               endDateTime,
               monitorId: id,
@@ -114,7 +115,7 @@ export function useTimelineData({
         return { events, pagination: base ? { ...base, count } : undefined };
       }
 
-      return getEvents({
+      return getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         startDateTime,
         endDateTime,
         monitorId: monitorFilter,

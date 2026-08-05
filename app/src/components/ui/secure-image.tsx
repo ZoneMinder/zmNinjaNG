@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Platform } from '../../lib/platform';
-import { getApiClient } from '../../api/client';
+import { getCurrentSession } from '../../services/sessions';
 import { cn } from '../../lib/utils';
 import { log, LogLevel } from '../../lib/logger';
 
@@ -82,7 +82,7 @@ export function SecureImage({ src, fallbackSrc, className, alt, ...props }: Secu
     // (though in this specific case, Native seems to be the one failing)
     if (isNative && src.startsWith('http') && imageSrc === src) {
       try {
-        const client = getApiClient();
+        const client = getCurrentSession().client;
         const response = await client.get<string>(src, { responseType: 'base64' });
         if (mountedRef.current && response.data) {
           const contentType =

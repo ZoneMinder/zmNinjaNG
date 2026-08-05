@@ -17,6 +17,8 @@ import { getPortalUrlForEvent } from '../lib/zm/server-resolver';
 import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent } from '../types/notifications';
 import { log, LogLevel } from '../lib/logger';
+import { getSession } from './sessions';
+import { asProfileId } from '../api/types';
 
 /**
  * Store-derived values injected into the poller at start time.
@@ -109,8 +111,9 @@ class EventPollerService {
   }
 
   private async _loadMonitorNames(): Promise<void> {
+    if (!this.profileId) return;
     try {
-      const result = await getMonitors();
+      const result = await getMonitors(getSession(asProfileId(this.profileId)).client, asProfileId(this.profileId));
       this.monitorNames.clear();
       this.monitorData = result.monitors.map((m) => ({
         Monitor: { Id: m.Monitor.Id, ServerId: m.Monitor.ServerId ?? null },
@@ -180,7 +183,7 @@ class EventPollerService {
         filters.notesRegexp = 'detected:';
       }
 
-      const result = await getEvents(filters);
+      const result = await getEvents(getSession(asProfileId(this.profileId)).client, asProfileId(this.profileId), filters);
       const events = result.events || [];
 
       if (this.isFirstPoll) {

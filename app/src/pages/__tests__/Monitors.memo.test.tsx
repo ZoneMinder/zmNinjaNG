@@ -56,6 +56,7 @@ vi.mock('../../stores/profile', () => ({
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (state: { isAuthenticated: boolean }) => unknown) =>
     selector({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
 vi.mock('react-i18next', () => ({

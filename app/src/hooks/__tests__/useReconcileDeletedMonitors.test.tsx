@@ -8,12 +8,14 @@ import { useDashboardStore } from '../../stores/dashboard';
 import { getMonitors } from '../../api/monitors';
 
 vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
+vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })) }));
 vi.mock('../useCurrentProfile', () => ({
   useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
 }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
     selector({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
 const mockGetMonitors = vi.mocked(getMonitors);
@@ -86,7 +88,7 @@ describe('useReconcileDeletedMonitors', () => {
     renderHook(() => useReconcileDeletedMonitors(), { wrapper });
 
     await waitFor(() => expect(mockGetMonitors).toHaveBeenCalled());
-    expect(mockGetMonitors).toHaveBeenCalledWith({ includeExcluded: true });
+    expect(mockGetMonitors).toHaveBeenCalledWith(expect.anything(), expect.anything(), { includeExcluded: true });
     expect(storedState().excluded).toEqual(['1', '99']);
     expect(storedState().widgetIds).toEqual(['1', '99']);
   });

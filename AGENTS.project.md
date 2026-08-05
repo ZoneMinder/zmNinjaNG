@@ -35,6 +35,12 @@ Path: `getFreshAccessToken` / `login` on the auth store (`app/src/stores/auth.ts
 Never: refresh calls bypassing the dedup entry points; tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
 Gate: `app/src/stores/__tests__/auth.test.ts`.
 
+### Sessions
+Owns: per-profile server connections.
+Path: `getSession` (`app/src/services/sessions.ts`), lazily built and cached per profile; wired to the store via `createStoreApiClient` (`app/src/api/store-gates.ts`), the sole caller of `createApiClient` (`app/src/api/client.ts`); pre-save probe flows in `app/src/services/discovery.ts` and `app/src/pages/ProfileForm.tsx` build clients directly for un-saved profiles.
+Never: constructing `ApiClient` outside the session registry, its gate factory, or the pre-save probe flows; per-profile token state outside the auth store; a session for `ALL_PROFILES_ID` or `PROBE_PROFILE_ID`; the auth store statically importing the session registry (would cycle back through the gate it injects).
+Gate: `app/src/tests/agents-contracts.test.ts`.
+
 ### Assistant tool loop
 Owns: whether an assistant turn may answer a data question.
 Path: the turn schema makes the answer branch unreachable until a real tool result exists; execution authority is the turn's own `opts.tools`, not the registry.
@@ -79,7 +85,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
 ### Native
 Owns: everything touching Capacitor or platform APIs.
-Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored.
+Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored, and trust is global once any profile enables self-signed (deliberate; see the TLS trust-scope decision in the all-profiles design spec).
 Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without stored fingerprint (breaks self-signed onboarding).
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 

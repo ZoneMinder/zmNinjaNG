@@ -279,7 +279,10 @@ export function useMonitorStream({
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
     }
-    void useAuthStore.getState().getFreshAccessToken().finally(() => {
+    const refresh = currentProfile
+      ? useAuthStore.getState().getFreshAccessToken(currentProfile.id)
+      : Promise.resolve(null);
+    void refresh.finally(() => {
       // killPrevious closes the old nph-zms process on ZM. The server side
       // may still be alive (just throttled with us during the suspend), so
       // without this each resume would orphan a connkey.

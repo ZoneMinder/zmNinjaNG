@@ -22,7 +22,8 @@
 /* eslint-disable react-hooks/purity */
 
 import { useEffect } from 'react';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, useAuthSlice } from '../stores/auth';
+import { useCurrentProfile } from './useCurrentProfile';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
 
 export interface FreshAccessToken {
@@ -31,9 +32,9 @@ export interface FreshAccessToken {
 }
 
 export function useFreshAccessToken(): FreshAccessToken {
-  const accessToken = useAuthStore((state) => state.accessToken);
-  const accessTokenExpires = useAuthStore((state) => state.accessTokenExpires);
-  const requiresAuth = useAuthStore((state) => state.requiresAuth);
+  const { currentProfile } = useCurrentProfile();
+  const profileId = currentProfile?.id ?? null;
+  const { accessToken, accessTokenExpires, requiresAuth } = useAuthSlice(profileId);
   const getFreshAccessToken = useAuthStore((state) => state.getFreshAccessToken);
 
   const tokenValid =
@@ -46,10 +47,10 @@ export function useFreshAccessToken(): FreshAccessToken {
   const isFresh = !requiresAuth || tokenValid;
 
   useEffect(() => {
-    if (requiresAuth && !tokenValid) {
-      void getFreshAccessToken();
+    if (profileId && requiresAuth && !tokenValid) {
+      void getFreshAccessToken(profileId);
     }
-  }, [requiresAuth, tokenValid, getFreshAccessToken]);
+  }, [profileId, requiresAuth, tokenValid, getFreshAccessToken]);
 
   return { token: tokenValid ? accessToken : null, isFresh };
 }

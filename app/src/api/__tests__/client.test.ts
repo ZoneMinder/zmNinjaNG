@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApiClient, resetApiClient, type ApiClientGates, type AuthGate, type SettingsGate } from '../client';
+import { createApiClient, type ApiClientGates, type AuthGate, type SettingsGate } from '../client';
 import { createStoreApiClient } from '../store-gates';
 import { httpRequest } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthStore, resetAuthGates } from '../../stores/auth';
+import { asProfileId } from '../types';
 import { API_REQUEST } from '../../lib/zmninja-ng-constants';
+
+const pid = asProfileId('p1');
 
 vi.mock('../../lib/http', () => ({
   httpRequest: vi.fn(),
@@ -54,16 +57,7 @@ function mockGates(overrides: { auth?: Partial<AuthGate>; settings?: Partial<Set
 describe('API Client', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetApiClient();
-    useAuthStore.setState({
-      accessToken: null,
-      refreshToken: null,
-      accessTokenExpires: null,
-      refreshTokenExpires: null,
-      version: null,
-      apiVersion: null,
-      isAuthenticated: false,
-    });
+    useAuthStore.setState({ slices: {} });
   });
 
   it('never attaches a token to the login.json query string when posting credentials', async () => {
@@ -313,11 +307,18 @@ describe('API Client', () => {
 
     function authedState() {
       useAuthStore.setState({
-        accessToken: 'at',
-        accessTokenExpires: Date.now() + 60 * 60 * 1000,
-        refreshToken: 'rt',
-        refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
-        isAuthenticated: true,
+        slices: {
+          [pid]: {
+            accessToken: 'at',
+            accessTokenExpires: Date.now() + 60 * 60 * 1000,
+            refreshToken: 'rt',
+            refreshTokenExpires: Date.now() + 24 * 60 * 60 * 1000,
+            version: null,
+            apiVersion: null,
+            isAuthenticated: true,
+            requiresAuth: true,
+          },
+        },
       });
     }
 
@@ -338,7 +339,7 @@ describe('API Client', () => {
         return { data: {}, status: 200, statusText: 'OK', headers: {} } as never;
       });
 
-      const client = createStoreApiClient('https://zm.example.com/api');
+      const client = createStoreApiClient('https://zm.example.com/api', undefined, pid);
       const requests = Array.from({ length: 5 }, (_, i) => client.get(`/monitors/${i}.json`));
 
       // Let all five requests hit the 401 handler before the refresh resolves.
@@ -356,11 +357,18 @@ describe('API Client', () => {
     it('fails all concurrent callers with one re-login attempt, then allows a later recovery', async () => {
       // No refresh token: recovery falls through to reLogin immediately.
       useAuthStore.setState({
-        accessToken: 'at',
-        accessTokenExpires: Date.now() + 60 * 60 * 1000,
-        refreshToken: null,
-        refreshTokenExpires: null,
-        isAuthenticated: true,
+        slices: {
+          [pid]: {
+            accessToken: 'at',
+            accessTokenExpires: Date.now() + 60 * 60 * 1000,
+            refreshToken: null,
+            refreshTokenExpires: null,
+            version: null,
+            apiVersion: null,
+            isAuthenticated: true,
+            requiresAuth: true,
+          },
+        },
       });
       const logout = vi.fn();
       useAuthStore.setState({ logout } as never);
@@ -372,7 +380,7 @@ describe('API Client', () => {
 
       vi.mocked(httpRequest).mockRejectedValue(unauthorized as never);
 
-      const client = createStoreApiClient('https://zm.example.com/api', reLogin);
+      const client = createStoreApiClient('https://zm.example.com/api', reLogin, pid);
       const requests = Array.from({ length: 4 }, () =>
         client.get('/monitors.json').then(() => 'resolved', (e: unknown) => e),
       );
@@ -401,13 +409,15 @@ describe('API Client', () => {
 
       vi.mocked(httpRequest).mockRejectedValue(unauthorized as never);
 
-      const client = createStoreApiClient('https://zm.example.com/api');
+      const client = createStoreApiClient('https://zm.example.com/api', undefined, pid);
       await expect(client.get('/monitors.json')).rejects.toMatchObject({ status: 401 });
       expect(refreshAccessToken).toHaveBeenCalledTimes(1);
       expect(vi.mocked(httpRequest)).toHaveBeenCalledTimes(2);
     });
 
-    it('resetApiClient clears an in-flight recovery so later requests start a new one', async () => {
+    it('resetAuthGates(profileId) clears an in-flight recovery so later requests start a new one', async () => {
+      // Per-profile gates: dropSession/logout(profileId) call resetAuthGates
+      // directly to clear a profile's pending single-flight auth ops (refs #337).
       authedState();
       const refreshResolvers: Array<() => void> = [];
       const refreshAccessToken = vi.fn(
@@ -417,16 +427,16 @@ describe('API Client', () => {
 
       vi.mocked(httpRequest).mockRejectedValue(unauthorized as never);
 
-      const client = createStoreApiClient('https://zm.example.com/api');
+      const client = createStoreApiClient('https://zm.example.com/api', undefined, pid);
       const first = client.get('/a.json').then(() => 'resolved', (e: unknown) => e);
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(refreshAccessToken).toHaveBeenCalledTimes(1);
 
-      resetApiClient();
+      resetAuthGates(pid);
 
       const second = client.get('/b.json').then(() => 'resolved', (e: unknown) => e);
       await new Promise((resolve) => setTimeout(resolve, 0));
-      // A stale recovery is not awaited; a new one starts.
+      // The gate is now cleared: a new recovery starts.
       expect(refreshAccessToken).toHaveBeenCalledTimes(2);
 
       refreshResolvers.forEach((resolve) => resolve());

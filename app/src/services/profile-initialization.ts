@@ -13,8 +13,7 @@
  */
 
 import type { Profile, ProfileId } from '../api/types';
-import { setApiClient } from '../api/client';
-import { createStoreApiClient } from '../api/store-gates';
+import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 import { BOOTSTRAP_TIMEOUTS } from '../lib/zmninja-ng-constants';
 import { performBootstrap, type BootstrapContext } from './profile-bootstrap';
@@ -89,12 +88,12 @@ function setInitializationState(
 /**
  * Clears stale authentication and cache data
  */
-async function clearStaleState(): Promise<void> {
+async function clearStaleState(profileId: ProfileId): Promise<void> {
   const clearStart = Date.now();
   log.profileService('Clearing stale auth and cache', LogLevel.INFO);
 
   const { useAuthStore } = await import('../stores/auth');
-  useAuthStore.getState().logout();
+  useAuthStore.getState().logout(profileId);
 
   const { clearQueryCache } = await import('../stores/query-cache');
   clearQueryCache();
@@ -103,25 +102,25 @@ async function clearStaleState(): Promise<void> {
 }
 
 /**
- * Initializes API client for the given profile
+ * Ensures the given profile's session exists.
  */
 async function initializeApiClient(
   profile: Profile,
   reLogin: () => Promise<boolean>
 ): Promise<void> {
   const apiClientStart = Date.now();
-  log.profileService('Initializing API client', LogLevel.INFO, {
+  log.profileService('Ensuring session', LogLevel.INFO, {
     apiUrl: profile.apiUrl,
   });
 
-  setApiClient(createStoreApiClient(profile.apiUrl, reLogin));
+  getSession(profile.id);
 
   // Wire the same credentials reLogin into the auth store so
   // getFreshAccessToken can fall through to it when refresh fails.
   const { useAuthStore } = await import('../stores/auth');
-  useAuthStore.getState().setReLoginCallback(reLogin);
+  useAuthStore.getState().setReLoginCallback(profile.id, reLogin);
 
-  logDuration('Bootstrap step: API client ready', apiClientStart, {
+  logDuration('Bootstrap step: session ready', apiClientStart, {
     apiUrl: profile.apiUrl,
   });
 }
@@ -229,7 +228,7 @@ export async function handleProfileRehydration(
   // Case 3: Valid profile - perform initialization and bootstrap
   try {
     // Clear stale state from previous session
-    await clearStaleState();
+    await clearStaleState(profile.id);
 
     // Initialize API client
     await initializeApiClient(profile, storeGet().reLogin);

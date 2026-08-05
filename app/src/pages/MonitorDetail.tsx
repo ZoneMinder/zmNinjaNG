@@ -11,9 +11,10 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { getMonitor, getControl, updateMonitor } from '../api/monitors';
 import { getZones } from '../api/zones';
+import { getCurrentSession } from '../services/sessions';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -73,7 +74,7 @@ export default function MonitorDetail() {
 
   // Profile and settings
   const { currentProfile, settings } = useCurrentProfile();
-  const accessToken = useAuthStore((state) => state.accessToken);
+  const accessToken = useAuthSlice(currentProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
 
   // Keep screen awake when Insomnia is enabled
@@ -82,21 +83,21 @@ export default function MonitorDetail() {
   // Fetch monitor data
   const { data: monitor, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitor(currentProfile?.id, id),
-    queryFn: () => getMonitor(id!),
+    queryFn: () => getMonitor(getCurrentSession().client, id!),
     enabled: !!id,
   });
 
   // Fetch control capabilities if monitor is controllable
   const { data: controlData } = useQuery({
     queryKey: queryKeys.control(currentProfile?.id, monitor?.Monitor.ControlId),
-    queryFn: () => getControl(monitor!.Monitor.ControlId!),
+    queryFn: () => getControl(getCurrentSession().client, monitor!.Monitor.ControlId!),
     enabled: !!monitor?.Monitor.ControlId && monitor.Monitor.Controllable === '1',
   });
 
   // Fetch zones when showZones is enabled
   const { data: zones = [], isLoading: isZonesLoading } = useQuery({
     queryKey: queryKeys.zones(currentProfile?.id, id),
-    queryFn: () => getZones(id!),
+    queryFn: () => getZones(getCurrentSession().client, id!),
     enabled: !!id && showZones,
   });
 
@@ -145,7 +146,7 @@ export default function MonitorDetail() {
   });
 
   // ZM version for feature detection
-  const zmVersion = useAuthStore((s) => s.version);
+  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
   const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
   // Settings dialog save handler: batches all changes into one or more API calls
@@ -160,7 +161,7 @@ export default function MonitorDetail() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(monitor.Monitor.Id, params);
+        await updateMonitor(getCurrentSession().client, monitor.Monitor.Id, params);
       }
       await refetch();
       toast.success(t('monitor_detail.capture_updated'));

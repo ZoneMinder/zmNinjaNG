@@ -16,7 +16,7 @@ import { useState, useRef, memo, useEffect, type ReactNode } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import type { Monitor, MonitorStatus, Profile } from '../../api/types';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthSlice } from '../../stores/auth';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { MONITOR_UI } from '../../lib/zmninja-ng-constants';
 import { useSettingsStore } from '../../stores/settings';
@@ -109,7 +109,7 @@ function MontageMonitorComponent({
   fromRoute = '/montage',
 }: MontageMonitorProps) {
   const { t } = useTranslation();
-  const zmVersion = useAuthStore((s) => s.version);
+  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
   const runState = getMonitorRunState(monitor, status, zmVersion);
   const settings = useSettingsStore(
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))

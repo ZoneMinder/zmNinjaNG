@@ -5,17 +5,18 @@ import {
   deleteNotification,
   checkNotificationsApiSupport,
 } from '../notifications';
-import { getApiClient } from '../client';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
 const mockPost = vi.fn();
 const mockPut = vi.fn();
 const mockDelete = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = {
+  get: mockGet,
+  postForm: mockPost,
+  putForm: mockPut,
+  delete: mockDelete,
+} as unknown as ApiClient;
 
 vi.mock('../../lib/logger', () => ({
   log: { api: vi.fn() },
@@ -40,12 +41,6 @@ const sampleNotification = {
 describe('Notifications API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-      postForm: mockPost,
-      putForm: mockPut,
-      delete: mockDelete,
-    } as unknown as ApiClient);
   });
 
   describe('registerToken', () => {
@@ -54,7 +49,7 @@ describe('Notifications API', () => {
         data: { notification: { Notification: sampleNotification } },
       });
 
-      const result = await registerToken({
+      const result = await registerToken(mockClient, {
         token: 'fcm-token-abc',
         platform: 'ios',
         monitorList: '1,2,3',
@@ -84,7 +79,7 @@ describe('Notifications API', () => {
         data: { notification: { Notification: sampleNotification } },
       });
 
-      await registerToken({ token: 'tok', platform: 'android' });
+      await registerToken(mockClient, { token: 'tok', platform: 'android' });
 
       const params = mockPost.mock.calls[0][1] as URLSearchParams;
       expect(params.get('Notification[Token]')).toBe('tok');
@@ -102,7 +97,7 @@ describe('Notifications API', () => {
         data: { notification: { Notification: sampleNotification } },
       });
 
-      const result = await updateNotification(42, {
+      const result = await updateNotification(mockClient, 42, {
         monitorList: '4,5',
         interval: 60,
         pushState: 'disabled',
@@ -126,7 +121,7 @@ describe('Notifications API', () => {
         data: { notification: { Notification: sampleNotification } },
       });
 
-      await updateNotification(42, { pushState: 'enabled' });
+      await updateNotification(mockClient, 42, { pushState: 'enabled' });
 
       const params = mockPut.mock.calls[0][1] as URLSearchParams;
       expect(params.has('Notification[MonitorList]')).toBe(false);
@@ -139,7 +134,7 @@ describe('Notifications API', () => {
     it('calls DELETE on the correct endpoint', async () => {
       mockDelete.mockResolvedValue({});
 
-      await deleteNotification(42);
+      await deleteNotification(mockClient, 42);
 
       expect(mockDelete).toHaveBeenCalledWith('/notifications/42.json');
     });
@@ -149,7 +144,7 @@ describe('Notifications API', () => {
     it('returns true when the endpoint responds successfully', async () => {
       mockGet.mockResolvedValue({ data: { notifications: [] } });
 
-      const supported = await checkNotificationsApiSupport();
+      const supported = await checkNotificationsApiSupport(mockClient);
 
       expect(mockGet).toHaveBeenCalledWith('/notifications.json');
       expect(supported).toBe(true);
@@ -158,14 +153,14 @@ describe('Notifications API', () => {
     it('returns false on a 404 response (error.response.status)', async () => {
       mockGet.mockRejectedValue({ response: { status: 404 } });
 
-      const supported = await checkNotificationsApiSupport();
+      const supported = await checkNotificationsApiSupport(mockClient);
       expect(supported).toBe(false);
     });
 
     it('returns false on a 404 response (error.status)', async () => {
       mockGet.mockRejectedValue({ status: 404 });
 
-      const supported = await checkNotificationsApiSupport();
+      const supported = await checkNotificationsApiSupport(mockClient);
       expect(supported).toBe(false);
     });
 
@@ -173,7 +168,7 @@ describe('Notifications API', () => {
       const serverError = { response: { status: 500 }, message: 'Internal Server Error' };
       mockGet.mockRejectedValue(serverError);
 
-      await expect(checkNotificationsApiSupport()).rejects.toEqual(serverError);
+      await expect(checkNotificationsApiSupport(mockClient)).rejects.toEqual(serverError);
     });
   });
 });

@@ -17,7 +17,7 @@ const h = vi.hoisted(() => ({
   } | null,
   trustedCertFingerprint: null as string | null,
   updateProfileSettings: vi.fn(),
-  applySSLTrustSetting: vi.fn().mockResolvedValue(undefined),
+  applyTrustedCertificates: vi.fn().mockResolvedValue(undefined),
   getServerCertFingerprint: vi.fn(),
   logSslTrust: vi.fn(),
 }));
@@ -43,7 +43,7 @@ vi.mock('../../stores/settings', () => ({
 }));
 
 vi.mock('../../lib/security/ssl-trust', () => ({
-  applySSLTrustSetting: h.applySSLTrustSetting,
+  applyTrustedCertificates: h.applyTrustedCertificates,
   getServerCertFingerprint: h.getServerCertFingerprint,
 }));
 
@@ -52,7 +52,7 @@ vi.mock('../../lib/logger', () => ({
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
 }));
 
-const mockApplySSLTrustSetting = h.applySSLTrustSetting;
+const mockApplyTrustedCertificates = h.applyTrustedCertificates;
 const mockGetServerCertFingerprint = h.getServerCertFingerprint;
 const mockLogSslTrust = h.logSslTrust;
 
@@ -106,7 +106,7 @@ describe('useCertTrustPrompt', () => {
       await result.current.prompt();
     });
 
-    expect(mockApplySSLTrustSetting).toHaveBeenCalledWith(true);
+    expect(mockApplyTrustedCertificates).toHaveBeenCalled();
     expect(mockGetServerCertFingerprint).toHaveBeenCalledWith('https://zm.example.com');
     expect(result.current.dialogProps.open).toBe(true);
     expect(result.current.dialogProps.certInfo).toEqual(CERT_INFO);
@@ -212,7 +212,8 @@ describe('useCertTrustPrompt', () => {
       allowSelfSignedCerts: true,
       trustedCertFingerprint: CERT_INFO.fingerprint,
     });
-    expect(mockApplySSLTrustSetting).toHaveBeenCalledWith(true, CERT_INFO.fingerprint);
+    // Called once from prompt's TOFU enable, once more from onTrust's re-apply with the pinned fingerprint
+    expect(mockApplyTrustedCertificates).toHaveBeenCalledTimes(2);
     expect(result.current.dialogProps.open).toBe(false);
   });
 
@@ -232,8 +233,8 @@ describe('useCertTrustPrompt', () => {
 
     expect(result.current.dialogProps.open).toBe(false);
     expect(h.updateProfileSettings).not.toHaveBeenCalled();
-    // applySSLTrustSetting was called once already (from prompt's TOFU enable), never again with a pin
-    expect(mockApplySSLTrustSetting).toHaveBeenCalledTimes(1);
+    // applyTrustedCertificates was called once already (from prompt's TOFU enable), never again with a pin
+    expect(mockApplyTrustedCertificates).toHaveBeenCalledTimes(1);
   });
 
   it('onTrust is a no-op without a current profile or fetched cert info', async () => {
@@ -244,6 +245,6 @@ describe('useCertTrustPrompt', () => {
     });
 
     expect(h.updateProfileSettings).not.toHaveBeenCalled();
-    expect(mockApplySSLTrustSetting).not.toHaveBeenCalled();
+    expect(mockApplyTrustedCertificates).not.toHaveBeenCalled();
   });
 });

@@ -22,6 +22,10 @@ vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
 vi.mock('../../lib/logger', () => ({
   log: {
     timeline: vi.fn(),

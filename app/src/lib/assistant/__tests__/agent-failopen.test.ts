@@ -38,6 +38,10 @@ vi.mock('../../../api/server', () => ({
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
 vi.mock('../../../api/groups', () => ({ getGroups: vi.fn() }));
 vi.mock('../../../api/tags', () => ({ getTags: vi.fn(), getEventTags: vi.fn(), extractUniqueTags: vi.fn() }));
+vi.mock('../../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
 
 const host: AssistantHost = { navigate: vi.fn(), onActivity: vi.fn() };
 
@@ -72,6 +76,8 @@ describe('fail-open tool routing', () => {
     // First call is pushed back, the model insists, then the query executes:
     // the #265 recovery still works through one pushback.
     expect(vi.mocked(getEvents)).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
       expect.objectContaining({ startDateTime: expect.any(String), endDateTime: expect.any(String) }),
     );
     expect(out[out.length - 1].text).toBe('No events in the last week.');

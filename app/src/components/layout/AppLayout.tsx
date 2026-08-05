@@ -156,8 +156,8 @@ export default function AppLayout() {
     setPendingCert(null);
 
     updateProfileSettings(profileId, { trustedCertFingerprint: certInfo.fingerprint });
-    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
-    await applySSLTrustSetting(true, certInfo.fingerprint);
+    const { applyTrustedCertificates } = await import('../../lib/security/ssl-trust');
+    await applyTrustedCertificates();
     log.app('Certificate trusted via TOFU migration', LogLevel.INFO);
   }, [pendingCert, updateProfileSettings]);
 
@@ -168,8 +168,8 @@ export default function AppLayout() {
 
     // Disable self-signed certs since user rejected the certificate
     updateProfileSettings(profileId, { allowSelfSignedCerts: false, trustedCertFingerprint: null });
-    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
-    await applySSLTrustSetting(false);
+    const { applyTrustedCertificates } = await import('../../lib/security/ssl-trust');
+    await applyTrustedCertificates();
     log.app('Certificate rejected, disabling self-signed cert support', LogLevel.INFO);
   }, [pendingCert, updateProfileSettings]);
 

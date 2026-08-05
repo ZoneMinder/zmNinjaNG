@@ -190,8 +190,8 @@ export function AdvancedSection({
 
     if (checked && Platform.isNative) {
       try {
-        const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
-        await applySSLTrustSetting(true);
+        const { applyTrustedCertificates, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
+        await applyTrustedCertificates();
         const info = await getServerCertFingerprint(currentProfile.portalUrl);
         if (info) {
           setCertInfo(info);
@@ -199,15 +199,15 @@ export function AdvancedSection({
           setCertDialogOpen(true);
           return;
         }
-        await applySSLTrustSetting(true, null);
+        await applyTrustedCertificates();
       } catch (error) {
         log.sslTrust('Failed to fetch cert during enable', LogLevel.ERROR, { error });
       }
     }
 
     if (!checked) {
-      const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
-      await applySSLTrustSetting(false);
+      const { applyTrustedCertificates } = await import('../../lib/security/ssl-trust');
+      await applyTrustedCertificates();
     }
   };
 
@@ -218,22 +218,22 @@ export function AdvancedSection({
       allowSelfSignedCerts: true,
       trustedCertFingerprint: certInfo.fingerprint,
     });
-    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
-    await applySSLTrustSetting(true, certInfo.fingerprint);
+    const { applyTrustedCertificates } = await import('../../lib/security/ssl-trust');
+    await applyTrustedCertificates();
   };
 
   const handleCancelTrust = async () => {
     setCertDialogOpen(false);
-    const { applySSLTrustSetting } = await import('../../lib/security/ssl-trust');
-    await applySSLTrustSetting(false);
+    const { applyTrustedCertificates } = await import('../../lib/security/ssl-trust');
+    await applyTrustedCertificates();
   };
 
   const handleReverify = async () => {
     if (!currentProfile) return;
     setReverifying(true);
     try {
-      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
-      await applySSLTrustSetting(true);
+      const { applyTrustedCertificates, getServerCertFingerprint } = await import('../../lib/security/ssl-trust');
+      await applyTrustedCertificates();
       const info = await getServerCertFingerprint(currentProfile.portalUrl);
       if (info) {
         const isChanged =
@@ -243,7 +243,7 @@ export function AdvancedSection({
         setCertIsChanged(isChanged);
         setCertDialogOpen(true);
       }
-      await applySSLTrustSetting(true, settings.trustedCertFingerprint);
+      await applyTrustedCertificates();
     } catch (error) {
       log.sslTrust('Failed to re-verify certificate', LogLevel.ERROR, { error });
     } finally {

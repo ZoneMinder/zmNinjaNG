@@ -5,7 +5,7 @@
  * Uses the configured API client for requests.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import type { Go2RTCPathResponse, LoginResponse, ZmsPathResponse, VersionResponse } from './types';
 import { Go2RTCPathResponseSchema, LoginResponseSchema, ZmsPathResponseSchema, VersionResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
@@ -26,14 +26,13 @@ export interface LoginWithRefreshToken {
  * Sends a POST request to /host/login.json with form-encoded credentials.
  * Validates the response using Zod schema.
  * 
+ * @param client - API client for the target profile
  * @param credentials - Object containing username and password
  * @returns Promise resolving to LoginResponse containing tokens and version info
  * @throws Error if login fails or response validation fails
  */
-export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
+export async function login(client: ApiClient, credentials: LoginCredentials): Promise<LoginResponse> {
   log.auth('Login attempt', LogLevel.INFO, { username: credentials.user });
-
-  const client = getApiClient();
 
   // ZoneMinder expects form-encoded data for login
   const formData = new URLSearchParams();
@@ -84,12 +83,11 @@ export async function login(credentials: LoginCredentials): Promise<LoginRespons
  * 
  * Sends a POST request to /host/login.json with the refresh token.
  * 
+ * @param client - API client for the target profile
  * @param refreshToken - The refresh token obtained from previous login
  * @returns Promise resolving to LoginResponse with new tokens
  */
-export async function refreshToken(refreshToken: string): Promise<LoginResponse> {
-  const client = getApiClient();
-
+export async function refreshToken(client: ApiClient, refreshToken: string): Promise<LoginResponse> {
   // Use form-encoded data for consistency
   const formData = new URLSearchParams();
   formData.append('token', refreshToken);
@@ -106,10 +104,10 @@ export async function refreshToken(refreshToken: string): Promise<LoginResponse>
  *
  * Fetches version information from /host/getVersion.json.
  *
+ * @param client - API client for the target profile
  * @returns Promise resolving to object with version and apiversion strings
  */
-export async function getVersion(): Promise<VersionResponse> {
-  const client = getApiClient();
+export async function getVersion(client: ApiClient): Promise<VersionResponse> {
   const response = await client.get('/host/getVersion.json');
 
   // Validate response with Zod
@@ -123,12 +121,12 @@ export async function getVersion(): Promise<VersionResponse> {
  * Attempts to fetch version info from the specified API URL.
  * Useful for validating server connection during setup.
  *
+ * @param client - API client to issue the probe request through
  * @param apiUrl - The base API URL to test
  * @returns Promise resolving to true if connection successful, false otherwise
  */
-export async function testConnection(apiUrl: string): Promise<boolean> {
+export async function testConnection(client: ApiClient, apiUrl: string): Promise<boolean> {
   try {
-    const client = getApiClient();
     await client.get('/host/getVersion.json', { baseURL: apiUrl });
     return true;
   } catch (error) {
@@ -143,11 +141,11 @@ export async function testConnection(apiUrl: string): Promise<boolean> {
  * This API endpoint returns the server-configured ZMS path, which may differ
  * from the default /cgi-bin/nph-zms. Only works after successful authentication.
  *
+ * @param client - API client for the target profile
  * @returns Promise resolving to the ZMS path (e.g., "/cgi-bin/nph-zms") or null if fetch fails
  */
-export async function fetchZmsPath(): Promise<string | null> {
+export async function fetchZmsPath(client: ApiClient): Promise<string | null> {
   try {
-    const client = getApiClient();
     log.auth('Fetching ZMS path from server config', LogLevel.DEBUG);
 
     const response = await client.get<ZmsPathResponse>('/configs/viewByName/ZM_PATH_ZMS.json');
@@ -182,11 +180,11 @@ export async function fetchZmsPath(): Promise<string | null> {
  *
  * Not all ZoneMinder servers have Go2RTC configured - this is optional.
  *
+ * @param client - API client for the target profile
  * @returns Promise resolving to the Go2RTC URL or null if not configured/fetch fails
  */
-export async function fetchGo2RTCPath(): Promise<string | null> {
+export async function fetchGo2RTCPath(client: ApiClient): Promise<string | null> {
   try {
-    const client = getApiClient();
     log.auth('Fetching Go2RTC path from server config', LogLevel.DEBUG);
 
     const response = await client.get<Go2RTCPathResponse>('/configs/viewByName/ZM_GO2RTC_PATH.json');

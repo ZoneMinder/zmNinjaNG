@@ -18,11 +18,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Command } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
 import { filterCommandItems, type CommandItem } from '../lib/command-palette';
@@ -50,7 +51,7 @@ export function CommandPalette() {
   const setOpen = useCommandPaletteStore((s) => s.setOpen);
   const openAssistant = useAssistantPanelStore((s) => s.open);
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const { setSelectedGroup } = useGroupFilter();
   const { groups } = useGroups();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -60,7 +61,7 @@ export function CommandPalette() {
 
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -78,12 +79,12 @@ export function CommandPalette() {
       label: g.Group.Name,
       groupId: g.Group.Id,
     }));
-    const excluded = getExcludedMonitorIdSet();
+    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
     const monitorItems: CommandItem[] = (monitorsData?.monitors || [])
       .filter((m) => !excluded.has(m.Monitor.Id))
       .map((m) => ({ kind: 'monitor', id: `m-${m.Monitor.Id}`, label: m.Monitor.Name, monitorId: m.Monitor.Id }));
     return [...pages, ...groupItems, ...monitorItems];
-  }, [t, groups, monitorsData]);
+  }, [t, groups, monitorsData, currentProfile]);
 
   const results = useMemo(() => filterCommandItems(items, query), [items, query]);
 

@@ -24,7 +24,7 @@ import { log, LogLevel } from '../../lib/logger';
 import { useTranslation } from 'react-i18next';
 import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
-import { useAuthStore } from '../../stores/auth';
+import { useAuthSlice } from '../../stores/auth';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
@@ -54,7 +54,7 @@ function MonitorCardComponent({
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const zmVersion = useAuthStore((s) => s.version);
+  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
   const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');

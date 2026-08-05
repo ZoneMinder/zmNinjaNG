@@ -7,6 +7,10 @@ import { deleteEvent } from '../../api/events';
 import { toast } from 'sonner';
 
 vi.mock('../../api/events', () => ({ deleteEvent: vi.fn() }));
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+  registerSessionsGate: vi.fn(),
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string, o?: { count?: number }) => `${k}:${o?.count ?? ''}` }) }));
 vi.mock('../../lib/logger', () => ({ log: { eventCard: vi.fn() }, LogLevel: { ERROR: 'ERROR' } }));
@@ -30,8 +34,8 @@ describe('useBulkDeleteEvents', () => {
     await act(async () => { await result.current.deleteEvents(['1', '2']); });
 
     expect(deleteEvent).toHaveBeenCalledTimes(2);
-    expect(deleteEvent).toHaveBeenCalledWith('1');
-    expect(deleteEvent).toHaveBeenCalledWith('2');
+    expect(deleteEvent).toHaveBeenCalledWith(expect.anything(), '1');
+    expect(deleteEvent).toHaveBeenCalledWith(expect.anything(), '2');
     const keys = spy.mock.calls.map((c) => JSON.stringify(c[0]));
     expect(keys.some((k) => k.includes('"events"'))).toBe(true);
     expect(spy.mock.calls.some((c) => typeof (c[0] as { predicate?: unknown })?.predicate === 'function')).toBe(true);

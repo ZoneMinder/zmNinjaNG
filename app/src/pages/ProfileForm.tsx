@@ -13,8 +13,9 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
-import { setApiClient } from '../api/client';
+import type { ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
+import { asProfileId } from '../api/types';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
 import { Switch } from '../components/ui/switch';
 import { Video, Server, ShieldCheck, ArrowRight, Loader2, Eye, EyeOff, ArrowLeft, QrCode, X } from 'lucide-react';
@@ -134,15 +135,24 @@ export default function ProfileForm() {
     setSuccess(false);
     setTesting(true);
 
+    // Mint this profile's id up front: the connection test below builds an
+    // auth session (discovery probe, optional credentials login) before the
+    // profile is saved. Minting here means that session, and the profile
+    // addProfile saves at the end of this flow, share the same id instead of
+    // the test session being orphaned under a scratch id. Refs #337.
+    const profileId = asProfileId(crypto.randomUUID());
+
     // Create abort controller for this connection attempt
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
     try {
-      // Enable trust-all for HTTP before any network calls (needed for discovery)
+      // Enable trust-all for HTTP before any network calls (needed for discovery).
+      // This profile isn't saved yet, so pass it as a candidate: the union
+      // computed from the store alone wouldn't know about it.
       if (allowSelfSignedCerts) {
-        const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
-        await applySSLTrustSetting(true);
+        const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+        await applyTrustedCertificates({ urls: [portalUrl], fingerprint: null, enabled: allowSelfSignedCerts });
       }
 
       const normalizedUsername = username.trim();
@@ -160,6 +170,10 @@ export default function ProfileForm() {
       let cgiUrl: string;
       let go2rtcPath: string | null = null;
       let acceptedFingerprint: string | null = null;
+      // The profile isn't saved yet (addProfile runs at the end of this flow),
+      // so there's no session to pull a client from; both branches below build
+      // one directly for this candidate profileId. Refs #337.
+      let profileClient: ApiClient | undefined;
 
       if (showManualUrls) {
         // Manual URL entry mode
@@ -193,19 +207,20 @@ export default function ProfileForm() {
         cgiUrl = manualCgiUrl;
         log.profileForm('Manual URLs set', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
 
-        // Initialize API client with manual URL
-        const client = createStoreApiClient(apiUrl);
-        setApiClient(client);
+        // Build the API client for the manual URL
+        const client = createStoreApiClient(apiUrl, undefined, profileId);
+        profileClient = client;
       } else {
         // Discover URLs from portal URL
         // Pass credentials if provided to fetch accurate ZM_PATH_ZMS from server
         log.profileForm('Discovering URLs', LogLevel.INFO);
         const credentials = hasUsername && hasPassword ? { username: normalizedUsername, password } : undefined;
         const discovered = await discoverUrls(portalUrl, {
+          profileId,
           credentials,
           signal,
           onClientCreated: (client) => {
-            setApiClient(client);
+            profileClient = client;
           },
         });
         log.profileForm('Successfully connected', LogLevel.INFO, { apiUrl: discovered.apiUrl });
@@ -217,20 +232,27 @@ export default function ProfileForm() {
 
       // TOFU: after discovery succeeds, fetch the server cert and ask user to trust it
       if (allowSelfSignedCerts && Platform.isNative) {
-        const { getServerCertFingerprint, applySSLTrustSetting } = await import('../lib/security/ssl-trust');
+        const { getServerCertFingerprint, applyTrustedCertificates } = await import('../lib/security/ssl-trust');
         const info = await getServerCertFingerprint(confirmedPortalUrl);
         if (info) {
           const trusted = await requestCertTrust(info);
           if (!trusted) {
-            await applySSLTrustSetting(false);
+            // This return precedes any login attempt below, so there are no
+            // tokens to clean up here.
+            await applyTrustedCertificates();
             setTesting(false);
             return;
           }
           // Save to local var (React state update from handleCertTrust is batched
           // and won't be available until next render)
           acceptedFingerprint = info.fingerprint;
-          // Apply fingerprint-based trust (installs WebView handler)
-          await applySSLTrustSetting(true, acceptedFingerprint);
+          // Apply fingerprint-based trust (installs WebView handler). Still a
+          // candidate: the profile isn't saved until after login/discovery succeeds.
+          await applyTrustedCertificates({
+            urls: [confirmedPortalUrl, apiUrl, cgiUrl],
+            fingerprint: acceptedFingerprint,
+            enabled: allowSelfSignedCerts,
+          });
         }
       }
 
@@ -242,17 +264,17 @@ export default function ProfileForm() {
 
           // Clear any existing auth state to ensure clean login
           // This prevents old tokens from interfering with new profile login
-          useAuthStore.getState().logout();
+          useAuthStore.getState().logout(profileId);
           log.profileForm('Cleared existing auth state for fresh login', LogLevel.DEBUG);
 
-          await useAuthStore.getState().login(normalizedUsername, password);
+          await useAuthStore.getState().login(profileId, normalizedUsername, password, profileClient);
           log.profileForm('Login successful', LogLevel.INFO);
 
           // Note: ZMS path is already fetched during discovery when credentials are provided,
           // so cgiUrl is already set correctly. We just need to fetch Go2RTC path here.
 
           // Fetch Go2RTC path if configured (optional, not all servers have it)
-          go2rtcPath = await fetchGo2RTCPath();
+          go2rtcPath = await fetchGo2RTCPath(profileClient!);
           if (go2rtcPath) {
             log.profileForm('Go2RTC path fetched from server config', LogLevel.INFO, {
               go2rtcPath
@@ -279,7 +301,7 @@ export default function ProfileForm() {
       );
 
       log.profileForm('Adding new profile', LogLevel.INFO, { profileName: finalProfileName });
-      const newProfileId = await addProfile({
+      await addProfile({
         name: finalProfileName,
         portalUrl: confirmedPortalUrl,
         apiUrl,
@@ -288,23 +310,26 @@ export default function ProfileForm() {
         password: password || undefined,
         isDefault: isFirstProfile,
         go2rtcUrl: go2rtcPath || undefined,
-      });
-      log.profileForm('Profile created', LogLevel.INFO, { profileName: finalProfileName, profileId: newProfileId });
+      }, profileId);
+      log.profileForm('Profile created', LogLevel.INFO, { profileName: finalProfileName, profileId });
 
       // Save self-signed cert setting and trusted fingerprint to the new profile
       if (allowSelfSignedCerts) {
         const { useSettingsStore } = await import('../stores/settings');
-        useSettingsStore.getState().updateProfileSettings(newProfileId, {
+        useSettingsStore.getState().updateProfileSettings(profileId, {
           allowSelfSignedCerts: true,
           trustedCertFingerprint: acceptedFingerprint,
         });
+        // Re-apply from committed state now that the profile is saved (no more candidate).
+        const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+        await applyTrustedCertificates();
       }
 
       // Switch to the newly created profile (unless it's the first profile, which is auto-set as current)
       if (!isFirstProfile) {
         const switchProfile = useProfileStore.getState().switchProfile;
-        log.profileForm('Switching to newly created profile', LogLevel.INFO, { profileId: newProfileId });
-        await switchProfile(newProfileId);
+        log.profileForm('Switching to newly created profile', LogLevel.INFO, { profileId });
+        await switchProfile(profileId);
       }
 
       // Navigate after a short delay
@@ -312,6 +337,17 @@ export default function ProfileForm() {
         navigate(returnTo);
       }, 1000);
     } catch (err: unknown) {
+      // The failed/cancelled attempt may have landed real tokens under this
+      // profile's minted id (a successful login before a later step, e.g.
+      // addProfile, threw). addProfile may have already saved the profile
+      // by the time a later step throws (e.g. switchProfile below); logout
+      // here is self-healing in that case, since bootstrap re-auths saved
+      // profiles from their stored credentials on next launch. When
+      // addProfile itself never ran, this clears the only trace of that
+      // login attempt's tokens - nothing else would. Refs #337.
+      const { useAuthStore } = await import('../stores/auth');
+      useAuthStore.getState().logout(profileId);
+
       // Don't show error if cancelled by user
       if (err instanceof DiscoveryError && err.code === 'CANCELLED') {
         log.profileForm('Discovery cancelled by user', LogLevel.INFO);

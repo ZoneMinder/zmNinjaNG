@@ -6,12 +6,14 @@ import { useAlarmStates } from '../useAlarmStates';
 import { getAlarmStatus } from '../../api/monitors';
 
 vi.mock('../../api/monitors', () => ({ getAlarmStatus: vi.fn() }));
+vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
 vi.mock('../useCurrentProfile', () => ({
   useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
 }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
     selector({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
 const mockStatus = vi.mocked(getAlarmStatus);
@@ -29,7 +31,7 @@ describe('useAlarmStates', () => {
   });
 
   it('returns a parsed state per monitor', async () => {
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       id === '1' ? { status: 2 } : { status: 0 }
     );
 
@@ -54,7 +56,7 @@ describe('useAlarmStates', () => {
     await waitFor(() => {
       expect(mockStatus).toHaveBeenCalledTimes(3);
     });
-    expect(mockStatus.mock.calls.map((c) => c[0])).toEqual(['1', '2', '3']);
+    expect(mockStatus.mock.calls.map((c) => c[1])).toEqual(['1', '2', '3']);
   });
 
   it('fetches nothing while disabled', async () => {
@@ -73,7 +75,7 @@ describe('useAlarmStates', () => {
   });
 
   it('reports a monitor whose request failed as unknown and surfaces the error', async () => {
-    mockStatus.mockImplementation(async (id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id === '2') throw new Error('boom');
       return { status: 2 };
     });
@@ -94,7 +96,7 @@ describe('useAlarmStates', () => {
     // A monitor missing from the map would be read downstream as "no longer
     // watched" and dropped without its dwell window, so the map must be total.
     let resolveSecond: ((value: { status: number }) => void) | undefined;
-    mockStatus.mockImplementation(async (id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id === '1') return { status: 2 };
       return new Promise((resolve) => {
         resolveSecond = resolve as (value: { status: number }) => void;
@@ -126,7 +128,7 @@ describe('useAlarmStates', () => {
     // stamps Date.now(), so a per-render identity meant render -> effect ->
     // setState -> render without end. Reference equality here is the property
     // that stops it, and it does not depend on how fast jsdom renders.
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       id === '1' ? { status: 2 } : { status: 0 }
     );
 

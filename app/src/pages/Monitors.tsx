@@ -10,10 +10,11 @@ import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useTranslation } from 'react-i18next';
 import { getMonitors, updateMonitor } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useMonitorNewEvents } from '../hooks/useMonitorNewEvents';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { LayoutGrid, List, Video } from 'lucide-react';
@@ -43,8 +44,9 @@ export default function Monitors() {
   const { currentProfile, settings } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const zmVersion = useAuthStore((s) => s.version);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const isAuthenticated = authSlice.isAuthenticated;
+  const zmVersion = authSlice.version;
   const { isFilterActive, filteredMonitorIds, isFilterReady } = useGroupFilter();
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +71,7 @@ export default function Monitors() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
   });
@@ -111,7 +113,7 @@ export default function Monitors() {
         if (value !== undefined) params[`Monitor[${key}]`] = value;
       }
       if (Object.keys(params).length > 0) {
-        await updateMonitor(selectedMonitor.Id, params);
+        await updateMonitor(getCurrentSession().client, selectedMonitor.Id, params);
       }
       await refetch();
       toast.success(t('monitor_detail.capture_updated'));

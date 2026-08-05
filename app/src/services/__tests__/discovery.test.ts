@@ -10,11 +10,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { discoverZoneminder, DiscoveryError } from '../discovery';
 import type { ApiClient } from '../../api/client';
 
-// Mock the API client
-vi.mock('../../api/client', () => ({
-  setApiClient: vi.fn(),
-}));
-
 vi.mock('../../api/store-gates', () => ({
   createStoreApiClient: vi.fn((_baseURL: string) => {
     return {

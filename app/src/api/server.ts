@@ -5,7 +5,7 @@
  * for ZoneMinder servers.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import { validateApiResponse } from '../lib/zm/api-validator';
 import { tolerantArray, withFieldCatch } from '../lib/zm/schema-tolerance';
 import { z } from 'zod';
@@ -128,8 +128,7 @@ export interface DiskUsage {
  *
  * @returns Promise resolving to array of Server objects
  */
-export async function getServers(): Promise<Server[]> {
-  const client = getApiClient();
+export async function getServers(client: ApiClient): Promise<Server[]> {
   const response = await client.get('/servers.json');
 
   const validated = validateApiResponse(ServersResponseSchema, response.data, {
@@ -148,8 +147,7 @@ export async function getServers(): Promise<Server[]> {
  *
  * @returns Promise resolving to array of Storage objects
  */
-export async function getStorages(): Promise<Storage[]> {
-  const client = getApiClient();
+export async function getStorages(client: ApiClient): Promise<Storage[]> {
   const response = await client.get('/storage.json');
 
   const validated = validateApiResponse(StoragesResponseSchema, response.data, {
@@ -167,8 +165,7 @@ export async function getStorages(): Promise<Storage[]> {
  *
  * @returns Promise resolving to boolean (true = running, false = stopped)
  */
-export async function getDaemonCheck(apiBaseUrl?: string): Promise<boolean> {
-  const client = getApiClient();
+export async function getDaemonCheck(client: ApiClient, apiBaseUrl?: string): Promise<boolean> {
   const config = apiBaseUrl ? { baseURL: apiBaseUrl } : undefined;
   const response = await client.get('/host/daemonCheck.json', config);
 
@@ -192,8 +189,7 @@ export async function getDaemonCheck(apiBaseUrl?: string): Promise<boolean> {
  *
  * @returns Promise resolving to ServerLoad object with load value
  */
-export async function getLoad(apiBaseUrl?: string): Promise<ServerLoad> {
-  const client = getApiClient();
+export async function getLoad(client: ApiClient, apiBaseUrl?: string): Promise<ServerLoad> {
   const config = apiBaseUrl ? { baseURL: apiBaseUrl } : undefined;
   const response = await client.get('/host/getLoad.json', config);
 
@@ -215,8 +211,7 @@ export async function getLoad(apiBaseUrl?: string): Promise<ServerLoad> {
  *
  * @returns Promise resolving to DiskUsage object with usage percentage
  */
-export async function getDiskPercent(apiBaseUrl?: string): Promise<DiskUsage> {
-  const client = getApiClient();
+export async function getDiskPercent(client: ApiClient, apiBaseUrl?: string): Promise<DiskUsage> {
   const config = apiBaseUrl ? { baseURL: apiBaseUrl } : undefined;
   const response = await client.get('/host/getDiskPercent.json', config);
 
@@ -256,8 +251,7 @@ export async function getDiskPercent(apiBaseUrl?: string): Promise<DiskUsage> {
  *
  * @returns Promise resolving to array of Config objects
  */
-export async function getConfigs(): Promise<import('./types').Config[]> {
-  const client = getApiClient();
+export async function getConfigs(client: ApiClient): Promise<import('./types').Config[]> {
   const response = await client.get('/configs.json');
   const { ConfigsResponseSchema } = await import('./types');
 
@@ -278,9 +272,8 @@ export async function getConfigs(): Promise<import('./types').Config[]> {
  *
  * @returns Promise resolving to the port number or null if not configured/fetch fails
  */
-export async function fetchMinStreamingPort(): Promise<number | null> {
+export async function fetchMinStreamingPort(client: ApiClient): Promise<number | null> {
   try {
-    const client = getApiClient();
     const response = await client.get<import('./types').MinStreamingPortResponse>(
       '/configs/viewByName/ZM_MIN_STREAMING_PORT.json',
       { intent: 'Fetch MIN_STREAMING_PORT config' },

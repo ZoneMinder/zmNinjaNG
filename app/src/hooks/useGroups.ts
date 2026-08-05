@@ -14,8 +14,9 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../api/groups';
+import { getCurrentSession } from '../services/sessions';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { queryKeys } from '../lib/query/query-keys';
 import type { GroupData } from '../api/types';
 
@@ -67,11 +68,11 @@ function getChildGroupIds(groupId: string, groups: GroupData[]): string[] {
  */
 export function useGroups(): UseGroupsReturn {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   const { data, isLoading, isSuccess, error, refetch } = useQuery({
     queryKey: queryKeys.groups(currentProfile?.id),
-    queryFn: getGroups,
+    queryFn: () => getGroups(getCurrentSession().client),
     enabled: !!currentProfile?.id && isAuthenticated,
     // Groups rarely change, so we can use a longer stale time
     staleTime: 5 * 60 * 1000, // 5 minutes

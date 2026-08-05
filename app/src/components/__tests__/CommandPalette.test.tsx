@@ -34,6 +34,7 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
 }));
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (sel: (s: { isAuthenticated: boolean }) => unknown) => sel({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 vi.mock('../../lib/profile/profile-settings', () => ({ getExcludedMonitorIdSet: () => new Set<string>() }));
 

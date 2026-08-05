@@ -5,8 +5,8 @@
  * Supports filtering, pagination, and archiving.
  */
 
-import { getApiClient } from './client';
-import type { EventsResponse, EventData, EventFilters } from './types';
+import type { ApiClient } from './client';
+import type { EventsResponse, EventData, EventFilters, ProfileId } from './types';
 import { EventsResponseSchema, EventResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
 import { validateApiResponse } from '../lib/zm/api-validator';
@@ -24,9 +24,9 @@ import { API_PAGINATION } from '../lib/zmninja-ng-constants';
 // closed a cycle (refs #281). Re-exported for the callers that expect it here.
 export type { EventFilters };
 
-/** Drop events belonging to per-profile excluded monitors. */
-function dropExcludedMonitorEvents(events: EventData[]): EventData[] {
-  const excludedIds = getExcludedMonitorIdSet();
+/** Drop events belonging to profileId's excluded monitors. */
+function dropExcludedMonitorEvents(events: EventData[], profileId: ProfileId): EventData[] {
+  const excludedIds = getExcludedMonitorIdSet(profileId);
   if (excludedIds.size === 0) return events;
   return events.filter(event => !excludedIds.has(event.Event.MonitorId));
 }
@@ -65,11 +65,12 @@ function buildEventsResponse(
  * page (refs #205).
  */
 async function fetchEventsByVariants(
+  client: ApiClient,
+  profileId: ProfileId,
   baseSegments: string[],
   variantSegments: string[],
   filters: EventFilters
 ): Promise<EventsResponse> {
-  const client = getApiClient();
   const desiredLimit = filters.limit || API_PAGINATION.eventsPerPage;
 
   const collected: EventData[] = [];
@@ -108,7 +109,7 @@ async function fetchEventsByVariants(
   const uniqueEvents = Array.from(
     new Map(collected.map(event => [event.Event.Id, event])).values()
   );
-  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents, profileId);
 
   // Order by StartDateTime (lexicographic on 'YYYY-MM-DD HH:MM:SS' is chronological).
   const sortDir = filters.direction === 'asc' ? 1 : -1;
@@ -128,12 +129,12 @@ async function fetchEventsByVariants(
  * Automatically fetches multiple pages if needed to reach the desired limit.
  * Handles ZM API pagination logic internally.
  *
+ * @param client - API client for the target profile
+ * @param profileId - The profile whose exclusion list filters the result
  * @param filters - Object containing filter criteria (monitor, date, etc.)
  * @returns Promise resolving to EventsResponse with list of events and pagination info
  */
-export async function getEvents(filters: EventFilters = {}): Promise<EventsResponse> {
-  const client = getApiClient();
-
+export async function getEvents(client: ApiClient, profileId: ProfileId, filters: EventFilters = {}): Promise<EventsResponse> {
   // Build filter path for ZM API
   const filterSegments: string[] = [];
   const addFilterSegment = (segment: string) => {
@@ -185,14 +186,14 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
       const chunk = filters.eventIds.slice(i, i + API_PAGINATION.eventIdFilterChunkSize);
       variants.push(`Id IN:${chunk.join(',')}`);
     }
-    return fetchEventsByVariants(filterSegments, variants, filters);
+    return fetchEventsByVariants(client, profileId, filterSegments, variants, filters);
   }
 
   // Tags filter server-side via one "Tags.Id:" query per selected tag (ZM
   // rejects "Tags.Id IN:"), merged so it composes with pagination (refs #205).
   if (filters.tagIds && filters.tagIds.length > 0) {
     const variants = filters.tagIds.map(tagId => `Tags.Id:${tagId}`);
-    return fetchEventsByVariants(filterSegments, variants, filters);
+    return fetchEventsByVariants(client, profileId, filterSegments, variants, filters);
   }
 
   const filterPath = filterSegments.join('');
@@ -247,7 +248,7 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
   );
 
   // Drop events belonging to per-profile excluded monitors at the API boundary
-  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents);
+  const visibleEvents = dropExcludedMonitorEvents(uniqueEvents, profileId);
 
   // Warn if we hit the max pages limit
   if (currentPage > maxPages && allEvents.length < desiredLimit) {
@@ -284,11 +285,10 @@ export async function getEvents(filters: EventFilters = {}): Promise<EventsRespo
  * `since` of null means no watermark yet, so every event counts.
  */
 export async function getMonitorEventsSince(
+  client: ApiClient,
   monitorId: string,
   since: string | null
 ): Promise<{ count: number; newest: string | null }> {
-  const client = getApiClient();
-
   const segments = [`MonitorId:${monitorId}`];
   if (since !== null) {
     segments.push(`StartDateTime >:${since}`);
@@ -320,12 +320,12 @@ export async function getMonitorEventsSince(
  * Builds the ZM API filter path directly to use StartDateTime comparisons for both directions.
  */
 export async function getAdjacentEvent(
+  client: ApiClient,
+  profileId: ProfileId,
   direction: 'next' | 'prev',
   currentStartDateTime: string,
   filters: EventFilters = {}
 ): Promise<EventData | null> {
-  const client = getApiClient();
-
   // Build filter segments (same logic as getEvents, but with custom date handling)
   const filterSegments: string[] = [];
   const addSegment = (segment: string) => {
@@ -360,7 +360,7 @@ export async function getAdjacentEvent(
 
   // Fetch a small batch (not just 1) so we can skip over excluded monitors
   // and still land on the nearest visible adjacent event.
-  const excludedIds = getExcludedMonitorIdSet();
+  const excludedIds = getExcludedMonitorIdSet(profileId);
   const params: Record<string, string | number> = {
     page: 1,
     limit: excludedIds.size === 0 ? 1 : 25,
@@ -390,8 +390,7 @@ export async function getAdjacentEvent(
  * @param eventId - The ID of the event to fetch
  * @returns Promise resolving to EventData
  */
-export async function getEvent(eventId: string): Promise<EventData> {
-  const client = getApiClient();
+export async function getEvent(client: ApiClient, eventId: string): Promise<EventData> {
   const response = await client.get(`/events/${eventId}.json`);
 
   // Validate response with Zod
@@ -416,8 +415,7 @@ export interface ConsoleEventCount {
  * hour", "1 day", ...) needs verifying against a live ZM server at device
  * time; it is not exercised by any e2e test.
  */
-export async function getConsoleEvents(interval: string): Promise<ConsoleEventCount[]> {
-  const client = getApiClient();
+export async function getConsoleEvents(client: ApiClient, interval: string): Promise<ConsoleEventCount[]> {
   const url = `/events/consoleEvents/${encodeURIComponent(interval)}.json`;
   const response = await client.get<{ results?: Record<string, number> }>(url, {
     intent: `Fetch console event counts (${interval})`,
@@ -431,8 +429,7 @@ export async function getConsoleEvents(interval: string): Promise<ConsoleEventCo
  * 
  * @param eventId - The ID of the event to delete
  */
-export async function deleteEvent(eventId: string): Promise<void> {
-  const client = getApiClient();
+export async function deleteEvent(client: ApiClient, eventId: string): Promise<void> {
   await client.delete(`/events/${eventId}.json`);
 }
 
@@ -443,8 +440,7 @@ export async function deleteEvent(eventId: string): Promise<void> {
  * and responds with `{"message":"Saved"}` on success, not the updated event.
  * Callers should invalidate the event/events queries to refresh state.
  */
-export async function setEventArchived(eventId: string, archived: boolean): Promise<void> {
-  const client = getApiClient();
+export async function setEventArchived(client: ApiClient, eventId: string, archived: boolean): Promise<void> {
   const body = new URLSearchParams();
   body.set('Event[Archived]', archived ? '1' : '0');
   await client.putForm(`/events/${eventId}.json`, body);

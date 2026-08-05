@@ -36,6 +36,8 @@ vi.mock('../auth', () => ({
     })),
     subscribe: vi.fn(() => vi.fn()),
   },
+  getAuthSlice: vi.fn(() => ({ accessToken: 'access-token' })),
+  registerAuthClientResolver: vi.fn(),
 }));
 
 vi.mock('../settings', () => ({
@@ -68,6 +70,11 @@ vi.mock('../../lib/version', () => ({
 
 vi.mock('../../api/notifications', () => ({
   updateNotification: vi.fn().mockResolvedValue({}),
+}));
+
+vi.mock('../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+  registerSessionsGate: vi.fn(),
 }));
 
 // services/pushNotifications.ts is only reachable dynamically from this store

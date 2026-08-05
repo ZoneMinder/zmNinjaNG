@@ -39,6 +39,7 @@ vi.mock('../../stores/auth', () => ({
   useAuthStore: () => ({
     logout,
   }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
 }));
 
 vi.mock('../../stores/settings', () => ({

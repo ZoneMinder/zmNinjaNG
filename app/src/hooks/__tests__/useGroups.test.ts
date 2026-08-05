@@ -20,6 +20,11 @@ vi.mock('../useCurrentProfile', () => ({
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (state: { isAuthenticated: boolean }) => unknown) =>
     selector({ isAuthenticated: true }),
+  useAuthSlice: () => ({ isAuthenticated: true }),
+}));
+
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
 }));
 
 const mockGroups: GroupData[] = [

@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -34,6 +34,7 @@ import { useTranslation } from 'react-i18next';
 import { getServers, getLoad, getDiskPercent, getDaemonCheck, getStorages } from '../api/server';
 import { getServerTimeZone } from '../api/time';
 import { getStates, changeState } from '../api/states';
+import { getCurrentSession } from '../services/sessions';
 import { useToast } from '../hooks/use-toast';
 import { log, LogLevel } from '../lib/logger';
 import {
@@ -51,22 +52,23 @@ export default function Server() {
   const queryClient = useQueryClient();
   const { currentProfile } = useCurrentProfile();
   const bandwidth = useBandwidthSettings();
-  const version = useAuthStore((s) => s.version);
-  const apiVersion = useAuthStore((s) => s.apiVersion);
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const version = authSlice.version;
+  const apiVersion = authSlice.apiVersion;
+  const isAuthenticated = authSlice.isAuthenticated;
   const [selectedAction, setSelectedAction] = useState<string>('');
 
   // Fetch server information
   const { data: servers, isLoading: serversLoading } = useQuery({
     queryKey: queryKeys.servers(currentProfile?.id),
-    queryFn: getServers,
+    queryFn: () => getServers(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch daemon status
   const { data: isDaemonRunning, isLoading: daemonLoading } = useQuery({
     queryKey: queryKeys.daemonCheck(currentProfile?.id),
-    queryFn: () => getDaemonCheck(),
+    queryFn: () => getDaemonCheck(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.daemonCheckInterval,
   });
@@ -74,41 +76,41 @@ export default function Server() {
   // Fetch load average
   const { data: loadData, isLoading: loadLoading } = useQuery({
     queryKey: queryKeys.serverLoad(currentProfile?.id),
-    queryFn: () => getLoad(),
+    queryFn: () => getLoad(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch disk usage
   const { data: diskData, isLoading: diskLoading } = useQuery({
     queryKey: queryKeys.diskUsage(currentProfile?.id),
-    queryFn: () => getDiskPercent(),
+    queryFn: () => getDiskPercent(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch states
   const { data: states, isLoading: statesLoading } = useQuery({
     queryKey: queryKeys.states(currentProfile?.id),
-    queryFn: getStates,
+    queryFn: () => getStates(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch timezone
   const { data: timezone } = useQuery({
     queryKey: queryKeys.timezone(currentProfile?.id),
-    queryFn: () => getServerTimeZone(),
+    queryFn: () => getServerTimeZone(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Fetch storages
   const { data: storages } = useQuery({
     queryKey: queryKeys.storages(currentProfile?.id),
-    queryFn: getStorages,
+    queryFn: () => getStorages(getCurrentSession().client),
     enabled: !!currentProfile && isAuthenticated,
   });
 
   // Mutation for state change
   const changeStateMutation = useMutation({
-    mutationFn: (stateName: string) => changeState(stateName),
+    mutationFn: (stateName: string) => changeState(getCurrentSession().client, stateName),
     onSuccess: () => {
       toast({
         title: t('common.success'),

@@ -19,6 +19,11 @@ let mockStoreState = {
 
 vi.mock('../../stores/auth', () => ({
   useAuthStore: (selector: (state: typeof mockStoreState) => unknown) => selector(mockStoreState),
+  useAuthSlice: () => mockStoreState,
+}));
+
+vi.mock('../useCurrentProfile', () => ({
+  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {}, hasProfile: true }),
 }));
 
 vi.mock('../../lib/logger', () => ({

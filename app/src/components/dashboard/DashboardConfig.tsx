@@ -30,6 +30,7 @@ import { asProfileId } from '../../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { GRID_LAYOUT } from '../../lib/zmninja-ng-constants';
 import { activateOnEnterOrSpace } from '../../lib/utils';
@@ -61,7 +62,7 @@ export function DashboardConfig() {
 
     const { data: monitors } = useQuery({
         queryKey: queryKeys.monitors(profileId),
-        queryFn: () => getMonitors(),
+        queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     });
 
     // Filter out deleted monitors

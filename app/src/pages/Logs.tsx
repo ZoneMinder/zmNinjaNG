@@ -31,6 +31,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { Label } from '../components/ui/label';
 import type { LogEntry } from '../stores/logs';
 import { getZMLogs, getZMLogLevel, getUniqueZMComponents } from '../api/logs';
+import { getCurrentSession } from '../services/sessions';
 import { sanitizeLogMessage } from '../lib/log-sanitizer';
 import type { ZMLog } from '../api/types';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -101,7 +102,7 @@ export default function Logs() {
     useEffect(() => {
         if (logSource === 'server') {
             setIsLoadingZmLogs(true);
-            getZMLogs({ limit: 100 })
+            getZMLogs(getCurrentSession().client, { limit: 100 })
                 .then((response) => {
                     const logs = response.logs.map((logData) => logData.Log);
                     setZmLogs(logs);

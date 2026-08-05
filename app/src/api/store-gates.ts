@@ -4,46 +4,46 @@
  * api/client.ts takes narrow AuthGate/SettingsGate interfaces instead of
  * importing the zustand stores. That keeps the client testable with plain
  * mocks and breaks the client -> auth store -> api/auth -> client import
- * cycle. This module owns the wiring: it builds the gates from the real
- * stores and registers the auth gate reset with resetApiClient. Refs #184.
+ * cycle. This module owns the wiring: it builds a profile-scoped gate set
+ * from the real stores. Refs #184, #337.
  */
 
-import { resetAuthGates, useAuthStore } from '../stores/auth';
+import { getAuthSlice, resetAuthGates, useAuthStore } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
+import type { ProfileId } from './types';
 import {
   createApiClient,
-  registerApiClientResetHook,
   type ApiClient,
   type ApiClientGates,
 } from './client';
 
-export const storeGates: ApiClientGates = {
-  auth: {
-    getAccessToken: () => useAuthStore.getState().accessToken,
-    getAccessTokenExpires: () => useAuthStore.getState().accessTokenExpires,
-    isAuthenticated: () => useAuthStore.getState().isAuthenticated,
-    getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(),
-    proactiveLogin: (reLogin) => useAuthStore.getState().proactiveLogin(reLogin),
-    recoverFromAuthFailure: (reLogin) => useAuthStore.getState().recoverFromAuthFailure(reLogin),
-  },
-  settings: {
-    getApiTimeoutSeconds: (profileId) =>
-      useSettingsStore.getState().getProfileSettings(profileId).apiTimeoutSeconds,
-  },
-};
+// Re-exported so services/sessions.ts (which cannot statically import
+// stores/auth.ts - that would cycle back through this module) can still
+// reach resetAuthGates via the api/ import it already has.
+export { resetAuthGates };
 
-/** createApiClient with gates assembled from the app stores. */
+/** Build the ApiClientGates for one profile - every gate closure is bound to profileId. */
+export function makeProfileGates(profileId: ProfileId): ApiClientGates {
+  return {
+    auth: {
+      getAccessToken: () => getAuthSlice(profileId).accessToken,
+      getAccessTokenExpires: () => getAuthSlice(profileId).accessTokenExpires,
+      isAuthenticated: () => getAuthSlice(profileId).isAuthenticated,
+      getFreshAccessToken: () => useAuthStore.getState().getFreshAccessToken(profileId),
+      proactiveLogin: (reLogin) => useAuthStore.getState().proactiveLogin(profileId, reLogin),
+      recoverFromAuthFailure: (reLogin) => useAuthStore.getState().recoverFromAuthFailure(profileId, reLogin),
+    },
+    settings: {
+      getApiTimeoutSeconds: (id) => useSettingsStore.getState().getProfileSettings(id).apiTimeoutSeconds,
+    },
+  };
+}
+
+/** createApiClient with gates assembled from the app stores, scoped to one profile. */
 export function createStoreApiClient(
   baseURL: string,
-  reLogin?: () => Promise<boolean>,
-  profileId?: string,
+  reLogin: (() => Promise<boolean>) | undefined,
+  profileId: ProfileId,
 ): ApiClient {
-  // A profile switch (resetApiClient) must also clear the auth store's pending
-  // single-flight gates so the new profile never attaches to an old login,
-  // refresh, or 401 recovery. Registered here, not at module load, so tests
-  // that mock the stores can import modules depending on this one. Duplicate
-  // registrations are deduplicated. No gate can be pending before the first
-  // client exists: every auth call needs the client.
-  registerApiClientResetHook(resetAuthGates);
-  return createApiClient(baseURL, storeGates, reLogin, profileId);
+  return createApiClient(baseURL, makeProfileGates(profileId), reLogin, profileId);
 }

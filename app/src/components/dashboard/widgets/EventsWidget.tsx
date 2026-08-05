@@ -16,6 +16,7 @@
 import { memo, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getEvents } from '../../../api/events';
+import { getCurrentSession } from '../../../services/sessions';
 import { useDateTimeFormat } from '../../../hooks/useDateTimeFormat';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -56,7 +57,7 @@ export const EventsWidget = memo(function EventsWidget({
     const monitorIdFilter = monitorIds?.length ? monitorIds.join(',') : undefined;
     const { data: eventsData, isLoading } = useQuery({
         queryKey: queryKeys.eventsWidget(currentProfile?.id, monitorIdFilter, limit, onlyDetectedObjects),
-        queryFn: () => getEvents({
+        queryFn: () => getEvents(getCurrentSession().client, getCurrentSession().profileId, {
             monitorId: monitorIdFilter,
             limit,
             sort: 'StartTime',

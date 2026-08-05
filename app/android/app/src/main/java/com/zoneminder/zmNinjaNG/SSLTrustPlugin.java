@@ -1,18 +1,24 @@
 package com.zoneminder.zmNinjaNG;
 
+import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Bundle;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeWebViewClient;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.ByteArrayInputStream;
+import java.net.Socket;
 import java.net.URL;
 import java.security.KeyStore;
 import java.security.MessageDigest;
@@ -20,14 +26,20 @@ import java.security.SecureRandom;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
 
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509ExtendedTrustManager;
 import javax.net.ssl.X509TrustManager;
 
 import android.net.http.SslCertificate;
@@ -36,7 +48,7 @@ import android.net.http.SslCertificate;
 public class SSLTrustPlugin extends Plugin {
 
     private boolean enabled = false;
-    private String trustedFingerprint = null;
+    private volatile Map<String, String> trustedFingerprints = new HashMap<>();
     private SSLSocketFactory originalSslSocketFactory;
     private HostnameVerifier originalHostnameVerifier;
 
@@ -51,7 +63,7 @@ public class SSLTrustPlugin extends Plugin {
     public void enable(PluginCall call) {
         this.enabled = true;
         installFingerprintTrustManager();
-        // WebView handler is only installed via setTrustedFingerprint()
+        // WebView handler is only installed via setTrustedFingerprints()
         // so that onReceivedSslError never calls proceed() without validation
         call.resolve();
     }
@@ -59,7 +71,7 @@ public class SSLTrustPlugin extends Plugin {
     @PluginMethod
     public void disable(PluginCall call) {
         this.enabled = false;
-        this.trustedFingerprint = null;
+        this.trustedFingerprints = new HashMap<>();
         restoreOriginalCerts();
         restoreWebViewSslHandler();
         call.resolve();
@@ -73,13 +85,26 @@ public class SSLTrustPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void setTrustedFingerprint(PluginCall call) {
-        this.trustedFingerprint = call.getString("fingerprint");
+    public void setTrustedFingerprints(PluginCall call) {
+        JSArray entries = call.getArray("entries");
+        Map<String, String> updated = new HashMap<>();
+        if (entries != null) {
+            for (int i = 0; i < entries.length(); i++) {
+                try {
+                    JSONObject entry = entries.getJSONObject(i);
+                    updated.put(normalizeHost(entry.getString("host")), entry.getString("fingerprint"));
+                } catch (JSONException e) {
+                    // Skip malformed entry
+                }
+            }
+        }
+        // Rebuild atomically: a single assignment swaps the whole map at once
+        this.trustedFingerprints = updated;
         if (this.enabled) {
             installFingerprintTrustManager();
-            // Only install WebView handler when we have a fingerprint to validate against.
+            // Only install WebView handler when we have fingerprints to validate against.
             // This ensures onReceivedSslError never calls proceed() without cert validation.
-            if (this.trustedFingerprint != null && !this.trustedFingerprint.isEmpty()) {
+            if (!updated.isEmpty()) {
                 installWebViewSslHandler();
             } else {
                 restoreWebViewSslHandler();
@@ -167,53 +192,51 @@ public class SSLTrustPlugin extends Plugin {
     /**
      * Install a TrustManager used while self-signed trust is enabled. A certificate
      * is accepted if it passes normal system validation (valid CA certs, other
-     * servers) OR matches the pinned fingerprint (the user's self-signed cert), so a
-     * pinned fingerprint does not reject every other HTTPS host. With no fingerprint
-     * pinned yet, self-signed certs are accepted for the TOFU cert-fetch flow.
-     * This covers CapacitorHttp requests which use HttpsURLConnection/OkHttp.
+     * servers) OR matches the pinned fingerprint for the connection's host (the
+     * user's self-signed cert), so a pinned fingerprint does not reject every other
+     * HTTPS host. With no fingerprint pinned yet for a host, self-signed certs are
+     * accepted for the TOFU cert-fetch flow. This covers CapacitorHttp requests
+     * which use HttpsURLConnection/OkHttp. X509ExtendedTrustManager is used (API 24+,
+     * matching minSdkVersion) so the socket/engine handshake exposes the peer host.
      */
     private void installFingerprintTrustManager() {
         try {
-            final String fp = this.trustedFingerprint;
             final X509TrustManager systemTrustManager = getSystemTrustManager();
             TrustManager[] trustManagers = new TrustManager[]{
-                new X509TrustManager() {
+                new X509ExtendedTrustManager() {
                     @Override
                     public void checkClientTrusted(X509Certificate[] chain, String authType) {}
 
                     @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) {}
+
+                    @Override
+                    public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) {}
+
+                    @Override
                     public void checkServerTrusted(X509Certificate[] chain, String authType) throws CertificateException {
-                        // Accept certs that pass normal system validation first, so a
-                        // pinned self-signed fingerprint does not reject valid-CA servers.
-                        if (systemTrustManager != null) {
+                        checkServerTrustedForHost(chain, authType, systemTrustManager, null);
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) throws CertificateException {
+                        String host = null;
+                        if (socket instanceof SSLSocket) {
                             try {
-                                systemTrustManager.checkServerTrusted(chain, authType);
-                                return;
-                            } catch (CertificateException notSystemValid) {
-                                // Not CA-valid (likely self-signed). Fall through to the
-                                // fingerprint check below.
+                                SSLSession handshakeSession = ((SSLSocket) socket).getHandshakeSession();
+                                if (handshakeSession != null) {
+                                    host = handshakeSession.getPeerHost();
+                                }
+                            } catch (Exception e) {
+                                // host stays null; treated as no pinned entry below
                             }
                         }
-                        if (fp == null || fp.isEmpty()) {
-                            // No fingerprint stored yet — allow connection so the app can
-                            // fetch the cert and show the TOFU dialog
-                            return;
-                        }
-                        if (chain == null || chain.length == 0) {
-                            throw new CertificateException("No server certificate");
-                        }
-                        try {
-                            String actual = sha256Fingerprint(chain[0]);
-                            if (!actual.equals(fp)) {
-                                throw new CertificateException(
-                                    "Certificate fingerprint mismatch: expected " + fp + ", got " + actual
-                                );
-                            }
-                        } catch (CertificateException ce) {
-                            throw ce;
-                        } catch (Exception e) {
-                            throw new CertificateException("Fingerprint check failed", e);
-                        }
+                        checkServerTrustedForHost(chain, authType, systemTrustManager, host);
+                    }
+
+                    @Override
+                    public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) throws CertificateException {
+                        checkServerTrustedForHost(chain, authType, systemTrustManager, engine.getPeerHost());
                     }
 
                     @Override
@@ -238,6 +261,51 @@ public class SSLTrustPlugin extends Plugin {
     }
 
     /**
+     * Validate a server certificate chain against the pinned fingerprint for the
+     * given host. Accepts certs that pass normal system validation first, so a
+     * pinned self-signed fingerprint does not reject valid-CA servers. With no
+     * fingerprint pinned for this host, self-signed certs are accepted (TOFU) so
+     * the app can fetch the cert and show the trust dialog.
+     */
+    private void checkServerTrustedForHost(
+            X509Certificate[] chain,
+            String authType,
+            X509TrustManager systemTrustManager,
+            String host
+    ) throws CertificateException {
+        if (systemTrustManager != null) {
+            try {
+                systemTrustManager.checkServerTrusted(chain, authType);
+                return;
+            } catch (CertificateException notSystemValid) {
+                // Not CA-valid (likely self-signed). Fall through to the
+                // fingerprint check below.
+            }
+        }
+        String fp = (host != null) ? trustedFingerprints.get(normalizeHost(host)) : null;
+        if (fp == null || fp.isEmpty()) {
+            // No fingerprint stored for this host yet — allow connection so the
+            // app can fetch the cert and show the TOFU dialog
+            return;
+        }
+        if (chain == null || chain.length == 0) {
+            throw new CertificateException("No server certificate");
+        }
+        try {
+            String actual = sha256Fingerprint(chain[0]);
+            if (!actual.equals(fp)) {
+                throw new CertificateException(
+                    "Certificate fingerprint mismatch: expected " + fp + ", got " + actual
+                );
+            }
+        } catch (CertificateException ce) {
+            throw ce;
+        } catch (Exception e) {
+            throw new CertificateException("Fingerprint check failed", e);
+        }
+    }
+
+    /**
      * Restore the original SSL socket factory and hostname verifier.
      */
     private void restoreOriginalCerts() {
@@ -251,19 +319,26 @@ public class SSLTrustPlugin extends Plugin {
 
     /**
      * Replace the WebView client with one that validates SSL certificates
-     * against the trusted fingerprint. This covers <img src="https://...">,
-     * MJPEG streams, and WSS connections in the WebView.
+     * against the trusted fingerprint for the connection's host. This covers
+     * <img src="https://...">, MJPEG streams, and WSS connections in the WebView.
      */
     private void installWebViewSslHandler() {
-        final String fp = this.trustedFingerprint;
         getActivity().runOnUiThread(() -> {
             try {
                 WebView webView = getBridge().getWebView();
                 webView.setWebViewClient(new BridgeWebViewClient(getBridge()) {
                     @Override
                     public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
-                        if (!enabled || fp == null || fp.isEmpty()) {
+                        if (!enabled) {
                             handler.cancel();
+                            return;
+                        }
+                        String host = Uri.parse(error.getUrl()).getHost();
+                        String fp = (host != null) ? trustedFingerprints.get(normalizeHost(host)) : null;
+                        if (fp == null || fp.isEmpty()) {
+                            // No fingerprint stored for this host yet — allow so the
+                            // app can fetch the cert and show the TOFU dialog
+                            handler.proceed();
                             return;
                         }
                         // Validate the certificate fingerprint
@@ -300,6 +375,20 @@ public class SSLTrustPlugin extends Plugin {
                 // Ignore
             }
         });
+    }
+
+    /**
+     * Normalize a host string for use as a trust-map key: lowercase (platform-
+     * reported hosts may differ in case from the JS side's `new URL().hostname`),
+     * and strip surrounding "[ ]" from IPv6 literals (JS stores them bracket-free).
+     */
+    private static String normalizeHost(String host) {
+        if (host == null) return null;
+        String normalized = host.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("[") && normalized.endsWith("]")) {
+            normalized = normalized.substring(1, normalized.length() - 1);
+        }
+        return normalized;
     }
 
     /**

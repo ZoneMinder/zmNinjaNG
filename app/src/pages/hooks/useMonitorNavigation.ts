@@ -8,6 +8,7 @@ import { useMemo, useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMonitors } from '../../api/monitors';
+import { getCurrentSession } from '../../services/sessions';
 import { filterEnabledMonitors } from '../../lib/monitor/filters';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useSwipeNavigation } from '../../hooks/useSwipeNavigation';
@@ -43,7 +44,7 @@ export function useMonitorNavigation({
   // Fetch all monitors for navigation
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
   });
 
   // Get enabled monitors list and find current monitor index

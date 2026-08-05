@@ -13,10 +13,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getEvents } from '../../../api/events';
+import { getCurrentSession } from '../../../services/sessions';
 import { useCurrentProfile } from '../../../hooks/useCurrentProfile';
 import { queryKeys } from '../../../lib/query/query-keys';
 import { useBandwidthSettings } from '../../../hooks/useBandwidthSettings';
-import { useAuthStore } from '../../../stores/auth';
+import { useAuthSlice } from '../../../stores/auth';
 import { Card, CardHeader, CardTitle, CardContent } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { Loader2, Activity } from 'lucide-react';
@@ -37,7 +38,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const bandwidth = useBandwidthSettings();
   const [timeRange, setTimeRange] = useState<TimeRange>('7d');
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
 
   // Calculate date range based on selection
   const { startDate, endDate } = useMemo(() => {
@@ -73,7 +74,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
   const { data: eventsData, isLoading, error } = useQuery({
     queryKey: queryKeys.eventsHeatmap(currentProfile?.id, timeRange),
     queryFn: () =>
-      getEvents({
+      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         startDateTime: formatForServer(startDate),
         endDateTime: formatForServer(endDate),
         limit: 1000,

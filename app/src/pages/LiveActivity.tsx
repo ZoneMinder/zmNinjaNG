@@ -14,9 +14,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useShallow } from 'zustand/react/shallow';
 import { EyeClosed } from 'lucide-react';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useSettingsStore } from '../stores/settings';
 import { useBandwidthSettings } from '../hooks/useBandwidthSettings';
 import { useAlarmStates } from '../hooks/useAlarmStates';
@@ -52,8 +53,9 @@ export default function LiveActivity() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const accessToken = useAuthStore((s) => s.accessToken);
+  const authSlice = useAuthSlice(currentProfile?.id ?? null);
+  const isAuthenticated = authSlice.isAuthenticated;
+  const accessToken = authSlice.accessToken;
   const updateSettings = useSettingsStore((s) => s.updateProfileSettings);
   const bandwidth = useBandwidthSettings();
   const gridContainerRef = useRef<HTMLDivElement>(null);
@@ -61,7 +63,7 @@ export default function LiveActivity() {
 
   const { data, isLoading: monitorsLoading, error: monitorsError } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
     refetchInterval: bandwidth.monitorStatusInterval,
   });

@@ -13,10 +13,11 @@
 
 import { useQueries } from '@tanstack/react-query';
 import { getAlarmStatus } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { parseAlarmState, type MonitorAlarmState } from '../lib/monitor/alarm-state';
 import { useCurrentProfile } from './useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 
 interface UseAlarmStatesOptions {
   /** Poll only while the page is visible. */
@@ -48,13 +49,13 @@ export function useAlarmStates(
   { enabled, pollIntervalMs }: UseAlarmStatesOptions
 ): UseAlarmStatesReturn {
   const { currentProfile } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const profileId = currentProfile?.id;
 
   return useQueries({
     queries: monitorIds.map((monitorId) => ({
       queryKey: queryKeys.monitorAlarmStatus(profileId, monitorId),
-      queryFn: () => getAlarmStatus(monitorId),
+      queryFn: () => getAlarmStatus(getCurrentSession().client, monitorId),
       enabled: enabled && !!profileId && isAuthenticated,
       refetchInterval: pollIntervalMs,
       // The page is only mounted while visible, so background refetching would

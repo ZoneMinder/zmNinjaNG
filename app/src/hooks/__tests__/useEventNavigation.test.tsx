@@ -17,6 +17,8 @@ vi.mock('../../api/events', async () => {
   return { ...actual, getAdjacentEvent: vi.fn() };
 });
 
+vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
+
 const getAdjacentEvent = vi.mocked(eventsApi.getAdjacentEvent);
 
 function makeEvent(id: string) {

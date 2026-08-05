@@ -1,14 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDaemonCheck, getDiskPercent, getLoad, getServers, getStorages } from '../server';
-import { getApiClient } from '../client';
 import { validateApiResponse } from '../../lib/zm/api-validator';
 import type { ApiClient } from '../client';
 
 const mockGet = vi.fn();
-
-vi.mock('../client', () => ({
-  getApiClient: vi.fn(),
-}));
+const mockClient = { get: mockGet } as unknown as ApiClient;
 
 vi.mock('../../lib/zm/api-validator', () => ({
   validateApiResponse: vi.fn((_, data) => data),
@@ -17,9 +13,6 @@ vi.mock('../../lib/zm/api-validator', () => ({
 describe('Server API', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getApiClient).mockReturnValue({
-      get: mockGet,
-    } as unknown as ApiClient);
   });
 
   it('returns server list', async () => {
@@ -29,7 +22,7 @@ describe('Server API', () => {
       },
     });
 
-    const servers = await getServers();
+    const servers = await getServers(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/servers.json');
     expect(validateApiResponse).toHaveBeenCalled();
@@ -41,7 +34,7 @@ describe('Server API', () => {
       data: { result: 1 },
     });
 
-    const isRunning = await getDaemonCheck();
+    const isRunning = await getDaemonCheck(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/host/daemonCheck.json', undefined);
     expect(isRunning).toBe(true);
@@ -52,7 +45,7 @@ describe('Server API', () => {
       data: { load: [1.2, 0.8, 0.5] },
     });
 
-    const load = await getLoad();
+    const load = await getLoad(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/host/getLoad.json', undefined);
     expect(load.load).toBe(1.2);
@@ -68,7 +61,7 @@ describe('Server API', () => {
       },
     });
 
-    const disk = await getDiskPercent();
+    const disk = await getDiskPercent(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/host/getDiskPercent.json', undefined);
     expect(disk.usage).toBe(75.5);
@@ -95,7 +88,7 @@ describe('Server API', () => {
       },
     });
 
-    const servers = await getServers();
+    const servers = await getServers(mockClient);
 
     expect(servers).toEqual([
       {
@@ -135,7 +128,7 @@ describe('Server API', () => {
       },
     });
 
-    const storages = await getStorages();
+    const storages = await getStorages(mockClient);
 
     expect(mockGet).toHaveBeenCalledWith('/storage.json');
     expect(storages).toHaveLength(1);
@@ -145,19 +138,19 @@ describe('Server API', () => {
 
   it('routes getDaemonCheck to alternate server when apiBaseUrl provided', async () => {
     mockGet.mockResolvedValue({ data: { result: 1 } });
-    await getDaemonCheck('https://pseudo.example.com/api');
+    await getDaemonCheck(mockClient, 'https://pseudo.example.com/api');
     expect(mockGet).toHaveBeenCalledWith('/host/daemonCheck.json', { baseURL: 'https://pseudo.example.com/api' });
   });
 
   it('routes getLoad to alternate server', async () => {
     mockGet.mockResolvedValue({ data: { load: [1.2] } });
-    await getLoad('https://pseudo.example.com/api');
+    await getLoad(mockClient, 'https://pseudo.example.com/api');
     expect(mockGet).toHaveBeenCalledWith('/host/getLoad.json', { baseURL: 'https://pseudo.example.com/api' });
   });
 
   it('routes getDiskPercent to alternate server', async () => {
     mockGet.mockResolvedValue({ data: { usage: 50, percent: 50 } });
-    await getDiskPercent('https://pseudo.example.com/api');
+    await getDiskPercent(mockClient, 'https://pseudo.example.com/api');
     expect(mockGet).toHaveBeenCalledWith('/host/getDiskPercent.json', { baseURL: 'https://pseudo.example.com/api' });
   });
 
@@ -168,7 +161,7 @@ describe('Server API', () => {
       },
     });
 
-    const storages = await getStorages();
+    const storages = await getStorages(mockClient);
 
     expect(storages).toEqual([]);
   });

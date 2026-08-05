@@ -19,10 +19,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { getMonitors } from '../api/monitors';
+import { getCurrentSession } from '../services/sessions';
 import { queryKeys } from '../lib/query/query-keys';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
 import { Platform } from '../lib/platform';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useKioskStore } from '../stores/kioskStore';
 import { useTvMode } from '../hooks/useTvMode';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
@@ -49,7 +50,7 @@ export function KeyboardShortcuts() {
   const location = useLocation();
   const { t } = useTranslation();
   const { currentProfile, settings } = useCurrentProfile();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
 
@@ -63,7 +64,7 @@ export function KeyboardShortcuts() {
 
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -73,9 +74,9 @@ export function KeyboardShortcuts() {
   // ignored so a number maps to the same monitor regardless of the active group.
   const monitors = useMemo(() => {
     const all = monitorsData?.monitors || [];
-    const excluded = getExcludedMonitorIdSet();
+    const excluded = currentProfile ? getExcludedMonitorIdSet(currentProfile.id) : new Set<string>();
     return excluded.size ? all.filter((m) => !excluded.has(m.Monitor.Id)) : all;
-  }, [monitorsData]);
+  }, [monitorsData, currentProfile]);
 
   const clearBuffer = useCallback(() => {
     bufferRef.current = '';

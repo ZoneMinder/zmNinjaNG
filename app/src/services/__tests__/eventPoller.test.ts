@@ -21,6 +21,10 @@ vi.mock('../../api/monitors', () => ({
   getMonitors: mockGetMonitors,
 }));
 
+vi.mock('../sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+}));
+
 vi.mock('../../lib/logger', () => ({
   log: {
     notifications: vi.fn(),
@@ -228,6 +232,8 @@ describe('EventPollerService', () => {
     await poller.start('profile-1', deps);
 
     expect(mockGetEvents).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
       expect.objectContaining({
         notesRegexp: 'detected:',
       }),

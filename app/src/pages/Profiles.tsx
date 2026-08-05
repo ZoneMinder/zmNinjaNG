@@ -39,7 +39,6 @@ import { Badge } from '../components/ui/badge';
 import type { Profile } from '../api/types';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
-import { setApiClient } from '../api/client';
 import { discoverUrls } from '../services/discovery';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
@@ -133,8 +132,17 @@ export default function Profiles() {
     setIsSaving(true);
     try {
       // Apply SSL trust before discovery so it works against a self-signed server.
-      const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
-      await applySSLTrustSetting(formData.allowSelfSignedCerts);
+      // Pass the edited (not-yet-saved) values as a candidate, keeping the
+      // profile's current stored fingerprint since this dialog doesn't re-verify it.
+      const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+      const existingFingerprint = useSettingsStore.getState().getProfileSettings(
+        selectedProfile.id
+      ).trustedCertFingerprint;
+      await applyTrustedCertificates({
+        urls: [formData.portalUrl, formData.apiUrl, formData.cgiUrl],
+        fingerprint: existingFingerprint,
+        enabled: formData.allowSelfSignedCerts,
+      });
 
       let portalUrl = formData.portalUrl.replace(/\/$/, '');
 
@@ -148,10 +156,8 @@ export default function Profiles() {
           ? { username: formData.username, password: formData.password }
           : undefined;
         const discovered = await discoverUrls(portalUrl, {
+          profileId: selectedProfile.id,
           credentials,
-          onClientCreated: (client) => {
-            setApiClient(client);
-          },
         });
         apiUrl = discovered.apiUrl;
         cgiUrl = discovered.cgiUrl;
@@ -179,6 +185,9 @@ export default function Profiles() {
       useSettingsStore.getState().updateProfileSettings(selectedProfile.id, {
         allowSelfSignedCerts: formData.allowSelfSignedCerts,
       });
+
+      // Re-apply from committed state now that the profile's URLs/settings are saved.
+      await applyTrustedCertificates();
 
       toast({
         title: t('common.success'),

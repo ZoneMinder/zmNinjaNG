@@ -4,19 +4,19 @@
  * Handles fetching server time configuration.
  */
 
-import { getApiClient } from './client';
+import type { ApiClient } from './client';
 import { HostTimeZoneResponseSchema } from './types';
 import { log, LogLevel } from '../lib/logger';
 import type { HttpError } from '../lib/http';
 
 /**
  * Get server time zone.
- * 
+ *
+ * @param client - API client for the target profile
  * @param token - Optional auth token to use for the request (overrides store)
  * @returns Promise resolving to time zone string (e.g., "America/New_York")
  */
-export async function getServerTimeZone(token?: string): Promise<string> {
-    const client = getApiClient();
+export async function getServerTimeZone(client: ApiClient, token?: string): Promise<string> {
     try {
         const config = token ? { params: { token } } : {};
         const response = await client.get<unknown>('/host/getTimeZone.json', config);

@@ -10,17 +10,21 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { loginSpy } = vi.hoisted(() => ({ loginSpy: vi.fn().mockResolvedValue(undefined) }));
+const { loginSpy, logoutSpy } = vi.hoisted(() => ({
+  loginSpy: vi.fn().mockResolvedValue(undefined),
+  logoutSpy: vi.fn(),
+}));
 
 vi.mock('../auth', () => ({
   useAuthStore: {
-    getState: () => ({ logout: vi.fn(), login: loginSpy, setTokens: vi.fn() }),
+    getState: () => ({ logout: logoutSpy, login: loginSpy, setTokens: vi.fn() }),
     subscribe: vi.fn(() => () => {}),
   },
+  getAuthSlice: vi.fn(() => ({ accessToken: null })),
+  registerAuthClientResolver: vi.fn(),
 }));
 vi.mock('../query-cache', () => ({ clearQueryCache: vi.fn() }));
-vi.mock('../../api/client', () => ({ setApiClient: vi.fn(), resetApiClient: vi.fn() }));
-vi.mock('../../api/store-gates', () => ({ createStoreApiClient: vi.fn(() => ({})) }));
+vi.mock('../../api/store-gates', () => ({ createStoreApiClient: vi.fn(() => ({})), resetAuthGates: vi.fn() }));
 vi.mock('../../api/time', () => ({ getServerTimeZone: vi.fn() }));
 vi.mock('../../services/profile-bootstrap', () => ({ performBootstrap: vi.fn() }));
 vi.mock('../../lib/security/secureStorage', () => ({
@@ -78,6 +82,12 @@ describe('switchProfile reLogin guard', () => {
     // profile's credentials.
     const after = await useProfileStore.getState().reLogin();
     expect(after).toBe(true);
-    expect(loginSpy).toHaveBeenCalledWith('asker', 'decrypted');
+    expect(loginSpy).toHaveBeenCalledWith(asProfileId('p-new'), 'asker', 'decrypted');
+  });
+
+  it('does not log out the outgoing profile during switch (refs #337)', async () => {
+    await useProfileStore.getState().switchProfile('p-new');
+
+    expect(logoutSpy).not.toHaveBeenCalled();
   });
 });

@@ -12,11 +12,12 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useShallow } from 'zustand/react/shallow';
 import { getEvents } from '../api/events';
 import type { EventFilters } from '../api/events';
+import { getCurrentSession } from '../services/sessions';
 import type { EventData } from '../api/types';
 import { getMonitors } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
-import { useAuthStore } from '../stores/auth';
+import { useAuthSlice } from '../stores/auth';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import { useSettingsStore, ALL_GROUPS_KEY, DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT } from '../stores/settings';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../hooks/useEventFilters';
@@ -61,7 +62,7 @@ export default function Events() {
     (state) => state.updateEventMontageGroupLayout
   );
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthSlice(currentProfile?.id ?? null).isAuthenticated;
   const { selectedGroupId, isFilterActive: isGroupFilterActive, filteredMonitorIds: groupMonitorIds } = useGroupFilter();
   const groupKey = selectedGroupId ?? ALL_GROUPS_KEY;
   const eventCols =
@@ -124,7 +125,7 @@ export default function Events() {
   // Fetch monitors for display in filter UI
   const { data: monitorsData } = useQuery({
     queryKey: queryKeys.monitors(currentProfile?.id),
-    queryFn: () => getMonitors(),
+    queryFn: () => getMonitors(getCurrentSession().client, getCurrentSession().profileId),
     enabled: !!currentProfile && isAuthenticated,
   });
 
@@ -208,7 +209,7 @@ export default function Events() {
   const { data: eventsData, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: queryKeys.eventsList(currentProfile?.id, filters, eventLimit, effectiveMonitorId, isGroupFilterActive, eventIdFilter, tagIdFilter),
     queryFn: () =>
-      getEvents({
+      getEvents(getCurrentSession().client, getCurrentSession().profileId, {
         ...filters,
         // Use effective monitor ID (user filter or group filter)
         monitorId: effectiveMonitorId,

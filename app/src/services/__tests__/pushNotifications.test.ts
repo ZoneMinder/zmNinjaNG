@@ -71,6 +71,10 @@ vi.mock('../../api/notifications', () => ({
   deleteNotification: (...args: unknown[]) => mockDeleteNotification(...args),
 }));
 
+vi.mock('../sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+}));
+
 const mockResolveProfileForNotification = vi.fn();
 const mockRequestProfileSwitch = vi.fn();
 vi.mock('../../lib/profile/notification-profile', () => ({
@@ -284,6 +288,7 @@ describe('registerTokenWithServer()', () => {
     await service.registerTokenWithServer();
 
     expect(mockRegisterToken).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({
         token: 'fcm-token-123',
         platform: 'android',
@@ -364,7 +369,7 @@ describe('deregister()', () => {
 
     await service.deregister();
 
-    expect(mockDeleteNotification).toHaveBeenCalledWith(99);
+    expect(mockDeleteNotification).toHaveBeenCalledWith(expect.anything(), 99);
     expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', { notificationId: null });
     expect(mockRemoveAllListeners).toHaveBeenCalled();
     expect(mockDeleteToken).toHaveBeenCalled();

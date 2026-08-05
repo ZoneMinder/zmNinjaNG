@@ -3,6 +3,7 @@ import { getObjectLabels, buildObjectLabelLine, __clearObjectLabelCacheForTests 
 import { getEvents } from '../../../api/events';
 
 vi.mock('../../../api/events', () => ({ getEvents: vi.fn() }));
+vi.mock('../../../services/sessions', () => ({ getSession: vi.fn(() => ({ client: {} })) }));
 
 const page = (notes: string[]) => ({
   events: notes.map((Notes, i) => ({ Event: { Id: String(i), MonitorId: '1', Notes } })),

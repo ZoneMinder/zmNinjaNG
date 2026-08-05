@@ -7,7 +7,8 @@
  * Key features:
  * - Persists profiles to localStorage (excluding passwords)
  * - Stores passwords in secure storage (native Keychain/Keystore or encrypted in localStorage)
- * - Handles profile switching with full state cleanup (auth, cache, API client)
+ * - Handles profile switching (query cache reset, session bootstrap); each
+ *   profile's session and auth state persist independently across a switch
  * - Manages app initialization state
  */
 
@@ -15,15 +16,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Profile, ProfileId } from '../api/types';
 import { asProfileId } from '../api/types';
-import { setApiClient } from '../api/client';
-import { createStoreApiClient } from '../api/store-gates';
 import { getServerTimeZone } from '../api/time';
 import { ProfileService } from '../services/profile';
 import { log, LogLevel } from '../lib/logger';
 import { setLogRedactionGate } from '../lib/log-sanitizer';
 import { setProfileSettingsGate } from '../lib/profile/profile-settings';
+import { getSession, dropSession, dropAllSessions, registerSessionsGate } from '../services/sessions';
 import { STORAGE_KEYS } from '../lib/zmninja-ng-constants';
-import { useAuthStore } from './auth';
+import { useAuthStore, getAuthSlice, registerAuthClientResolver } from './auth';
 import { useSettingsStore } from './settings';
 import { useMonitorSeenStore } from './monitorSeen';
 import { performBootstrap } from '../services/profile-bootstrap';
@@ -41,7 +41,7 @@ interface ProfileState {
 
 
   // Actions
-  addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>) => Promise<string>;
+  addProfile: (profile: Omit<Profile, 'id' | 'createdAt'>, id?: ProfileId) => Promise<string>;
   updateProfile: (id: string, updates: Partial<Profile>) => Promise<void>;
   deleteProfile: (id: string) => Promise<void>;
   deleteAllProfiles: () => Promise<void>;
@@ -95,16 +95,19 @@ export const useProfileStore = create<ProfileState>()(
          * Generates a UUID, encrypts the password (if provided), and adds to the list.
          * If it's the first profile, it becomes the default and current profile.
          */
-        addProfile: async (profileData) => {
+        addProfile: async (profileData, id) => {
           // Check for duplicate names
           if (!ProfileService.validateNameAvailability(profileData.name, get().profiles)) {
             throw new Error(`Profile "${profileData.name}" already exists`);
           }
 
-          // Boundary: this is where a profile id is minted. Every ProfileId
-          // downstream (currentProfileId, query-key cache scoping) traces
-          // back to this cast. Refs #217.
-          const newProfileId = asProfileId(crypto.randomUUID());
+          // Boundary: this is where a profile id is minted, unless the caller
+          // already minted one (e.g. ProfileForm testing the connection - and
+          // therefore building the auth session - before this profile is
+          // saved). Every ProfileId downstream (currentProfileId, query-key
+          // cache scoping) traces back to this cast or the id passed in.
+          // Refs #217, #337.
+          const newProfileId = id ?? asProfileId(crypto.randomUUID());
 
           // Store password in secure storage (native keystore on mobile, encrypted on web)
           if (profileData.password) {
@@ -130,16 +133,13 @@ export const useProfileStore = create<ProfileState>()(
             };
           });
 
-          // If this is now the current profile, initialize API client
+          // If this is now the current profile, ensure its session exists
           if (get().currentProfileId === newProfile.id) {
-            setApiClient(createStoreApiClient(newProfile.apiUrl, undefined, newProfile.id));
-
             // Fetch timezone for new profile
             try {
               // Get token from auth store state
-              const { useAuthStore } = await import('./auth');
-              const { accessToken } = useAuthStore.getState();
-              const timezone = await getServerTimeZone(accessToken || undefined);
+              const { accessToken } = getAuthSlice(newProfile.id);
+              const timezone = await getServerTimeZone(getSession(newProfile.id).client, accessToken || undefined);
               get().updateProfile(newProfile.id, { timezone });
             } catch (e) {
               log.profileService('Failed to fetch timezone for new profile', LogLevel.WARN, { error: e });
@@ -153,7 +153,7 @@ export const useProfileStore = create<ProfileState>()(
          * Update an existing profile.
          * 
          * Handles password updates by re-encrypting and storing in secure storage.
-         * Re-initializes API client if the current profile's URL changes.
+         * Drops the profile's cached session if its connection details changed.
          */
         updateProfile: async (id, updates) => {
           log.profileService(`updateProfile called for profile ID: ${id}`, LogLevel.INFO, updates);
@@ -175,11 +175,16 @@ export const useProfileStore = create<ProfileState>()(
             profiles: state.profiles.map((p) => (p.id === id ? { ...p, ...processedUpdates } : p)),
           }));
 
-          // If updating current profile's API URL, reinitialize client
-          const { profiles, currentProfileId } = get();
-          const currentProfile = profiles.find(p => p.id === currentProfileId);
-          if (currentProfile?.id === id && updates.apiUrl) {
-            setApiClient(createStoreApiClient(updates.apiUrl, get().reLogin, id));
+          // Connection details changed: evict the cached session so the next
+          // getSession rebuilds it against the new URL/credentials. Refs #337.
+          if (
+            updates.apiUrl !== undefined ||
+            updates.portalUrl !== undefined ||
+            updates.cgiUrl !== undefined ||
+            updates.username !== undefined ||
+            updates.password !== undefined
+          ) {
+            dropSession(asProfileId(id));
           }
 
           log.profileService('updateProfile complete', LogLevel.INFO);
@@ -198,6 +203,12 @@ export const useProfileStore = create<ProfileState>()(
           // Drop this profile's per-monitor seen-watermarks (refs #239)
           useMonitorSeenStore.getState().clearProfile(id);
 
+          // Drop its cached session and clear its auth slice/persisted
+          // refresh token - otherwise all three survive the profile's own
+          // deletion. Refs #337.
+          dropSession(asProfileId(id));
+          useAuthStore.getState().logout(asProfileId(id));
+
           set((state) => {
             const profiles = state.profiles.filter((p) => p.id !== id);
             const currentProfileId =
@@ -209,20 +220,13 @@ export const useProfileStore = create<ProfileState>()(
 
             return { profiles, currentProfileId };
           });
-
-          // Reinitialize API client if current profile changed
-          const { profiles: updatedProfiles, currentProfileId: newCurrentId } = get();
-          const newCurrentProfile = updatedProfiles.find(p => p.id === newCurrentId);
-          if (newCurrentProfile) {
-            setApiClient(createStoreApiClient(newCurrentProfile.apiUrl, get().reLogin, newCurrentProfile.id));
-          }
         },
 
         /**
          * Delete all profiles.
-         * 
+         *
          * Clears all profiles and removes all passwords from secure storage.
-         * Resets the API client.
+         * Drops every cached session.
          */
         deleteAllProfiles: async () => {
           const { profiles } = get();
@@ -237,25 +241,27 @@ export const useProfileStore = create<ProfileState>()(
           // Clear all profiles and reset state
           set({ profiles: [], currentProfileId: null });
 
-          // Reset API client
-          const { resetApiClient } = await import('../api/client');
-          resetApiClient();
+          // Drop every cached session and clear every profile's auth slice
+          // and persisted refresh token. Refs #337.
+          dropAllSessions();
+          useAuthStore.getState().logoutAll();
 
           log.profileService('All profiles deleted', LogLevel.INFO);
         },
 
         /**
          * Switch to a different profile.
-         * 
-         * Performs a full context switch:
-         * 1. Clears auth state (logout)
+         *
+         * Performs a context switch:
+         * 1. Quits the outgoing profile's active streams
          * 2. Clears query cache (React Query)
-         * 3. Resets API client
-         * 4. Sets new profile as current
-         * 5. Initializes API client with new URL
-         * 6. Attempts to authenticate with stored credentials
-         * 
-         * Includes rollback logic if switching fails.
+         * 3. Sets new profile as current
+         * 4. Ensures the new profile's session exists
+         * 5. Runs bootstrap (auth, timezone, zms path, multi-port)
+         *
+         * Sessions are per-profile and persist across a switch: the outgoing
+         * profile's auth state is left untouched (refs #337). Includes
+         * rollback logic if switching fails.
          */
         switchProfile: async (id) => {
           const profile = get().profiles.find((p) => p.id === id);
@@ -279,27 +285,18 @@ export const useProfileStore = create<ProfileState>()(
           switchInProgress = true;
           try {
             // STEP 0: Quit the previous profile's active streams while its SSL
-            // trust and access token are still in effect. Done before logout and
-            // the new profile's SSL-trust flip so a self-signed old server's
+            // trust and access token are still in effect, before the new
+            // profile's SSL-trust flip, so a self-signed old server's
             // CMD_QUIT is not rejected, which would orphan its nph-zms. refs #188
             log.profileService('Step 0: Quitting previous profile streams', LogLevel.INFO);
             const { quitAllActiveStreams } = await import('../lib/monitor/active-streams');
             await quitAllActiveStreams();
 
-            // STEP 1: Clear ALL existing state FIRST (critical for avoiding data mixing)
-            log.profileService('Step 1: Clearing all existing state', LogLevel.INFO);
-
-            const { useAuthStore } = await import('./auth');
-            log.profileService('Clearing auth state (logout)', LogLevel.INFO);
-            useAuthStore.getState().logout();
-
+            // STEP 1: Clear the query cache so the new profile doesn't render
+            // stale data left over from the outgoing profile.
             const { clearQueryCache } = await import('./query-cache');
-            log.profileService('Clearing query cache', LogLevel.INFO);
+            log.profileService('Step 1: Clearing query cache', LogLevel.INFO);
             clearQueryCache();
-
-            const { resetApiClient } = await import('../api/client');
-            log.profileService('Resetting API client', LogLevel.INFO);
-            resetApiClient();
 
             // STEP 2: Update current profile ID
             // Use profile.id (already a ProfileId) rather than the raw `id`
@@ -310,10 +307,10 @@ export const useProfileStore = create<ProfileState>()(
             // Update last used timestamp (don't await this)
             get().updateProfile(id, { lastUsed: Date.now() });
 
-            // STEP 3: Initialize API client with new profile
-            log.profileService('Step 3: Initializing API client', LogLevel.INFO, { apiUrl: profile.apiUrl });
-            setApiClient(createStoreApiClient(profile.apiUrl, get().reLogin, profile.id));
-            log.profileService('API client initialized', LogLevel.INFO);
+            // STEP 3: Ensure the new profile's session exists
+            log.profileService('Step 3: Ensuring session', LogLevel.INFO, { apiUrl: profile.apiUrl });
+            getSession(profile.id);
+            log.profileService('Session ready', LogLevel.INFO);
 
             // STEP 4-6: Run bootstrap tasks (auth, timezone, zms path, multi-port)
             log.profileService('Step 4-6: Running bootstrap tasks', LogLevel.INFO);
@@ -334,23 +331,22 @@ export const useProfileStore = create<ProfileState>()(
               });
 
               try {
-                // Clear state again to ensure clean rollback
+                // Clear the failed switch target's half-built auth state (not
+                // the profile we're restoring to).
                 const { useAuthStore } = await import('./auth');
-                useAuthStore.getState().logout();
+                useAuthStore.getState().logout(profile.id);
 
                 const { clearQueryCache } = await import('./query-cache');
                 clearQueryCache();
-
-                const { resetApiClient } = await import('../api/client');
-                resetApiClient();
 
                 // Restore previous profile
                 log.profileService('Restoring previous profile ID', LogLevel.INFO);
                 set({ currentProfileId: previousProfileId });
 
-                // Re-initialize with previous profile
-                log.profileService('Re-initializing API client', LogLevel.INFO, { apiUrl: previousProfile.apiUrl });
-                setApiClient(createStoreApiClient(previousProfile.apiUrl, get().reLogin, previousProfile.id));
+                // Its session persisted through the failed switch; ensure it
+                // still exists.
+                log.profileService('Re-ensuring session for rollback profile', LogLevel.INFO, { apiUrl: previousProfile.apiUrl });
+                getSession(previousProfile.id);
 
                 // Run bootstrap for previous profile
                 log.profileService('Running bootstrap for rollback profile', LogLevel.INFO);
@@ -400,7 +396,7 @@ export const useProfileStore = create<ProfileState>()(
             if (!password) return false;
 
             const { useAuthStore } = await import('./auth');
-            await useAuthStore.getState().login(profile.username, password);
+            await useAuthStore.getState().login(currentProfileId, profile.username, password);
             return true;
           } catch (e) {
             log.profileService('Re-login helper failed', LogLevel.ERROR, { error: e });
@@ -438,7 +434,7 @@ export const useProfileStore = create<ProfileState>()(
     },
     {
       name: STORAGE_KEYS.profilesStore,
-      // On load, initialize API client with current profile and authenticate
+      // On load, ensure the current profile's session exists and authenticate
       // Complex initialization logic is extracted to services/profile-initialization.ts for maintainability
       onRehydrateStorage: () => {
         try {
@@ -494,18 +490,35 @@ setLogRedactionGate({
 // imported by api/events.ts and other api modules downstream of this store).
 // Refs #217.
 setProfileSettingsGate({
-  getExcludedMonitorIds: () => {
-    const { currentProfileId } = useProfileStore.getState();
-    if (!currentProfileId) return [];
-    return useSettingsStore.getState().getProfileSettings(currentProfileId).excludedMonitorIds;
-  },
+  getExcludedMonitorIds: (profileId) => useSettingsStore.getState().getProfileSettings(profileId).excludedMonitorIds,
 });
+
+// services/sessions.ts has no store imports for the same reason (breaking a
+// static import cycle back through this store). reLoginFor ignores the given
+// id and reuses today's reLogin, which always targets currentProfileId. Every
+// getSession call in this file (addProfile, switchProfile, rollback) runs
+// only after currentProfileId has already been set to that same profile, so
+// this stays correct; a caller outside this store (e.g. a background poller)
+// invoking getSession for a non-current profile would get a reLogin that
+// targets the wrong profile on 401 - not exercised today. Refs #337.
+registerSessionsGate({
+  getProfile: (id) => useProfileStore.getState().profiles.find((p) => p.id === id),
+  getCurrentProfileId: () => useProfileStore.getState().currentProfileId,
+  reLoginFor: () => () => useProfileStore.getState().reLogin(),
+});
+
+// stores/auth.ts's login/refreshAccessToken resolve their API client through
+// this late-bound gate: getSession can't be imported there directly without
+// cycling (services/sessions -> api/store-gates -> stores/auth). This module
+// already imports both, so it wires them together. Refs #337.
+registerAuthClientResolver((profileId) => getSession(profileId).client);
 
 // Subscribe to auth store to update refresh token in profile
 useAuthStore.subscribe((state) => {
-  const { refreshToken } = state;
   const { currentProfileId, updateProfile, profiles } = useProfileStore.getState();
+  if (!currentProfileId) return;
 
+  const refreshToken = state.slices[currentProfileId]?.refreshToken;
   if (currentProfileId && refreshToken) {
     const profile = profiles.find(p => p.id === currentProfileId);
     if (profile && profile.refreshToken !== refreshToken) {

@@ -47,8 +47,8 @@ export function useCertTrustPrompt(): UseCertTrustPromptResult {
     if (!currentProfile || !Platform.isNative) return;
     setVerifying(true);
     try {
-      const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
-      await applySSLTrustSetting(true);
+      const { applyTrustedCertificates, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
+      await applyTrustedCertificates();
       const info = await getServerCertFingerprint(currentProfile.portalUrl);
       if (info) {
         const stored = settings.trustedCertFingerprint;
@@ -72,8 +72,8 @@ export function useCertTrustPrompt(): UseCertTrustPromptResult {
       allowSelfSignedCerts: true,
       trustedCertFingerprint: certInfo.fingerprint,
     });
-    const { applySSLTrustSetting } = await import('../lib/security/ssl-trust');
-    await applySSLTrustSetting(true, certInfo.fingerprint);
+    const { applyTrustedCertificates } = await import('../lib/security/ssl-trust');
+    await applyTrustedCertificates();
   }, [currentProfile, certInfo, updateProfileSettings]);
 
   const onCancel = useCallback(() => {

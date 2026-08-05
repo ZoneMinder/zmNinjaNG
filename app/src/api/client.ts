@@ -2,7 +2,6 @@ import { httpRequest, type HttpError, type HttpOptions, type HttpResponse } from
 import { API_REQUEST } from '../lib/zmninja-ng-constants';
 import { log, LogLevel } from '../lib/logger';
 import { sanitizeObject } from '../lib/log-sanitizer';
-import { setApiClientInitialized } from './client-ready';
 
 export type ApiMethod = NonNullable<HttpOptions['method']>;
 
@@ -77,8 +76,6 @@ export interface ApiClientGates {
   auth: AuthGate;
   settings: SettingsGate;
 }
-
-let apiClient: ApiClient | null = null;
 
 // Correlation ID counter - starts at 1, increments with each request, resets on app restart
 let correlationIdCounter = 0;
@@ -296,33 +293,3 @@ export function createApiClient(
   };
 }
 
-export function getApiClient(): ApiClient {
-  if (!apiClient) {
-    throw new Error('API client not initialized. Call createApiClient first.');
-  }
-  return apiClient;
-}
-
-export function setApiClient(client: ApiClient): void {
-  apiClient = client;
-  setApiClientInitialized(true);
-}
-
-/**
- * Hooks run by resetApiClient. api/store-gates.ts registers the auth store's
- * resetAuthGates here so a profile switch clears the pending single-flight
- * gates without the client importing the store.
- */
-const resetHooks = new Set<() => void>();
-
-export function registerApiClientResetHook(hook: () => void): void {
-  resetHooks.add(hook);
-}
-
-export function resetApiClient(): void {
-  apiClient = null;
-  // A profile switch must not await a login/refresh/recovery started for the
-  // old profile.
-  resetHooks.forEach((hook) => hook());
-  setApiClientInitialized(false);
-}

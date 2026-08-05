@@ -8,6 +8,7 @@
 import type { Profile } from '../api/types';
 import { getServerTimeZone } from '../api/time';
 import { fetchGo2RTCPath, fetchZmsPath } from '../api/auth';
+import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 
 export interface BootstrapContext {
@@ -27,7 +28,7 @@ export async function bootstrapAuth(
     log.profileService('This is normal for public servers', LogLevel.INFO);
     // Mark as authenticated so API client doesn't try to re-login
     const { useAuthStore } = await import('../stores/auth');
-    useAuthStore.getState().setTokens({});
+    useAuthStore.getState().setTokens(profile.id, {});
     return;
   }
 
@@ -42,7 +43,7 @@ export async function bootstrapAuth(
     }
 
     const { useAuthStore } = await import('../stores/auth');
-    await useAuthStore.getState().login(profile.username, decryptedPassword);
+    await useAuthStore.getState().login(profile.id, profile.username, decryptedPassword);
     log.profileService('Authentication successful', LogLevel.INFO);
   } catch (authError: unknown) {
     log.profileService(
@@ -62,9 +63,9 @@ export async function bootstrapTimezone(
 ): Promise<void> {
   try {
     log.profileService('Fetching server timezone', LogLevel.INFO);
-    const { useAuthStore } = await import('../stores/auth');
-    const { accessToken } = useAuthStore.getState();
-    const timezone = await getServerTimeZone(accessToken || undefined);
+    const { getAuthSlice } = await import('../stores/auth');
+    const { accessToken } = getAuthSlice(profile.id);
+    const timezone = await getServerTimeZone(getSession(profile.id).client, accessToken || undefined);
 
     if (timezone !== profile.timezone) {
       log.profileService('Server timezone fetched', LogLevel.INFO, { timezone });
@@ -86,7 +87,7 @@ export async function bootstrapZmsPath(
 ): Promise<void> {
   try {
     log.profileService('Fetching ZMS path from server config', LogLevel.INFO);
-    const zmsPath = await fetchZmsPath();
+    const zmsPath = await fetchZmsPath(getSession(profile.id).client);
 
     if (!zmsPath || !profile.portalUrl) {
       log.profileService('ZMS path not available, keeping current CGI URL', LogLevel.INFO, {
@@ -134,7 +135,7 @@ export async function bootstrapGo2RTCPath(
 ): Promise<void> {
   try {
     log.profileService('Fetching Go2RTC path from server config', LogLevel.INFO);
-    const go2rtcPath = await fetchGo2RTCPath();
+    const go2rtcPath = await fetchGo2RTCPath(getSession(profile.id).client);
 
     if (!go2rtcPath) {
       log.profileService('Go2RTC not configured on server', LogLevel.INFO);
@@ -173,7 +174,7 @@ export async function bootstrapMultiPortStreaming(
   try {
     log.profileService('Fetching server configuration for multi-port streaming', LogLevel.INFO);
     const { fetchMinStreamingPort } = await import('../api/server');
-    const minPort = await fetchMinStreamingPort();
+    const minPort = await fetchMinStreamingPort(getSession(profile.id).client);
 
     if (minPort === null) {
       log.profileService('Multi-port streaming not configured on server', LogLevel.DEBUG);
@@ -230,13 +231,13 @@ export async function bootstrapMultiPortStreaming(
 /**
  * Bootstrap multi-server map from /servers.json
  */
-export async function bootstrapServerMap(): Promise<void> {
+export async function bootstrapServerMap(profile: Profile): Promise<void> {
   try {
     const { getServers } = await import('../api/server');
     const { buildServerMap, setServerMap } = await import('../lib/zm/server-resolver');
 
     log.profileService('Fetching server list for multi-server routing', LogLevel.INFO);
-    const servers = await getServers();
+    const servers = await getServers(getSession(profile.id).client);
 
     if (servers.length === 0) {
       log.profileService('No servers returned, single-server mode', LogLevel.DEBUG);
@@ -269,7 +270,7 @@ export async function bootstrapSSLTrust(
   try {
     const { useSettingsStore } = await import('../stores/settings');
     const settings = useSettingsStore.getState().getProfileSettings(profile.id);
-    const { applySSLTrustSetting, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
+    const { applyTrustedCertificates, getServerCertFingerprint } = await import('../lib/security/ssl-trust');
 
     log.sslTrust(
       `Profile "${profile.name}" allowSelfSignedCerts=${settings.allowSelfSignedCerts}; setting SSL trust override to ${settings.allowSelfSignedCerts}`,
@@ -277,13 +278,13 @@ export async function bootstrapSSLTrust(
     );
 
     if (!settings.allowSelfSignedCerts) {
-      await applySSLTrustSetting(false);
+      await applyTrustedCertificates();
       return;
     }
 
     // Enable SSL trust (installs TrustManager for HTTP; WebView handler
-    // is only installed when setTrustedFingerprint receives a non-null value)
-    await applySSLTrustSetting(true, settings.trustedCertFingerprint);
+    // is only installed when a fingerprint has been pinned for this host)
+    await applyTrustedCertificates();
 
     // Migration: self-signed certs enabled but no fingerprint stored.
     // Fetch the cert and signal the UI to show the TOFU dialog.
@@ -309,7 +310,7 @@ export async function performBootstrap(
   // SSL trust must be configured before any API calls
   await bootstrapSSLTrust(profile);
   await bootstrapAuth(profile, context);
-  await bootstrapServerMap();
+  await bootstrapServerMap(profile);
   await bootstrapTimezone(profile, context);
   await bootstrapZmsPath(profile, context);
   await bootstrapGo2RTCPath(profile, context);

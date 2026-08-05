@@ -13,7 +13,9 @@ import { log, LogLevel } from '../lib/logger';
 import { navigationService } from '../lib/navigation';
 import type { NotificationSettings, NotificationSource } from '../types/notifications';
 import type { Profile } from '../api/types';
+import { asProfileId } from '../api/types';
 import { registerToken, deleteNotification } from '../api/notifications';
+import { getSession } from './sessions';
 import { getAppVersion } from '../lib/version';
 import { getEventImageUrl } from '../lib/zm/url-builder';
 import { NOTIFICATIONS_SERVICE } from '../lib/zmninja-ng-constants';
@@ -229,7 +231,7 @@ export class MobilePushService {
           const notifId = settings.notificationId;
           if (notifId) {
             log.push('Deleting notification via ZM API (direct mode)', LogLevel.INFO, { notificationId: notifId });
-            await deleteNotification(notifId);
+            await deleteNotification(getSession(asProfileId(profileId)).client, notifId);
             gates.updateProfileSettings(profileId, { notificationId: null });
           }
         } else {
@@ -435,7 +437,7 @@ export class MobilePushService {
 
         log.push('Registering FCM token via ZM REST API (direct mode)', LogLevel.INFO, { platform, profile: currentProfile?.name });
 
-        const result = await registerToken({
+        const result = await registerToken(getSession(asProfileId(profileId)).client, {
           token,
           platform,
           monitorList,

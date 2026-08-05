@@ -12,6 +12,10 @@ vi.mock('../../api/monitors', () => ({
   getAlarmStatus: vi.fn(),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getCurrentSession: vi.fn(() => ({ client: {} })),
+}));
+
 // Mutable so a test can set a page preference or the server version before it
 // renders. vi.hoisted because the mock factories below are hoisted above
 // ordinary module scope.
@@ -43,6 +47,7 @@ vi.mock('../../stores/auth', () => ({
       version: string | null;
     }) => unknown
   ) => selector({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
+  useAuthSlice: () => ({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
 }));
 
 // The real stores/notifications.ts module is heavy: importing it for real
@@ -144,7 +149,7 @@ describe('LiveActivity', () => {
   });
 
   it('shows only the alarming monitor, named without its id', async () => {
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -160,7 +165,7 @@ describe('LiveActivity', () => {
   });
 
   it('announces the alarm state through the header icon', async () => {
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -276,7 +281,7 @@ describe('LiveActivity', () => {
     // The mocked poll interval is 1000ms and the cooling timer fires at 1000ms,
     // so a settled page has no legitimate reason to render at all in the
     // window.
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -301,7 +306,7 @@ describe('LiveActivity', () => {
   });
 
   it('labels a tile with how long its alarm episode has run', async () => {
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -331,7 +336,7 @@ describe('LiveActivity', () => {
     vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       return { status: 2 } as never;
@@ -373,7 +378,7 @@ describe('LiveActivity', () => {
     // alarm is new information and has to show.
     let quiet = false;
     let alarmAgain = false;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       if (alarmAgain) return { status: 2 } as never;
       return { status: quiet ? 0 : 2 } as never;
@@ -443,7 +448,7 @@ describe('LiveActivity', () => {
     // the gear. The tiles themselves still render, so the assertion below is
     // about the chrome rather than about the page having gone blank.
     env.settings.liveActivityIsFullscreen = true;
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -557,7 +562,7 @@ describe('LiveActivity', () => {
     });
     // Both monitors are pollable in this fixture; the ignore-list case itself
     // is covered by the next test, which overrides the mocked settings.
-    expect(mockStatus.mock.calls.map((c) => c[0]).sort()).toEqual(['3', '4']);
+    expect(mockStatus.mock.calls.map((c) => c[1]).sort()).toEqual(['3', '4']);
   });
 
   it('drops an ignored monitor id from polling', async () => {
@@ -591,7 +596,7 @@ describe('LiveActivity', () => {
     await waitFor(() => {
       expect(reimportedGetAlarmStatus).toHaveBeenCalled();
     });
-    expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[0])).toEqual(['3']);
+    expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[1])).toEqual(['3']);
   });
 
   it('keeps the short enter duration on the tile', async () => {
@@ -604,7 +609,7 @@ describe('LiveActivity', () => {
     // arbitrary-value class so that re-adding any transition duration here
     // cannot silently swallow it again. The collision is invisible by reading
     // the source, so the resolved class list is what gets asserted.
-    mockStatus.mockImplementation(async (id: string) =>
+    mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
 
@@ -653,7 +658,7 @@ describe('LiveActivity', () => {
     vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarms once to enter the list, then stays quiet inside the 30s dwell,
@@ -709,7 +714,7 @@ describe('LiveActivity', () => {
     vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (id: string) => {
+    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarming on the first poll only, quiet from then on.

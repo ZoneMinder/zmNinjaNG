@@ -42,15 +42,19 @@ vi.mock('../../api/server', () => ({
   fetchMinStreamingPort: vi.fn(),
 }));
 
+vi.mock('../../services/sessions', () => ({
+  getSession: vi.fn(() => ({ client: {} })),
+}));
+
 // Mock stores - these need to be dynamic imports in the actual code
 vi.mock('../auth', () => ({
   useAuthStore: {
     getState: vi.fn(() => ({
       login: vi.fn().mockResolvedValue(undefined),
-      accessToken: 'mock-token',
       setTokens: vi.fn(),
     })),
   },
+  getAuthSlice: vi.fn(() => ({ accessToken: 'mock-token' })),
 }));
 
 vi.mock('../settings', () => ({
@@ -93,7 +97,6 @@ describe('Profile Bootstrap', () => {
       const mockSetTokens = vi.fn();
       vi.mocked(useAuthStore.getState).mockReturnValue({
         login: vi.fn(),
-        accessToken: null,
         setTokens: mockSetTokens,
       } as any);
 
@@ -102,7 +105,7 @@ describe('Profile Bootstrap', () => {
       await bootstrapAuth(profileWithoutCreds, mockContext);
 
       expect(mockContext.getDecryptedPassword).not.toHaveBeenCalled();
-      expect(mockSetTokens).toHaveBeenCalledWith({});
+      expect(mockSetTokens).toHaveBeenCalledWith(mockProfile.id, {});
     });
 
     it('authenticates with stored credentials', async () => {
@@ -110,13 +113,12 @@ describe('Profile Bootstrap', () => {
       const mockLogin = vi.fn().mockResolvedValue(undefined);
       vi.mocked(useAuthStore.getState).mockReturnValue({
         login: mockLogin,
-        accessToken: null,
       } as any);
 
       await bootstrapAuth(mockProfile, mockContext);
 
       expect(mockContext.getDecryptedPassword).toHaveBeenCalledWith('test-profile');
-      expect(mockLogin).toHaveBeenCalledWith('admin', 'decrypted-password');
+      expect(mockLogin).toHaveBeenCalledWith(mockProfile.id, 'admin', 'decrypted-password');
     });
 
     it('handles password decryption failure gracefully', async () => {
