@@ -163,6 +163,51 @@ describe('ProfileSwitcher', () => {
 
       expect(screen.queryByTestId('profile-switcher-all-active')).not.toBeInTheDocument();
     });
+
+    it('lists the group under the All Servers item, named and ticked', () => {
+      render(<ProfileSwitcher />);
+
+      const items = screen.getAllByTestId(/^profile-switcher-(item-.+|all|virtual-.+)$/);
+      const entry = screen.getByTestId(`profile-switcher-virtual-${group}`);
+      expect(items.at(-1)).toBe(entry);
+      expect(items.at(-2)).toBe(screen.getByTestId('profile-switcher-all'));
+      expect(entry).toHaveTextContent('Backyard');
+      expect(screen.getByTestId(`profile-switcher-active-virtual-${group}`)).toBeInTheDocument();
+    });
+
+    it('switches to the group id when its entry is clicked', () => {
+      mockProfileState.currentProfileId = 'profile-a';
+
+      render(<ProfileSwitcher />);
+      fireEvent.click(screen.getByTestId(`profile-switcher-virtual-${group}`));
+
+      expect(switchProfileMock).toHaveBeenCalledWith(group);
+    });
+
+    it('leaves the group entry unticked while All Servers is active', () => {
+      mockProfileState.currentProfileId = ALL_PROFILES_ID;
+
+      render(<ProfileSwitcher />);
+
+      expect(screen.getByTestId(`profile-switcher-virtual-${group}`)).toBeInTheDocument();
+      expect(
+        screen.queryByTestId(`profile-switcher-active-virtual-${group}`)
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId('profile-switcher-all-active')).toBeInTheDocument();
+    });
+
+    // Same gate as the All Servers item: one selectable server aggregates
+    // nothing, whichever aggregate is named.
+    it('hides groups once fewer than 2 profiles are selectable', () => {
+      setProfiles([profileA, { ...profileB, disabled: true }]);
+      mockProfileState.virtualProfiles = [
+        { id: group, name: 'Backyard', memberProfileIds: ['profile-b'] },
+      ];
+
+      render(<ProfileSwitcher />);
+
+      expect(screen.queryByTestId(`profile-switcher-virtual-${group}`)).not.toBeInTheDocument();
+    });
   });
 
   it('marks the All Servers item while the sentinel is active', () => {

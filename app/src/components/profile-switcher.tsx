@@ -47,6 +47,9 @@ export function ProfileSwitcher() {
   // question, so a group never marks it as the current selection (refs #337).
   const isAggregate = isAggregateProfileId(currentProfileId);
   const aggregateLabel = useAggregateLabel();
+  // Raw slice with the `?? []` inside the selector so useShallow dedupes
+  // repeated empty snapshots to one reference (see useProfileScope).
+  const virtualProfiles = useProfileStore(useShallow((state) => state.virtualProfiles ?? []));
   const currentProfile = useProfileStore(
     useShallow((state) => {
       const { profiles, currentProfileId } = state;
@@ -168,6 +171,31 @@ export function ProfileSwitcher() {
             )}
           </DropdownMenuItem>
         )}
+        {/* Groups sit under the built-in All Servers entry, behind the same
+            gate: with one selectable server no aggregate has anything to
+            aggregate (refs #337). */}
+        {profiles.length >= 2 &&
+          virtualProfiles.map((group) => (
+            <DropdownMenuItem
+              key={group.id}
+              onClick={() => handleSwitch(group.id)}
+              className="flex items-center justify-between cursor-pointer"
+              data-testid={`profile-switcher-virtual-${group.id}`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Layers className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="font-medium truncate" title={group.name}>
+                  {group.name}
+                </span>
+              </div>
+              {currentProfileId === group.id && (
+                <Check
+                  className="h-4 w-4 text-primary shrink-0"
+                  data-testid={`profile-switcher-active-virtual-${group.id}`}
+                />
+              )}
+            </DropdownMenuItem>
+          ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleAddProfile} className="cursor-pointer" data-testid="profile-switcher-add-profile">
           <Plus className="h-4 w-4 mr-2" />
