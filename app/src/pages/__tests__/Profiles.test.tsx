@@ -96,15 +96,26 @@ const OFFICE = {
   createdAt: 2,
 };
 
-function storeState(profiles: typeof HOME[], currentProfileId: string) {
+const deleteVirtualProfileMock = vi.fn();
+
+function storeState(
+  profiles: typeof HOME[],
+  currentProfileId: string,
+  virtualProfiles: { id: string; name: string; memberProfileIds: string[] }[] = []
+) {
   return {
     profiles,
+    virtualProfiles,
     currentProfileId,
     updateProfile: vi.fn(),
     deleteProfile: vi.fn(),
     deleteAllProfiles: vi.fn(),
     switchProfile: switchProfileMock,
     setProfileDisabled: setProfileDisabledMock,
+    deleteVirtualProfile: deleteVirtualProfileMock,
+    addVirtualProfile: vi.fn(),
+    updateVirtualProfile: vi.fn(),
+    profileExists: vi.fn(() => false),
   };
 }
 
@@ -256,5 +267,132 @@ describe('Profiles Page', () => {
 
     expect(setProfileDisabledMock).toHaveBeenCalledWith('p1', true);
     expect(sonnerToast.error).toHaveBeenCalledWith('profiles.cannot_disable_active');
+  });
+
+  // Group cards: the visible half of virtual profiles (refs #337, spec 11).
+  describe('group cards', () => {
+    const GROUP = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: ['p2'] };
+
+    beforeEach(() => {
+      deleteVirtualProfileMock.mockReset();
+      useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
+    });
+
+    it('names the group, counts its members, and warns about the cost', () => {
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+
+      const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
+      expect(card).toHaveTextContent('Backyard');
+      expect(card).toHaveTextContent('profiles.group_member_count:{"count":1}');
+      expect(card).toHaveTextContent('profiles.group_resource_note');
+    });
+
+    it('renders group cards after the All Servers card', () => {
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+
+      const cards = screen.getAllByTestId(/^profile-card(-all|-virtual-.+)?$/);
+      expect(cards.at(-1)).toBe(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+    });
+
+    it('marks the group card active while that group is current', () => {
+      useCurrentProfileMock.mockReturnValue({ currentProfile: null, isAllMode: true });
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], GROUP.id, [GROUP]));
+
+      render(<Profiles />);
+
+      const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
+      expect(card.querySelector('[data-testid="profile-active-indicator"]')).toBeInTheDocument();
+    });
+
+    it('switches to the group id when its card is clicked', async () => {
+      const user = userEvent.setup();
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+
+      expect(switchProfileMock).toHaveBeenCalledWith(GROUP.id);
+      expect(mockNavigate).toHaveBeenCalledWith('/monitors');
+    });
+
+    // Same gate as the All Servers card: with one selectable server there is
+    // nothing to group.
+    it('offers the New group action only with 2+ enabled profiles', () => {
+      const disabledOffice = { ...OFFICE, disabled: true };
+      useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', []));
+      const { unmount } = render(<Profiles />);
+      expect(screen.queryByTestId('profile-new-group-button')).not.toBeInTheDocument();
+      unmount();
+
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
+      render(<Profiles />);
+      expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+    });
+
+    it('opens the dialog in edit mode from the group card', async () => {
+      const user = userEvent.setup();
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId(`profile-virtual-edit-${GROUP.id}`));
+
+      expect(screen.getByTestId('virtual-profile-dialog')).toHaveTextContent(
+        'profiles.group_edit_title'
+      );
+      expect(screen.getByTestId('virtual-profile-name')).toHaveValue('Backyard');
+      // Editing a group must not also switch to it.
+      expect(switchProfileMock).not.toHaveBeenCalled();
+    });
+
+    it('opens the dialog in create mode from the New group action', async () => {
+      const user = userEvent.setup();
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId('profile-new-group-button'));
+
+      expect(screen.getByTestId('virtual-profile-dialog')).toHaveTextContent(
+        'profiles.group_create_title'
+      );
+    });
+
+    // The confirmation has to say the member servers survive; without that
+    // line, "Delete Backyard?" reads as deleting the two servers in it.
+    it('confirms the delete, promises the servers survive, then deletes only the group', async () => {
+      const user = userEvent.setup();
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`));
+
+      expect(screen.getByTestId('profile-virtual-delete-dialog')).toHaveTextContent(
+        'profiles.delete_group_confirm_desc:{"name":"Backyard"}'
+      );
+      expect(deleteVirtualProfileMock).not.toHaveBeenCalled();
+
+      await user.click(screen.getByTestId('profile-virtual-delete-confirm'));
+
+      expect(deleteVirtualProfileMock).toHaveBeenCalledWith(GROUP.id);
+      expect(switchProfileMock).not.toHaveBeenCalled();
+    });
+
+    it('reports a failed group delete instead of closing silently', async () => {
+      const user = userEvent.setup();
+      const { toast: sonnerToast } = await import('sonner');
+      deleteVirtualProfileMock.mockImplementation(() => {
+        throw new Error('Virtual profile not found');
+      });
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`));
+      await user.click(screen.getByTestId('profile-virtual-delete-confirm'));
+
+      expect(sonnerToast.error).toHaveBeenCalledWith('profiles.delete_group_error');
+    });
   });
 });

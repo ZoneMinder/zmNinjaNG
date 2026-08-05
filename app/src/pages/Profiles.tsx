@@ -7,6 +7,7 @@
 
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useShallow } from 'zustand/react/shallow';
 import { useProfileStore, ProfileGuardError } from '../stores/profile';
 import { useSettingsStore } from '../stores/settings';
 import { useCurrentProfile } from '../hooks/useCurrentProfile';
@@ -37,8 +38,10 @@ import {
 import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers, Power, PowerOff } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
-import type { Profile } from '../api/types';
+import type { Profile, VirtualProfile } from '../api/types';
 import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
+import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
+import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
 import { discoverUrls } from '../services/discovery';
@@ -65,11 +68,19 @@ export default function Profiles() {
   const deleteAllProfiles = useProfileStore((state) => state.deleteAllProfiles);
   const switchProfile = useProfileStore((state) => state.switchProfile);
   const setProfileDisabled = useProfileStore((state) => state.setProfileDisabled);
+  // Raw slice with the `?? []` inside the selector so useShallow dedupes
+  // repeated empty snapshots to one reference (see useProfileScope).
+  const virtualProfiles = useProfileStore(useShallow((state) => state.virtualProfiles ?? []));
+  const deleteVirtualProfile = useProfileStore((state) => state.deleteVirtualProfile);
 
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleteAllDialogOpen, setIsDeleteAllDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Profile | null>(null);
+  // The group dialog is mounted only while open (never `open={false}`), so
+  // opening it is what seeds its fields; `{ group: null }` is create mode.
+  const [groupDialog, setGroupDialog] = useState<{ group: VirtualProfile | null } | null>(null);
+  const [groupPendingDelete, setGroupPendingDelete] = useState<VirtualProfile | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [switchingProfileId, setSwitchingProfileId] = useState<string | null>(null);
 
@@ -293,6 +304,19 @@ export default function Profiles() {
           ? t('profiles.cannot_disable_active')
           : t('common.error')
       );
+    }
+  };
+
+  const handleDeleteGroup = () => {
+    if (!groupPendingDelete) return;
+    try {
+      // Only the grouping goes: the member profiles are untouched, which is
+      // what the confirmation copy promises.
+      deleteVirtualProfile(groupPendingDelete.id);
+      setGroupPendingDelete(null);
+      sonnerToast.success(t('profiles.delete_group_success'));
+    } catch {
+      sonnerToast.error(t('profiles.delete_group_error'));
     }
   };
 
@@ -526,6 +550,31 @@ export default function Profiles() {
                   )}
                 </div>
               )}
+              {/* Groups render whatever the enabled count is, so a group made
+                  while two servers were enabled stays editable and deletable
+                  after one is disabled. Only creating a new one is gated. */}
+              {virtualProfiles.map((group) => (
+                <VirtualProfileCard
+                  key={group.id}
+                  group={group}
+                  isActive={currentProfileId === group.id}
+                  isSwitching={switchingProfileId === group.id}
+                  onSwitch={() => handleSwitchProfile(group.id)}
+                  onEdit={() => setGroupDialog({ group })}
+                  onDelete={() => setGroupPendingDelete(group)}
+                />
+              ))}
+              {enabledProfileCount >= 2 && (
+                <Button
+                  variant="outline"
+                  className="mt-3 w-full"
+                  onClick={() => setGroupDialog({ group: null })}
+                  data-testid="profile-new-group-button"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {t('profiles.new_group')}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -682,6 +731,38 @@ export default function Profiles() {
               onClick={handleDeleteProfile}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="profile-delete-confirm"
+            >
+              {t('common.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {groupDialog && (
+        <VirtualProfileDialog group={groupDialog.group} onClose={() => setGroupDialog(null)} />
+      )}
+
+      {/* Delete Group Confirmation. The copy has to say the member servers
+          survive: without it "Delete Backyard?" reads as deleting them. */}
+      <AlertDialog
+        open={groupPendingDelete !== null}
+        onOpenChange={(open) => !open && setGroupPendingDelete(null)}
+      >
+        <AlertDialogContent data-testid="profile-virtual-delete-dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('profiles.delete_group_confirm_title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('profiles.delete_group_confirm_desc', { name: groupPendingDelete?.name })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="profile-virtual-delete-cancel">
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteGroup}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="profile-virtual-delete-confirm"
             >
               {t('common.delete')}
             </AlertDialogAction>
