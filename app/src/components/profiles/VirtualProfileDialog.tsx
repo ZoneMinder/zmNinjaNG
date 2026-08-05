@@ -54,15 +54,20 @@ export function VirtualProfileDialog({ group, onClose }: VirtualProfileDialogPro
   };
 
   const handleSave = () => {
+    // Trimmed before anything looks at it: availability compares untrimmed,
+    // so "Backyard " would pass a check that "Backyard" fails and then sit in
+    // the switcher looking identical to the profile it collides with.
+    const trimmedName = name.trim();
+
     // The same three rules the store enforces, checked here so the message is
     // localized and lands in the dialog. The store's copies are the ones that
     // actually hold the invariant (any caller can reach the action); these
     // exist because an English throw is not a user-facing error.
-    if (name.trim().length === 0) {
+    if (trimmedName.length === 0) {
       setError(t('profiles.group_name_required'));
       return;
     }
-    if (profileExists(name, group?.id)) {
+    if (profileExists(trimmedName, group?.id)) {
       setError(t('profiles.group_name_taken'));
       return;
     }
@@ -73,9 +78,9 @@ export function VirtualProfileDialog({ group, onClose }: VirtualProfileDialogPro
 
     try {
       if (group) {
-        updateVirtualProfile(group.id, { name, memberProfileIds: memberIds });
+        updateVirtualProfile(group.id, { name: trimmedName, memberProfileIds: memberIds });
       } else {
-        addVirtualProfile(name, memberIds);
+        addVirtualProfile(trimmedName, memberIds);
       }
       onClose();
     } catch (err) {

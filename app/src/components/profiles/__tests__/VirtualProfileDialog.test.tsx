@@ -88,6 +88,22 @@ describe('VirtualProfileDialog', () => {
     });
   });
 
+  // A stored "Backyard " is indistinguishable on screen from a profile called
+  // "Backyard", and the availability check compares untrimmed, so an untrimmed
+  // save is how two identical-looking names get past it (spec section 6).
+  it('trims the name before storing it and before checking availability', async () => {
+    const user = userEvent.setup();
+
+    render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
+
+    await user.type(screen.getByTestId('virtual-profile-name'), '  Backyard  ');
+    await user.click(screen.getByTestId('virtual-profile-member-p1'));
+    await user.click(screen.getByTestId('virtual-profile-save'));
+
+    expect(profileExistsMock).toHaveBeenCalledWith('Backyard', undefined);
+    expect(addVirtualProfileMock).toHaveBeenCalledWith('Backyard', ['p1']);
+  });
+
   it('refuses a blank name and writes nothing', async () => {
     const user = userEvent.setup();
 
