@@ -10,6 +10,18 @@ This chapter explains why that works here, what enforces correctness
 instead of eyeballs on diffs, and where a human still reviews
 deliberately.
 
+.. note::
+
+   **Does this actually work? Read the evidence.** The
+   `all-profiles retrospective
+   <https://github.com/ZoneMinder/zmNinjaNg/blob/main/docs/superpowers/analysis/2026-08-04-all-profiles-retrospective.md>`_
+   is a commit-by-commit validation of this model over one four-day
+   arc: three programs, roughly ninety agent contexts, and every
+   defect the review loop caught before merge, told incident by
+   incident with the probes and mutations that proved each one. It
+   also reports, with the same candor, what cost time and what a
+   future run should drop.
+
 Scope, platforms, and release guardrails
 ----------------------------------------
 
