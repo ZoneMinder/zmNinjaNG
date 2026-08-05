@@ -22,7 +22,7 @@ import {
 import { Button } from './ui/button';
 import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
-import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
 import { useAggregateLabel } from '../hooks/useAggregateLabel';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
 
@@ -44,8 +44,7 @@ export function ProfileSwitcher() {
   const profiles = useProfileStore(useShallow((state) => state.profiles.filter((p) => !p.disabled)));
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
   // Any aggregate hides the single-profile label; which aggregate decides what
-  // the trigger says. The All Servers row's own tick asks the narrower
-  // question, so a group never marks it as the current selection (refs #337).
+  // the trigger says (refs #337).
   const isAggregate = isAggregateProfileId(currentProfileId);
   const aggregateLabel = useAggregateLabel();
   // Raw slice with the `?? []` inside the selector so useShallow dedupes
@@ -155,26 +154,9 @@ export function ProfileSwitcher() {
             )}
           </DropdownMenuItem>
         ))}
-        {/* Placed after the real profiles for consistency with the Profiles
-            page card order (refs #337 round 2). */}
-        {profiles.length >= 2 && (
-          <DropdownMenuItem
-            onClick={() => handleSwitch(ALL_PROFILES_ID)}
-            className="flex items-center justify-between cursor-pointer"
-            data-testid="profile-switcher-all"
-          >
-            <div className="flex items-center gap-2">
-              <Layers className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{t('profiles.all_servers')}</span>
-            </div>
-            {currentProfileId === ALL_PROFILES_ID && (
-              <Check className="h-4 w-4 text-primary" data-testid="profile-switcher-all-active" />
-            )}
-          </DropdownMenuItem>
-        )}
-        {/* Groups sit under the built-in All Servers entry, behind the same
-            gate: with one selectable server no aggregate has anything to
-            aggregate (refs #337). */}
+        {/* Groups sit after the real profiles, for consistency with the
+            Profiles page card order, and behind a gate: with one selectable
+            server a group has nothing to aggregate (refs #337). */}
         {profiles.length >= 2 &&
           virtualProfiles.map((group) => (
             <DropdownMenuItem

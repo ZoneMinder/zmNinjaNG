@@ -35,11 +35,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Layers, Power, PowerOff } from 'lucide-react';
+import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Power, PowerOff } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
 import type { Profile, VirtualProfile } from '../api/types';
-import { ALL_PROFILES_ID, isAggregateProfileId } from '../api/types';
+import { isAggregateProfileId } from '../api/types';
 import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
 import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
@@ -55,14 +55,11 @@ export default function Profiles() {
   const { t } = useTranslation();
 
   const profiles = useProfileStore((state) => state.profiles);
-  // The All Servers card is only meaningful with 2+ SELECTABLE profiles - a
-  // disabled one can never join the aggregate (refs #337).
+  // A new group is only meaningful with 2+ SELECTABLE profiles - a disabled
+  // one can never join an aggregate (refs #337).
   const enabledProfileCount = profiles.filter((p) => !p.disabled).length;
   const { currentProfile } = useCurrentProfile();
-  // The All Servers card marks itself active for its own sentinel only: a
-  // group is an aggregate too, and claims its own card (refs #337).
   const currentProfileId = useProfileStore((state) => state.currentProfileId);
-  const isAllCardActive = currentProfileId === ALL_PROFILES_ID;
   const aggregateLabel = useAggregateLabel();
   const updateProfile = useProfileStore((state) => state.updateProfile);
   const deleteProfile = useProfileStore((state) => state.deleteProfile);
@@ -513,44 +510,6 @@ export default function Profiles() {
                   </div>
                 ))}
               </div>
-              {enabledProfileCount >= 2 && (
-                <div
-                  className={`flex items-center justify-between p-4 rounded-lg border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/15 transition-colors cursor-pointer mt-3 ${isAllCardActive ? 'ring-1 ring-blue-500' : ''}`}
-                  data-testid="profile-card-all"
-                  onClick={() => handleSwitchProfile(ALL_PROFILES_ID)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      handleSwitchProfile(ALL_PROFILES_ID);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    {isAllCardActive && (
-                      <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
-                    )}
-                    <Layers className="h-5 w-5 text-blue-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate" title={t('profiles.all_servers')}>{t('profiles.all_servers')}</div>
-                      <p className="text-xs text-muted-foreground truncate" title={t('profiles.all_servers_subtitle')}>
-                        {t('profiles.all_servers_subtitle')}
-                      </p>
-                      <p
-                        className="text-xs text-muted-foreground/80 truncate"
-                        title={t('profiles.all_servers_resource_note')}
-                        data-testid="profile-card-all-note"
-                      >
-                        {t('profiles.all_servers_resource_note')}
-                      </p>
-                    </div>
-                  </div>
-                  {switchingProfileId === ALL_PROFILES_ID && (
-                    <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-                  )}
-                </div>
-              )}
               {/* Groups render whatever the enabled count is, so a group made
                   while two servers were enabled stays editable and deletable
                   after one is disabled. Only creating a new one is gated. */}

@@ -1,7 +1,6 @@
 /**
- * One group's card on the Profiles page: the same blue family as the All
- * Servers card, because a group aggregates the same way and All Servers is
- * just the built-in group. Refs #337.
+ * One group's card on the Profiles page, in its own blue family so an
+ * aggregate never reads as one more server card. Refs #337.
  *
  * Lives here rather than inline in Profiles.tsx, which is already well over
  * the file-size rule.

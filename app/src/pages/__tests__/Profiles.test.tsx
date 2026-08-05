@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Profiles from '../Profiles';
-import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { mintVirtualProfileId } from '../../api/types';
 import { ProfileGuardError } from '../../stores/profile';
 
 const mockNavigate = vi.fn();
@@ -143,77 +143,18 @@ describe('Profiles Page', () => {
     expect(screen.getByTestId('profile-name')).toHaveTextContent('Home');
   });
 
-  it('does not render the All Servers card with fewer than 2 profiles', () => {
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: HOME,
-      isAllMode: false,
-    });
-    useProfileStoreMock.mockReturnValue(storeState([HOME], 'p1'));
-
-    render(<Profiles />);
-
-    expect(screen.queryByTestId('profile-card-all')).not.toBeInTheDocument();
-  });
-
-  it('renders the All Servers card with 2+ profiles and marks it active in All mode', () => {
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: null,
-      isAllMode: true,
-    });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], ALL_PROFILES_ID));
-
-    render(<Profiles />);
-
-    const allCard = screen.getByTestId('profile-card-all');
-    expect(allCard).toBeInTheDocument();
-    expect(allCard).toHaveTextContent('profiles.all_servers');
-    expect(screen.getByTestId('profile-active-indicator')).toBeInTheDocument();
-  });
-
-  // A group aggregates like All Servers but is a different selection, so the
-  // All Servers card must not claim to be the active one (refs #337).
-  it('leaves the All Servers card unmarked while a group is current', () => {
-    const group = mintVirtualProfileId();
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: null,
-      isAllMode: true,
-    });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], group));
-
-    render(<Profiles />);
-
-    expect(screen.getByTestId('profile-card-all')).toBeInTheDocument();
-    expect(screen.queryByTestId('profile-active-indicator')).not.toBeInTheDocument();
-  });
-
-  // refs #337 round 2: the All Servers card moved to the end of the list.
-  it('renders the All Servers card after every profile card, with the resource note', () => {
+  // Virtual profile groups supersede the All Servers card, so the page offers
+  // no built-in aggregate at all: an aggregate is now always a named group the
+  // user picked members for (refs #337).
+  it('renders no All Servers card, whatever the enabled profile count', () => {
     useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
     useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
 
     render(<Profiles />);
 
-    const cards = screen.getAllByTestId(/^profile-card(-all)?$/);
-    expect(cards.at(-1)).toBe(screen.getByTestId('profile-card-all'));
-    expect(screen.getByTestId('profile-card-all-note')).toHaveTextContent(
-      'profiles.all_servers_resource_note'
-    );
-  });
-
-  it('switches to the All Servers sentinel and navigates to /monitors on click', async () => {
-    const user = userEvent.setup();
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: HOME,
-      isAllMode: false,
-    });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
-
-    render(<Profiles />);
-
-    await user.click(screen.getByTestId('profile-card-all'));
-
-    expect(switchProfileMock).toHaveBeenCalledWith(ALL_PROFILES_ID);
-    expect(mockNavigate).toHaveBeenCalledWith('/monitors');
+    expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+    expect(screen.queryByTestId('profile-card-all')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('profile-card-all-note')).not.toBeInTheDocument();
   });
 
   // refs #337: per-profile disable toggle
@@ -241,16 +182,6 @@ describe('Profiles Page', () => {
     expect(screen.getByTestId('profile-edit-button-p2')).toBeInTheDocument();
     expect(screen.getByTestId('profile-delete-button-p2')).toBeInTheDocument();
     expect(screen.getByTestId('profile-disable-toggle-p2')).toBeInTheDocument();
-  });
-
-  it('hides the All Servers card when fewer than 2 profiles are enabled', () => {
-    const disabledOffice = { ...OFFICE, disabled: true };
-    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1'));
-
-    render(<Profiles />);
-
-    expect(screen.queryByTestId('profile-card-all')).not.toBeInTheDocument();
   });
 
   it('shows an error toast when disabling the active profile is rejected', async () => {
@@ -289,12 +220,12 @@ describe('Profiles Page', () => {
       expect(card).toHaveTextContent('profiles.group_resource_note');
     });
 
-    it('renders group cards after the All Servers card', () => {
+    it('renders group cards after every profile card', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
 
-      const cards = screen.getAllByTestId(/^profile-card(-all|-virtual-.+)?$/);
+      const cards = screen.getAllByTestId(/^profile-card(-virtual-.+)?$/);
       expect(cards.at(-1)).toBe(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
     });
 
@@ -319,8 +250,7 @@ describe('Profiles Page', () => {
       expect(mockNavigate).toHaveBeenCalledWith('/monitors');
     });
 
-    // Same gate as the All Servers card: with one selectable server there is
-    // nothing to group.
+    // With one selectable server there is nothing to group.
     it('offers the New Virtual Profile Group action only with 2+ enabled profiles', () => {
       const disabledOffice = { ...OFFICE, disabled: true };
       useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', []));

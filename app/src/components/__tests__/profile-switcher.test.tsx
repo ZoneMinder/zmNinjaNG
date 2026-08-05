@@ -1,7 +1,8 @@
 /**
- * profile-switcher-all only appears once there are 2+ profiles (All mode is
- * meaningless with a single server) and, when clicked, must switch to the
- * ALL_PROFILES_ID sentinel. Refs #337.
+ * The switcher's aggregate entries are virtual profile groups: they appear
+ * once there are 2+ selectable profiles (an aggregate is meaningless with a
+ * single server) and, when clicked, switch to the group's own id. The built-in
+ * All Servers entry is gone. Refs #337.
  *
  * The dropdown-menu primitives are Radix (portal + open-state driven), which
  * jsdom cannot drive via a real trigger click/pointer-capture sequence (no
@@ -14,7 +15,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ProfileSwitcher } from '../profile-switcher';
-import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { mintVirtualProfileId } from '../../api/types';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -91,43 +92,18 @@ describe('ProfileSwitcher', () => {
     navigateMock.mockClear();
   });
 
-  it('has no All Servers item with a single profile', () => {
-    setProfiles([profileA]);
+  // No built-in aggregate is offered any more, at any profile count: groups
+  // replaced it (refs #337).
+  it('has no All Servers item, whatever the profile count', () => {
+    setProfiles([profileA, profileB]);
 
     render(<ProfileSwitcher />);
 
+    expect(screen.getByTestId('profile-switcher-item-profile-b')).toBeInTheDocument();
     expect(screen.queryByTestId('profile-switcher-all')).not.toBeInTheDocument();
   });
 
-  it('shows the All Servers item once there are 2+ profiles', () => {
-    setProfiles([profileA, profileB]);
-
-    render(<ProfileSwitcher />);
-
-    expect(screen.getByTestId('profile-switcher-all')).toBeInTheDocument();
-  });
-
-  it('switches to the ALL_PROFILES_ID sentinel when clicked', () => {
-    setProfiles([profileA, profileB]);
-
-    render(<ProfileSwitcher />);
-    fireEvent.click(screen.getByTestId('profile-switcher-all'));
-
-    expect(switchProfileMock).toHaveBeenCalledWith(ALL_PROFILES_ID);
-  });
-
-  // refs #337 round 2: moved to the end for consistency with the Profiles page.
-  it('places the All Servers item after every profile item', () => {
-    setProfiles([profileA, profileB]);
-
-    render(<ProfileSwitcher />);
-
-    const items = screen.getAllByTestId(/^profile-switcher-(item-.+|all)$/);
-    expect(items.at(-1)).toBe(screen.getByTestId('profile-switcher-all'));
-  });
-
-  // A group is an aggregate too, but a different one: the trigger names it,
-  // and the All Servers row must not read as the current selection (refs #337).
+  // A group is the only aggregate left, and the trigger names it (refs #337).
   describe('with a group active', () => {
     const group = mintVirtualProfileId();
 
@@ -158,19 +134,12 @@ describe('ProfileSwitcher', () => {
       expect(trigger).not.toHaveTextContent('profiles.all_servers');
     });
 
-    it('leaves the All Servers item unmarked', () => {
+    it('lists the group after every profile item, named and ticked', () => {
       render(<ProfileSwitcher />);
 
-      expect(screen.queryByTestId('profile-switcher-all-active')).not.toBeInTheDocument();
-    });
-
-    it('lists the group under the All Servers item, named and ticked', () => {
-      render(<ProfileSwitcher />);
-
-      const items = screen.getAllByTestId(/^profile-switcher-(item-.+|all|virtual-.+)$/);
+      const items = screen.getAllByTestId(/^profile-switcher-(item-.+|virtual-.+)$/);
       const entry = screen.getByTestId(`profile-switcher-virtual-${group}`);
       expect(items.at(-1)).toBe(entry);
-      expect(items.at(-2)).toBe(screen.getByTestId('profile-switcher-all'));
       expect(entry).toHaveTextContent('Backyard');
       expect(screen.getByTestId(`profile-switcher-active-virtual-${group}`)).toBeInTheDocument();
     });
@@ -182,18 +151,6 @@ describe('ProfileSwitcher', () => {
       fireEvent.click(screen.getByTestId(`profile-switcher-virtual-${group}`));
 
       expect(switchProfileMock).toHaveBeenCalledWith(group);
-    });
-
-    it('leaves the group entry unticked while All Servers is active', () => {
-      mockProfileState.currentProfileId = ALL_PROFILES_ID;
-
-      render(<ProfileSwitcher />);
-
-      expect(screen.getByTestId(`profile-switcher-virtual-${group}`)).toBeInTheDocument();
-      expect(
-        screen.queryByTestId(`profile-switcher-active-virtual-${group}`)
-      ).not.toBeInTheDocument();
-      expect(screen.getByTestId('profile-switcher-all-active')).toBeInTheDocument();
     });
 
     // A group can still be listed while holding nothing selectable, when the
@@ -214,8 +171,7 @@ describe('ProfileSwitcher', () => {
       expect(switchProfileMock).not.toHaveBeenCalled();
     });
 
-    // Same gate as the All Servers item: one selectable server aggregates
-    // nothing, whichever aggregate is named.
+    // One selectable server aggregates nothing, whichever group is named.
     it('hides groups once fewer than 2 profiles are selectable', () => {
       setProfiles([profileA, { ...profileB, disabled: true }]);
       mockProfileState.virtualProfiles = [
@@ -228,16 +184,6 @@ describe('ProfileSwitcher', () => {
     });
   });
 
-  it('marks the All Servers item while the sentinel is active', () => {
-    setProfiles([profileA, profileB]);
-    mockProfileState.currentProfileId = ALL_PROFILES_ID;
-
-    render(<ProfileSwitcher />);
-
-    expect(screen.getByTestId('profile-switcher-all-active')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-switcher-trigger')).toHaveTextContent('profiles.all_servers');
-  });
-
   it('hides a disabled profile from the list (refs #337)', () => {
     setProfiles([profileA, { ...profileB, disabled: true }]);
 
@@ -245,7 +191,5 @@ describe('ProfileSwitcher', () => {
 
     expect(screen.getByTestId('profile-switcher-item-profile-a')).toBeInTheDocument();
     expect(screen.queryByTestId('profile-switcher-item-profile-b')).not.toBeInTheDocument();
-    // Only one selectable profile remains, so the All Servers item hides too.
-    expect(screen.queryByTestId('profile-switcher-all')).not.toBeInTheDocument();
   });
 });
