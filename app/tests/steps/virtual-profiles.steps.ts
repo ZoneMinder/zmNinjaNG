@@ -15,6 +15,50 @@ const { When, Then } = createBdd();
 
 const GROUP_CARD = '[data-testid^="profile-card-virtual-"]';
 
+/** The group every "aggregate over all my servers" scenario switches into.
+ *  A group is now the only aggregate there is, so the scenarios that used to
+ *  click the built-in All Servers card make one of these instead. */
+const EVERY_SERVER_GROUP = 'Everything';
+
+When('I switch to a group holding every profile', async ({ page }) => {
+  await page.getByTestId('profile-new-group-button').click();
+  await expect(page.getByTestId('virtual-profile-dialog')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+  await page.getByTestId('virtual-profile-name').fill(EVERY_SERVER_GROUP);
+
+  const rows = page.locator('[data-testid^="virtual-profile-member-row-"]');
+  await expect.poll(async () => rows.count(), {
+    timeout: testConfig.timeouts.element,
+  }).toBeGreaterThan(1);
+  const memberCount = await rows.count();
+  for (let i = 0; i < memberCount; i++) {
+    const box = rows.nth(i).getByRole('checkbox');
+    await box.click();
+    // Ticking, never toggling: a member left unticked would silently narrow
+    // every aggregate assertion that follows.
+    await expect(box).toBeChecked({ timeout: testConfig.timeouts.element });
+  }
+
+  await page.getByTestId('virtual-profile-save').click();
+  await expect(page.getByTestId('virtual-profile-dialog')).toHaveCount(0, {
+    timeout: testConfig.timeouts.element,
+  });
+  await page.locator(GROUP_CARD).filter({ hasText: EVERY_SERVER_GROUP }).click();
+});
+
+Then('I should see the new group action', async ({ page }) => {
+  await expect(page.getByTestId('profile-new-group-button')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+Then('I should not see the new group action', async ({ page }) => {
+  await expect(page.getByTestId('profile-new-group-button')).toHaveCount(0, {
+    timeout: testConfig.timeouts.element,
+  });
+});
+
 When(
   'I create a group named {string} holding only the {string} profile',
   async ({ page }, groupName: string, memberName: string) => {
@@ -88,8 +132,11 @@ Then('every monitor profile chip should name {string}', async ({ page }, name: s
   }, { timeout: testConfig.timeouts.pageLoad }).toBeTruthy();
 });
 
-// Same select the All Servers steps drive - it belongs to whichever aggregate
-// is current, which is the whole point of these assertions.
+// The tri-state that decides whether aggregated tiles follow each server or
+// one imposed mode. The select belongs to whichever aggregate is current,
+// which is the whole point of these assertions. All three states are stored
+// values, "Per server" included, so the round-trip through a reload is what
+// proves the group's bucket holds what the row shows.
 const STREAMING_SELECT = 'all-mode-streaming-select';
 
 Then('the aggregate streaming mode should be named for {string}', async ({ page }, name: string) => {

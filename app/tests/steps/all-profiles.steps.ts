@@ -116,14 +116,6 @@ Then('I record the single-profile monitor card count', async ({ page }) => {
   singleProfileMonitorCount = await page.getByTestId('monitor-card').count();
 });
 
-Then('I should see the All Servers profile card', async ({ page }) => {
-  await expect(page.getByTestId('profile-card-all')).toBeVisible({ timeout: testConfig.timeouts.element });
-});
-
-Then('I should not see the All Servers profile card', async ({ page }) => {
-  await expect(page.getByTestId('profile-card-all')).toHaveCount(0, { timeout: testConfig.timeouts.element });
-});
-
 // refs #337: per-profile disable toggle. Same button drives both directions -
 // clicking it again on an already-disabled profile re-enables it.
 When('I disable the {string} profile', async ({ page }, name: string) => {
@@ -136,10 +128,6 @@ When('I enable the {string} profile', async ({ page }, name: string) => {
   const card = page.locator('[data-testid="profile-card"]').filter({ hasText: name });
   await card.locator('[data-testid^="profile-disable-toggle-"]').click();
   await expect(card.getByTestId('profile-disabled-badge')).toHaveCount(0, { timeout: testConfig.timeouts.element });
-});
-
-When('I click the All Servers profile card', async ({ page }) => {
-  await page.getByTestId('profile-card-all').click();
 });
 
 Then('I should be on the monitors page', async ({ page }) => {
@@ -235,8 +223,8 @@ Then('the URL should match the all-mode monitor detail route', async ({ page }) 
   await expect(page).toHaveURL(/\/all\/monitors\/[^/]+\/[^/]+$/, { timeout: testConfig.timeouts.transition });
 });
 
-Then('the profile switcher should still show All Servers', async ({ page }) => {
-  await expect(page.getByTestId('profile-switcher-trigger')).toHaveText(/All Servers/, {
+Then('the profile switcher should still show the group', async ({ page }) => {
+  await expect(page.getByTestId('profile-switcher-trigger')).toHaveText(/Everything/, {
     timeout: testConfig.timeouts.element,
   });
 });
@@ -584,24 +572,10 @@ Then('the montage edit-layout control should be available', async ({ page }) => 
   });
 });
 
-// All Servers Streaming Mode (refs #337): the tri-state that decides whether
-// aggregated tiles follow each server or one imposed mode. All three states are
-// stored values, "Per server" included, so the round-trip through a reload is
-// what proves the ALL bucket holds what the row shows.
-When('I set the All Servers streaming mode to {string}', async ({ page }, label: string) => {
-  await page.getByTestId('all-mode-streaming-select').click();
-  const option = page.getByTestId(`all-mode-streaming-option-${label.toLowerCase().replace(/ /g, '-')}`);
-  await expect(option).toBeVisible({ timeout: testConfig.timeouts.element });
-  await option.click();
-});
+// The aggregate Streaming Mode tri-state lives in virtual-profiles.steps.ts,
+// with the rest of the steps that drive whichever aggregate is current.
 
-Then('the All Servers streaming mode should be {string}', async ({ page }, label: string) => {
-  await expect(page.getByTestId('all-mode-streaming-select')).toContainText(label, {
-    timeout: testConfig.timeouts.element,
-  });
-});
-
-// All Servers performance (refs #337). The knobs that used to be constants:
+// Aggregate performance (refs #337). The knobs that used to be constants:
 // what proves one is wired is the aggregate surface changing, so this drives
 // the montage stream cap down to a single tile and back. The number field
 // commits on Enter (or blur), never per keystroke, so the step presses it.
@@ -609,7 +583,7 @@ const MONTAGE_TILES =
   '[data-testid^="montage-monitor-"]:not([data-testid="montage-monitor-media"])';
 
 When(
-  'I set the All Servers maximum live streams to {string}',
+  'I set the aggregate maximum live streams to {string}',
   async ({ page }, value: string) => {
     const input = page.getByTestId('all-mode-max-streams-input');
     await expect(input).toBeVisible({ timeout: testConfig.timeouts.element });
@@ -619,7 +593,7 @@ When(
 );
 
 Then(
-  'the All Servers maximum live streams should be {string}',
+  'the aggregate maximum live streams should be {string}',
   async ({ page }, value: string) => {
     await expect(page.getByTestId('all-mode-max-streams-input')).toHaveValue(value, {
       timeout: testConfig.timeouts.element,
@@ -627,14 +601,14 @@ Then(
   }
 );
 
-When('I reset the All Servers maximum live streams', async ({ page }) => {
+When('I reset the aggregate maximum live streams', async ({ page }) => {
   const reset = page.getByTestId('all-mode-max-streams-reset');
   await expect(reset).toBeVisible({ timeout: testConfig.timeouts.element });
   await reset.click();
 });
 
 Then(
-  'the All Servers maximum live streams should be back to the shipped default',
+  'the aggregate maximum live streams should be back to the shipped default',
   async ({ page }) => {
     // The constant, not a number typed into the feature file: the row's
     // default IS MONTAGE_GRID.allModeMaxStreams, so changing that constant
@@ -747,7 +721,7 @@ Then('the monitor detail page should show the recorded monitor', async ({ page }
 // Viewport gating (refs #337). A gated tile holds no connection, so it has no
 // <img>: asserting one is present asserts the observer reported the tile in
 // view and the page acted on it.
-When('I turn All Servers off-screen tile pausing {string}', async ({ page }, state: string) => {
+When('I turn aggregate off-screen tile pausing {string}', async ({ page }, state: string) => {
   const toggle = page.getByTestId('all-mode-viewport-gating-switch');
   await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
   const wanted = state === 'on' ? 'checked' : 'unchecked';
@@ -757,7 +731,7 @@ When('I turn All Servers off-screen tile pausing {string}', async ({ page }, sta
   });
 });
 
-Then('All Servers off-screen tile pausing should be {string}', async ({ page }, state: string) => {
+Then('aggregate off-screen tile pausing should be {string}', async ({ page }, state: string) => {
   await expect(page.getByTestId('all-mode-viewport-gating-switch')).toHaveAttribute(
     'data-state',
     state === 'on' ? 'checked' : 'unchecked',
