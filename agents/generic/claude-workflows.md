@@ -128,3 +128,23 @@ named fleet.
 - Subagent final plain text often never reaches the controller. Every
   dispatch states: report via SendMessage to "main", fall back to the
   controller's name if that errors. Budget one nudge round anyway.
+
+## Cadence lessons from the virtual-profiles run (2026-08-05, refs #337)
+
+- Briefs cite symbols and anchors, never line numbers. Every audit's
+  line refs rotted within hours on an active branch; each implementer
+  paid a re-verification pass. "RE-VERIFY all lines" belongs in the
+  brief only as a safety net, not as the addressing scheme.
+- A one-line fix the reviewer itself specified needs no re-review
+  round: the orchestrator inspects the diff directly, runs the scoped
+  suite, and ships. The review loop exists for work the reviewer has
+  not already designed.
+- Mutation batteries run at most twice: the implementer proves red,
+  the first review runs its own battery. A scoped re-review re-applies
+  only the mutants tied to its findings; re-running the full battery a
+  third time buys nothing.
+- Full-gate runs happen once per wave, at push time (which is all P3
+  asks). Fix rounds run the scoped suites for what they touched plus
+  the gates their change class implicates (settings-shape consumers,
+  locale parity, word budget). ~25 full runs in one day was habit, not
+  requirement.
