@@ -26,13 +26,14 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm/zm-constants';
-import { EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES } from '../../lib/zmninja-ng-constants';
+import { EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES, ZMS_PLAYBACK_BADGE_MS } from '../../lib/zmninja-ng-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/zoom-controls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
+import { cn } from '../../lib/utils';
 
 interface ZmsEventPlayerProps {
   portalUrl: string;
@@ -84,6 +85,15 @@ export function ZmsEventPlayer({
   const { settings } = useCurrentProfile();
   const [currentFrame, setCurrentFrame] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [badgeVisible, setBadgeVisible] = useState(true);
+
+  // The ZMS badge says "this event is a live re-stream, not a video file". That
+  // is worth one look per event, so show it briefly and get out of the way (#340).
+  useEffect(() => {
+    setBadgeVisible(true);
+    const timer = setTimeout(() => setBadgeVisible(false), ZMS_PLAYBACK_BADGE_MS);
+    return () => clearTimeout(timer);
+  }, [eventId]);
   // ZMS speed is a percentage (100 = 1x). Seed from the persisted multiplier so
   // the stream and presets open at the saved speed and carry it across events.
   const [playbackSpeed, setPlaybackSpeed] = useState(() => Math.round((playbackRate ?? 1) * 100));
@@ -481,9 +491,14 @@ export function ZmsEventPlayer({
             />
           </div>
 
-          {/* Status Badge */}
-          <div className="absolute top-4 left-4 z-10">
-            <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white hover:bg-blue-500">
+          {/* Status Badge - fades out after a few seconds so it stops covering the picture (issue #340) */}
+          <div
+            className={cn(
+              'absolute top-4 left-4 z-10 pointer-events-none transition-opacity duration-1000',
+              badgeVisible ? 'opacity-100' : 'opacity-0',
+            )}
+          >
+            <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white">
               <AlertCircle className="h-3 w-3" />
               {t('event_detail.zms_playback')}
             </Badge>

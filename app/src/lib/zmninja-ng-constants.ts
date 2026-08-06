@@ -331,6 +331,14 @@ export const EVENT_SCRUB_SEEK_DEBOUNCE_MS = 200;
 export const EVENT_SEEK_FLUSH_DELAY_MS = 400;
 
 /**
+ * How long (ms) the "ZMS Playback" badge stays on the event player before it
+ * fades out (issue #340). The badge exists to tell the user this event is a ZMS
+ * stream rather than a recorded video, which is a one-time fact - once read, it
+ * only covers the picture on a phone.
+ */
+export const ZMS_PLAYBACK_BADGE_MS = 5000;
+
+/**
  * Significant frames ZoneMinder can serve for an event (issue #272), in the
  * order the event frame carousel shows them: most informative first, so the
  * annotated detection image leads, then the frame that triggered the alarm,
