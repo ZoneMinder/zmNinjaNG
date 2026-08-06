@@ -82,7 +82,6 @@ function MonitorLivePreview({ monitor, profileId }: { monitor: Monitor; profileI
     logFn: log.monitor,
     enabled: true,
     minStreamingPort: effectiveMinStreamingPort,
-    apiTimeoutSeconds: settings.apiTimeoutSeconds,
     profileId: currentProfile?.id,
   });
 

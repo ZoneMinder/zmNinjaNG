@@ -115,7 +115,6 @@ const baseOptions = {
   accessToken: 'tok-abc',
   viewMode: 'streaming' as 'streaming' | 'snapshot',
   logFn: mockLogFn,
-  apiTimeoutSeconds: 12,
 };
 
 describe('useStreamLifecycle', () => {
@@ -267,7 +266,7 @@ describe('useStreamLifecycle', () => {
       // The old connkey (1001) is quit before minting the new one.
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining('connkey=1001'),
-        expect.objectContaining({ timeoutMs: 12000 }),
+        expect.objectContaining({ timeoutMs: 3000 }),
       );
     });
   });
@@ -294,7 +293,7 @@ describe('useStreamLifecycle', () => {
 
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining(`connkey=${activeKey}`),
-        expect.objectContaining({ timeoutMs: 12000 }),
+        expect.objectContaining({ timeoutMs: 3000 }),
       );
       expect(mockClearConnKey).toHaveBeenCalledWith('1');
       expect(mockConnKeys['1']).toBeUndefined();
@@ -368,7 +367,7 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining('connkey=7777'),
-          expect.objectContaining({ timeoutMs: 12000 }),
+          expect.objectContaining({ timeoutMs: 3000 }),
         );
       });
     });
@@ -581,7 +580,7 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining(`connkey=${activeKey}`),
-          expect.objectContaining({ timeoutMs: 12000 }),
+          expect.objectContaining({ timeoutMs: 3000 }),
         );
       });
     });
@@ -621,7 +620,7 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining('http://my-zm-server'),
-          expect.objectContaining({ timeoutMs: 12000 }),
+          expect.objectContaining({ timeoutMs: 3000 }),
         );
       });
     });
@@ -944,12 +943,12 @@ describe('useStreamLifecycle', () => {
       await waitFor(() => {
         expect(mockHttpGet).toHaveBeenCalledWith(
           expect.stringContaining(`:30001/`),
-          expect.objectContaining({ timeoutMs: 12000 }),
+          expect.objectContaining({ timeoutMs: 3000 }),
         );
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining(`connkey=${streamingKey}`),
-        expect.objectContaining({ timeoutMs: 12000 }),
+        expect.objectContaining({ timeoutMs: 3000 }),
       );
       expect(mockHttpGet).toHaveBeenCalledTimes(1);
     });
@@ -1103,7 +1102,7 @@ describe('useStreamLifecycle', () => {
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining(':40001/'),
-        expect.objectContaining({ timeoutMs: 12000 }),
+        expect.objectContaining({ timeoutMs: 3000 }),
       );
       expect(mockHttpGet).not.toHaveBeenCalledWith(
         expect.stringContaining(':30001/'),
@@ -1264,7 +1263,7 @@ describe('useStreamLifecycle', () => {
       await quitAllActiveStreams();
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining(`connkey=${activeKey}`),
-        expect.objectContaining({ timeoutMs: 12000 }),
+        expect.objectContaining({ timeoutMs: 3000 }),
       );
 
       unmount();

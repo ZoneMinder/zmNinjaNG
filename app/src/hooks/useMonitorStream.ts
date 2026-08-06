@@ -127,7 +127,6 @@ export function useMonitorStream({
     logFn: log.monitor,
     enabled,
     minStreamingPort: effectiveMinStreamingPort,
-    apiTimeoutSeconds: settings.apiTimeoutSeconds,
     profileId: currentProfile?.id,
   });
 

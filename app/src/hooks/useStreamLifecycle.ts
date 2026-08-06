@@ -119,12 +119,6 @@ export interface UseStreamLifecycleOptions {
   /** Base port for multi-port streaming (port = minStreamingPort + monitorId). */
   minStreamingPort?: number;
   /**
-   * Profile's API request timeout (seconds), applied to CMD_QUIT so teardown
-   * requests follow the same timeout as the rest of the app's HTTP. 0 disables
-   * it. Defaults to the built-in default when not supplied.
-   */
-  apiTimeoutSeconds?: number;
-  /**
    * Profile that owns this monitorId, used only to scope the connKeys store
    * lookup key (monitorCacheKey) so two profiles sharing a monitor id (two
    * independent ZM servers) never collide on one connkey slot (refs #337).
@@ -172,13 +166,14 @@ export function useStreamLifecycle({
   logFn,
   enabled = true,
   minStreamingPort,
-  apiTimeoutSeconds = API_REQUEST.defaultTimeoutSeconds,
   profileId,
 }: UseStreamLifecycleOptions): UseStreamLifecycleReturn {
   const regenerateConnKey = useMonitorStore((state) => state.regenerateConnKey);
 
-  // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
-  const cmdQuitTimeoutMs = apiTimeoutSeconds > 0 ? apiTimeoutSeconds * 1000 : undefined;
+  // Teardown timeout, deliberately shorter than the API timeout: a profile
+  // switch awaits every CMD_QUIT, and a wedged zms never answers. See
+  // API_REQUEST.cmdQuitTimeoutSeconds.
+  const cmdQuitTimeoutMs = API_REQUEST.cmdQuitTimeoutSeconds * 1000;
   const cacheKey = monitorCacheKey(profileId, monitorId || '');
 
   const [connKey, setConnKey] = useState(0);

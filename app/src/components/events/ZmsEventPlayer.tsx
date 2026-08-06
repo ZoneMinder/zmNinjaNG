@@ -26,9 +26,8 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm/zm-constants';
-import { EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES, ZMS_PLAYBACK_BADGE_MS } from '../../lib/zmninja-ng-constants';
+import { API_REQUEST, EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES, ZMS_PLAYBACK_BADGE_MS } from '../../lib/zmninja-ng-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/zoom-controls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
@@ -82,7 +81,6 @@ export function ZmsEventPlayer({
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
   const { isFresh: isAccessTokenFresh } = useFreshAccessToken();
-  const { settings } = useCurrentProfile();
   const [currentFrame, setCurrentFrame] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [badgeVisible, setBadgeVisible] = useState(true);
@@ -224,8 +222,9 @@ export function ZmsEventPlayer({
 
   // Send CMD_QUIT on unmount so the nph-zms process exits instead of idling.
   // Params are kept in a ref so the cleanup closure is never stale.
-  // CMD_QUIT follows the same timeout as the rest of the app's HTTP. 0 disables.
-  const cmdQuitTimeoutMs = settings.apiTimeoutSeconds > 0 ? settings.apiTimeoutSeconds * 1000 : undefined;
+  // Teardown timeout, deliberately shorter than the API timeout: a wedged zms
+  // never answers. See API_REQUEST.cmdQuitTimeoutSeconds.
+  const cmdQuitTimeoutMs = API_REQUEST.cmdQuitTimeoutSeconds * 1000;
   const quitParamsRef = useRef({ portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId, eventId, cmdQuitTimeoutMs });
   useEffect(() => {
     quitParamsRef.current = { portalUrl, token, apiUrl, connKey, minStreamingPort, monitorId, eventId, cmdQuitTimeoutMs };

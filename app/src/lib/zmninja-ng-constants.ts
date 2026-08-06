@@ -25,6 +25,14 @@ export const API_REQUEST = {
   // Bounds for the user-facing setting (seconds).
   minTimeoutSeconds: 0,
   maxTimeoutSeconds: 120,
+  // CMD_QUIT is fire-and-forget teardown, not a data read, so it uses its own
+  // short timeout instead of apiTimeoutSeconds. A profile switch awaits every
+  // stream's CMD_QUIT before it flips SSL trust (refs #188), and a wedged zms
+  // (ZM answers 503 once its streaming daemon is saturated) never replies, so
+  // inheriting the 15s API timeout stalled the switch for 15 seconds. The
+  // request has already reached the server by the time we abort; aborting only
+  // stops us waiting for the reply, it does not cancel the quit.
+  cmdQuitTimeoutSeconds: 3,
 } as const;
 
 /**

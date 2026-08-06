@@ -356,8 +356,8 @@ describe('ZmsEventPlayer', () => {
     const quits = quitCalls();
     expect(quits).toHaveLength(1);
     expect(connkeyOf(quits[0][0] as string)).toBe(streamConnkey);
-    // apiTimeoutSeconds (15) from profile settings, converted to ms
-    expect(quits[0][1]).toEqual({ timeoutMs: 15000 });
+    // API_REQUEST.cmdQuitTimeoutSeconds (3), converted to ms
+    expect(quits[0][1]).toEqual({ timeoutMs: 3000 });
   });
 
   it('does not send CMD_QUIT on unmount when the stream never loaded', () => {
