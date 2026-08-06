@@ -58,6 +58,11 @@ interface ZmsEventPlayerProps {
   /** Pauses the stream while something covers it, such as the full-size frame
    * viewer (#272). Playback resumes on release only if it was running. */
   suspended?: boolean;
+  /** Shows the "ZMS playback" notice. Only true when the page fell back here
+   * after MP4 playback failed: that substitution is a surprise worth naming.
+   * ZMS chosen deliberately (a JPEG-only event, TV mode, the per-monitor force
+   * setting) needs no notice, and the badge covers the picture (#340). */
+  showNotice?: boolean;
 }
 
 export function ZmsEventPlayer({
@@ -77,6 +82,7 @@ export function ZmsEventPlayer({
   playbackRate,
   onRateChange,
   suspended = false,
+  showNotice = false,
 }: ZmsEventPlayerProps) {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
@@ -85,13 +91,14 @@ export function ZmsEventPlayer({
   const [isPlaying, setIsPlaying] = useState(true);
   const [badgeVisible, setBadgeVisible] = useState(true);
 
-  // The ZMS badge says "this event is a live re-stream, not a video file". That
-  // is worth one look per event, so show it briefly and get out of the way (#340).
+  // The notice says "this event is a live re-stream, not the video file you
+  // expected". Worth one look per event, then out of the way (#340).
   useEffect(() => {
+    if (!showNotice) return;
     setBadgeVisible(true);
     const timer = setTimeout(() => setBadgeVisible(false), ZMS_PLAYBACK_BADGE_MS);
     return () => clearTimeout(timer);
-  }, [eventId]);
+  }, [eventId, showNotice]);
   // ZMS speed is a percentage (100 = 1x). Seed from the persisted multiplier so
   // the stream and presets open at the saved speed and carry it across events.
   const [playbackSpeed, setPlaybackSpeed] = useState(() => Math.round((playbackRate ?? 1) * 100));
@@ -490,18 +497,20 @@ export function ZmsEventPlayer({
             />
           </div>
 
-          {/* Status Badge - fades out after a few seconds so it stops covering the picture (issue #340) */}
-          <div
-            className={cn(
-              'absolute top-4 left-4 z-10 pointer-events-none transition-opacity duration-1000',
-              badgeVisible ? 'opacity-100' : 'opacity-0',
-            )}
-          >
-            <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white">
-              <AlertCircle className="h-3 w-3" />
-              {t('event_detail.zms_playback')}
-            </Badge>
-          </div>
+          {/* Fallback notice - fades out after a few seconds so it stops covering the picture (issue #340) */}
+          {showNotice && (
+            <div
+              className={cn(
+                'absolute top-4 left-4 z-10 pointer-events-none transition-opacity duration-1000',
+                badgeVisible ? 'opacity-100' : 'opacity-0',
+              )}
+            >
+              <Badge variant="secondary" className="gap-2 bg-blue-500/80 text-white">
+                <AlertCircle className="h-3 w-3" />
+                {t('event_detail.zms_playback')}
+              </Badge>
+            </div>
+          )}
         </div>
         <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
       </Card>

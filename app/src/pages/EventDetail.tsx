@@ -96,10 +96,13 @@ export default function EventDetail() {
   };
   const [useZmsFallback, setUseZmsFallback] = useState(isTvMode || Platform.isTVDevice);
 
-  // On TV devices, use ZMS stream instead of MP4 (Fire Stick WebView has video rendering issues)
+  // Back to the baseline for every event: ZMS on TV devices (Fire Stick WebView
+  // has video rendering issues), MP4 everywhere else. A fallback describes one
+  // event's broken video, so continuous playback (#250) must not carry it to
+  // the next event, whose video may well play (refs #340).
   useEffect(() => {
-    if (isTvMode) setUseZmsFallback(true);
-  }, [isTvMode]);
+    setUseZmsFallback(isTvMode || Platform.isTVDevice);
+  }, [id, isTvMode]);
 
   const queryClient = useQueryClient();
   // routeProfileId when present (All-mode deep route), else the current
@@ -375,6 +378,12 @@ export default function EventDetail() {
     : null;
   const playThroughZms = useZmsFallback || forcedZmsMonitorId !== null;
 
+  // The ZMS notice names an unexpected substitution: this event has a video,
+  // but MP4 playback failed so we fell back to the stream. ZMS chosen
+  // deliberately - TV mode, the per-monitor force setting, a JPEG-only event -
+  // is not a surprise, and the badge covers the picture (#340).
+  const fellBackFromVideo = useZmsFallback && !isTvMode && !Platform.isTVDevice;
+
   // Stable callback so Mp4EventPlayer's effect doesn't re-run on every parent render.
   const handleVideoError = useCallback(() => {
     log.eventDetail('Video playback failed, falling back to ZMS stream', LogLevel.INFO);
@@ -597,6 +606,7 @@ export default function EventDetail() {
                   minStreamingPort={effectiveMinStreamingPort}
                   monitorId={event.Event.MonitorId}
                   onEnded={handleVideoEnded}
+                  showNotice={fellBackFromVideo}
                   playbackRate={settings.eventPlaybackRate}
                   onRateChange={handleRateChange}
                   className="space-y-4"

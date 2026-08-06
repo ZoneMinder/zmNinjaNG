@@ -66,7 +66,7 @@ vi.mock('../../../api/events', () => ({
   getEventImageUrl: vi.fn().mockReturnValue('https://zm.test/image.jpg'),
 }));
 
-function renderPlayer(props: { suspended?: boolean } = {}) {
+function renderPlayer(props: { suspended?: boolean; showNotice?: boolean } = {}) {
   return render(
     <ZmsEventPlayer
       portalUrl="https://zm.test"
@@ -129,6 +129,18 @@ describe('ZmsEventPlayer', () => {
     // implementation must not leak into the next one.
     httpGetMock.mockReset();
     httpGetMock.mockResolvedValue({ data: {} });
+  });
+
+  // The ZMS notice explains an unexpected substitution, so it shows only when
+  // MP4 playback failed and the page fell back to ZMS (#340). A JPEG-only
+  // event, TV mode, or the per-monitor force setting are not substitutions.
+  it('shows the ZMS notice only when playback fell back from video', () => {
+    renderPlayer();
+    expect(screen.queryByText('event_detail.zms_playback')).toBeNull();
+
+    cleanup();
+    renderPlayer({ showNotice: true });
+    expect(screen.getByText('event_detail.zms_playback')).toBeTruthy();
   });
 
   // Suspension (#272): the frame viewer covers the stream, so it pauses while

@@ -346,6 +346,7 @@ describe('EventDetail forced ZMS playback (#313)', () => {
   beforeEach(() => {
     h.settings.forceZmsMonitorIds = [];
     h.settings.eventContinuousPlay = false;
+    h.routeParams = { id: '101' };
     h.locationState = {};
     h.logEventDetail.mockClear();
     h.toastError.mockClear();
@@ -371,6 +372,22 @@ describe('EventDetail forced ZMS playback (#313)', () => {
 
     expect(screen.getByTestId('zms-player')).toBeTruthy();
     expect(h.toastError).toHaveBeenCalledWith('event_detail.video_playback_failed');
+  });
+
+  // Falling back is a fact about one event's video, not a mode. Continuous
+  // playback (#250) walks to the next event through this same mounted page, so
+  // the flag has to clear or every later event plays through ZMS - and shows
+  // the fallback notice - even when its own video is fine (#340).
+  it('tries MP4 again on the next event after one event fell back to ZMS', () => {
+    const { rerender } = render(<EventDetail />);
+    fireEvent.click(screen.getByTestId('mp4-fire-error'));
+    expect(screen.getByTestId('zms-player')).toBeTruthy();
+
+    h.routeParams = { id: '102' };
+    rerender(<EventDetail />);
+
+    expect(screen.getByTestId('mp4-player')).toBeTruthy();
+    expect(screen.queryByTestId('zms-player')).toBeNull();
   });
 
   it('never mounts the MP4 player for a monitor on the list', () => {
