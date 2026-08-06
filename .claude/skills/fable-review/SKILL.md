@@ -182,8 +182,30 @@ Sections, in order:
    commit rules (P1, P2, P5), native build-number handling, and anything
    that must not be merged, deleted, or re-attempted.
 
-Then post the report location and the scorecard in the session, and offer
-to open the tracking issue. Do not open issues or push branches unasked.
+## After the report
+
+1. Post the report path and the scorecard table in the session.
+2. Offer to log a tracking issue carrying the review. Ask two things in
+   the same message: why this review was run (scheduled sweep, before a
+   handover, after a heavy fix period, a specific worry), and whether
+   there is any other context to include. Wait for the answer; the
+   reason belongs to the maintainer, not to your guess.
+3. Only if they say yes, create it:
+   - Title names the review and its date.
+   - Body opens with a short **Why this review ran** section from their
+     answer, then the report verbatim (`gh issue create --body-file
+     <report path>` after prepending that section, so the issue and the
+     file do not drift).
+   - Labels `core` and `refactor` together: a review spans both
+     behavior-changing findings and behavior-preserving cleanups, so
+     neither label alone describes the work it will spawn. Confirm both
+     labels exist first (`gh label list`).
+   - Close with the identification line the project rules require:
+     `Posted by Claude (Fable 5), assisting @pliablepixels.`
+   - Report the issue URL back.
+4. If they decline, say the report stands on its own and stop. Never open
+   an issue, push a branch, or start executing findings unasked - the
+   phase plan is the maintainer's to schedule (P1).
 
 ## Common mistakes
 
@@ -199,3 +221,4 @@ to open the tracking issue. Do not open issues or push branches unasked.
 | Ranking theoretical risks alongside observed ones | Label the evidence, rank by it |
 | Omitting the non-findings section | The executor will "fix" a deliberate design and ship a regression |
 | Leaving native items unmarked | Say device-pass-required on every one; CI cannot verify them |
+| Filing the issue with your own guess at why the review ran | Ask, then quote the answer. The trigger is the maintainer's context, and it is what makes the issue readable a month later |
