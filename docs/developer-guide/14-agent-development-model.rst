@@ -22,6 +22,14 @@ deliberately.
    also reports, with the same candor, what cost time and what a
    future run should drop.
 
+   The `post-sweep codebase review
+   <https://github.com/ZoneMinder/zmNinjaNg/issues/348>`_ is the
+   complementary check: after that fix period, a fresh-context
+   twelve-pillar review scored the whole repository (overall 7.9/10),
+   with every finding re-verified against the cited source before
+   scoring. It measures where the model's gates held, where ungated
+   rules drifted, and carries the phased plan for closing the gap.
+
 Scope, platforms, and release guardrails
 ----------------------------------------
 
