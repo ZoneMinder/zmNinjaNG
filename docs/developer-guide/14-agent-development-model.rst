@@ -422,6 +422,18 @@ boundary cases, mock saturation), never by test count. One useful probe:
 try to name a plausible bug the suite would miss; if that takes under a
 minute, the testing score is inflated. Output ends in a ranked fix list.
 
+The repo carries its own variant of this review as the
+`fable-review <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/fable-review>`__
+skill. It scores the same kind of pillars against this project's
+contracts, refuses to run on any model other than Fable, and writes a
+report under ``docs/superpowers/analysis/`` with enough detail per finding
+(site, fix, verification, effort, risk, contracts implicated) for another
+agent to execute it. The shape comes from
+`issue #217 <https://github.com/ZoneMinder/zmNinjaNg/issues/217>`__: a
+Fable review scored the codebase 7.5, an Opus session executed it in
+`PR #218 <https://github.com/ZoneMinder/zmNinjaNg/pull/218>`__, and the
+re-review scored 8.1.
+
 Ranked fixes become issues, and issues become agent work.
 `Issue #281 <https://github.com/ZoneMinder/zmNinjaNg/issues/281>`__ shows
 the full cycle: a scorecard run found React correctness gaps, coverage
@@ -550,6 +562,7 @@ Where everything lives
 - `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__, the instruction-system gate
 - `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__, the PR label gate
 - `mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__, the history mining skill
+- `fable-review <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/fable-review>`__, the scored codebase review skill
 
 What this asks of a contributor
 -------------------------------
