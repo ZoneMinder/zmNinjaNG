@@ -115,5 +115,6 @@ jobs:
           files: |
             dist/android/*.apk
             dist/android/*.aab
+            dist/android/*-mapping.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
