@@ -80,6 +80,42 @@ export function specializeToolSchemas(
 }
 
 /**
+ * The same tools with a `server` argument naming the servers in scope
+ * (refs #337).
+ *
+ * Injected rather than declared in the registry for the same reason
+ * `specializeToolSchemas` injects object labels: the valid values are the
+ * user's own profile names, known only at turn time, and an enum is what makes
+ * a wrong one impossible to generate on a guided-decoding backend rather than
+ * merely correctable afterwards.
+ *
+ * Fewer than two servers returns `tools` unchanged, by identity: a
+ * single-profile install must see the registry it has always seen, argument
+ * for argument, so no prompt-sensitive backend shifts behavior because a
+ * feature it cannot use exists.
+ */
+export function withServerArg(tools: ToolDefinition[], serverNames: readonly string[]): ToolDefinition[] {
+  if (serverNames.length < 2) return tools;
+  const names = [...serverNames];
+  return tools.map((tool) => ({
+    ...tool,
+    schema: {
+      ...tool.schema,
+      properties: {
+        ...(tool.schema.properties ?? {}),
+        server: {
+          type: 'string',
+          enum: names,
+          description:
+            'Which server to read, named exactly as listed here. Set it when the user names a server. ' +
+            'Omit it to cover every server: the result is then grouped per server.',
+        },
+      },
+    },
+  }));
+}
+
+/**
  * Names the assistant used to expose, kept ONLY so the agent loop can explain
  * itself when a model asks for one (they appear in model training data and in
  * older conversations). This is a list of strings, deliberately not a registry

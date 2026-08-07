@@ -114,7 +114,10 @@ describe('AGENTS.md stays portable', () => {
     // Claude-only shim). Raising this budget is a deliberate act that needs
     // a reason in the commit message, like the lint ratchet (C7). Lowering
     // it is always welcome.
-    const WORD_BUDGET = 2000;
+    // 2000 -> 2050 (refs #337): the assistant tool-loop contract gained the
+    // multi-server path, and the entry was already compressed to pay for most
+    // of it. A contract nobody can find is worse than 50 words.
+    const WORD_BUDGET = 2050;
     const words = (f: string) =>
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
     const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');

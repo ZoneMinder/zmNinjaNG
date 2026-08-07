@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { runContractEval, CONTRACT_EVAL_CASE_COUNT } from '../contract-eval';
-import { TOOL_CASES } from '../contract-eval-cases';
+import { TOOL_CASES, SERVER_TOOL_CASES } from '../contract-eval-cases';
 import type { AssistantMessage, AssistantProvider, AssistantTurn, ExecutedToolCall, ToolDefinition } from '../types';
 
 vi.mock('../../logger', () => ({
@@ -45,7 +45,9 @@ function providerFrom(
 
 /** The expectation the shared case list holds for one question. */
 function caseFor(q: string) {
-  const c = TOOL_CASES.find((x) => x.q === q);
+  // Both lists: the group cases (refs #337) are scored by the same runner, with
+  // a prompt and registry that carry the `server` argument.
+  const c = [...TOOL_CASES, ...SERVER_TOOL_CASES].find((x) => x.q === q);
   if (!c) throw new Error(`no case for ${q}`);
   return c;
 }
@@ -85,6 +87,12 @@ function passingCall(q: string): { name: string; input: Record<string, unknown> 
     'what camera groups exist': {},
     'is everything healthy': {},
     'is the backyard camera alarmed': {},
+    // The group cases (refs #337): a named server scopes the call, and a
+    // question naming none must leave `server` off.
+    'compare events in isaac and home today': { when: 'today', server: 'isaac' },
+    'how many events on isaac today': { when: 'today', server: 'isaac' },
+    'which cameras are recording on home': { server: 'home' },
+    'what happened today': { when: 'today' },
   };
   return { name: c.tool, input: inputs[q] ?? {} };
 }

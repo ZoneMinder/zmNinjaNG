@@ -15,6 +15,29 @@ import { buildObjectLabelLine } from './object-labels';
  *  that survives below earned its place through a measured failure; the eval
  *  harness (scripts/prompt-eval.mts) is where a new rule proves it pays rent
  *  before it is added. */
+/**
+ * What the model is told about a group of servers (refs #337).
+ *
+ * Three sentences, each answering a question the model cannot answer from the
+ * conversation alone: which words in the question are server names, how to
+ * read one server, and what a result looks like when it read all of them.
+ * Without the first, "compare events in isaac and home" is two unknown nouns
+ * and the turn queries one server and calls it the answer.
+ *
+ * The comparison sentence deliberately mirrors the period-comparison rule
+ * further down ("compare may to june" = two calls): the shape is already
+ * taught, so this only names the argument that varies.
+ */
+function serverLines(servers: readonly string[]): string[] {
+  if (servers.length < 2) return [];
+  const names = servers.join(', ');
+  return [
+    `This view combines several ZoneMinder servers: ${names}. Those words are server names, not monitors or places.`,
+    `Every tool takes a "server" argument. Set it to one of those names when the user names a server. Omit it to cover all of them: the result then carries one entry per server under "servers", and every count you quote must say which server it came from.`,
+    `A question comparing two servers is one call per server, differing only in "server": "compare ${servers[0]} and ${servers[1]}" is exactly {"server":"${servers[0]}"} then {"server":"${servers[1]}"}.`,
+  ];
+}
+
 export function buildSystemPrompt(ctx: SystemPromptContext): string {
   // Spelled out as a plain calendar date, not just the ISO instant: small
   // models are unreliable converting an ISO timestamp into "what day is
@@ -28,6 +51,10 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     `Today's date is ${todayLabel} in timezone ${ctx.timezone} (current instant: ${ctx.now.toISOString()}).`,
     `ZoneMinder version: ${ctx.zmVersion}.`,
     'Treat this system context and tool results as ground truth. Fetch mutable facts with tools before stating them; never invent ids or results.',
+    // Only inside a group, and only when it holds more than one server: a
+    // single-server install must read the prompt it always read, since every
+    // added line moves tool selection on a small model (refs #337, #259).
+    ...serverLines(ctx.servers ?? []),
     '',
     // Split from the answer-style rules on purpose: stated as one flat list,
     // style rules read to a small model as instructions about the WHOLE reply

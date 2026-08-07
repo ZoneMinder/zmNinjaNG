@@ -25,6 +25,12 @@ export interface DisplayEntity {
    *  preview to resolve the streaming port (refs #270). Unset for monitors,
    *  whose own `id` is the monitor. */
   monitorId?: string;
+  /** Which server this row came from, set only while the turn covers a group
+   *  of them (refs #337). The card renders it, because "Front Door" means
+   *  nothing when two servers both have one. */
+  server?: string;
+  /** That server's profile, for the card's all-mode deep route. */
+  profileId?: ProfileId;
 }
 
 /** One entry in the conversation. Assistant turns carry text and/or toolCalls;
@@ -193,8 +199,36 @@ export interface ResolvedTimeframe {
   fields: import('./event-range').WindowFields;
 }
 
+/**
+ * One server a turn may read, while the app is showing a group of them
+ * (refs #337).
+ *
+ * The display fields repeat the same-named `ToolContext` fields because they
+ * differ per server: a card built for `home` with `isaac`'s portal URL and
+ * token renders a broken thumbnail. `contextForServer` (server-scope.ts)
+ * swaps this whole set in before a tool runs, so tools stay single-server and
+ * never learn that a group exists.
+ */
+export interface ScopedServer {
+  profileId: ProfileId;
+  /** The profile's name, as the user typed it and as the model must name it. */
+  name: string;
+  portalUrl?: string;
+  accessToken?: string | null;
+  minStreamingPort?: number;
+  thumbnailFallbackChain?: ThumbnailFallbackEntry[];
+  /** The server's own timezone: "today" ends at a different instant on a
+   *  server in Berlin than on one in New York. */
+  timezone?: string;
+}
+
 export interface ToolContext {
   profileId: ProfileId;
+  /** Every server this turn may read, when the app is showing a group
+   *  (refs #337). Absent or single means an ordinary single-server turn, which
+   *  runs exactly as it did before: `executeScoped` hands the tool this
+   *  context untouched.  */
+  servers?: ScopedServer[];
   /** The question this turn is answering, so a tool can check that a
    *  model-supplied phrase came from the user rather than from an example in
    *  the prompt (see `list_events`' `when`). */
@@ -414,4 +448,8 @@ export interface SystemPromptContext {
   timezone: string;
   locale: string;
   zmVersion: string;
+  /** Names of the servers this view combines (refs #337). Fewer than two
+   *  drops every server line, so a single-server install reads the prompt it
+   *  always read. */
+  servers?: string[];
 }

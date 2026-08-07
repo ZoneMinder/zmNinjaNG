@@ -41,7 +41,8 @@ import {
 import { sharedMockProvider } from '../../lib/assistant/providers/mock';
 import { buildSystemPrompt } from '../../lib/assistant/system-prompt';
 import { getObjectLabels } from '../../lib/assistant/object-labels';
-import { TOOLS, specializeToolSchemas } from '../../lib/assistant/tools';
+import { TOOLS, specializeToolSchemas, withServerArg } from '../../lib/assistant/tools';
+import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
@@ -303,6 +304,9 @@ export function AskPanel() {
   // against an unconfigured backend whenever the user enabled the assistant on
   // some other member of the group (refs #337).
   const { profileId: configuredProfileId } = useAssistantEnabled();
+  // A group of two or more is what turns the tool layer multi-server; a
+  // one-member group answers about that one server, exactly like single mode.
+  const coversAllServers = isAllMode && (scope?.profiles.length ?? 0) > 1;
   const defaultPinnedId = isAllMode ? (pinnedProfileId ?? configuredProfileId) : undefined;
   const { profile: pinnedProfile, settings: pinnedSettings } = useProfileById(defaultPinnedId);
   // Single mode: the page's own current profile/settings, byte-identical to
@@ -534,12 +538,21 @@ export function AskPanel() {
       // guessing at a taxonomy. Cached per profile; never throws.
       const objectLabels = await getObjectLabels(profileId);
 
+      // Every server this view combines, or an empty list outside a group
+      // (refs #337). It drives three things that must agree: the roster in the
+      // prompt, the `server` argument's enum, and which sessions the tool
+      // wrapper may reach. Pinned-profile behavior is unchanged when the group
+      // holds one server, since `buildScopedServers` returns nothing then.
+      const servers = isAllMode ? await buildScopedServers(scope?.profiles ?? []) : [];
+      const serverNames = servers.map((s) => s.name);
+
       const system = buildSystemPrompt({
         objectLabels,
         now: new Date(),
         timezone: currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         locale: i18n.language,
         zmVersion,
+        servers: serverNames,
       });
 
       // Image-building inputs for event result cards (refs #246), mirroring
@@ -547,6 +560,7 @@ export function AskPanel() {
       // returns event rows (list_events/get_event via lib/assistant/display.ts).
       const ctx: ToolContext = {
         profileId,
+        servers,
         queryClient,
         host,
         portalUrl: currentProfile?.portalUrl,
@@ -644,10 +658,11 @@ export function AskPanel() {
         history,
         system: turnSystem,
         signal: controller.signal,
-        // Specialized rather than the bare registry: objectType is pinned to
-        // this install's labels so the model cannot decode an invented one
-        // (refs #270, see specializeToolSchemas).
-        tools: kind === 'zoneminder' ? specializeToolSchemas(TOOLS, objectLabels) : [],
+        // Specialized, then scoped: objectType pinned to this install's labels,
+        // and `server` pinned to the servers this view combines so a model on a
+        // guided-decoding backend cannot name a server that is not there
+        // (refs #270, #337).
+        tools: kind === 'zoneminder' ? withServerArg(specializeToolSchemas(TOOLS, objectLabels), serverNames) : [],
         objectLabels,
         initialTrace,
         historyTurns: settings.assistantHistoryTurns,
@@ -723,8 +738,15 @@ export function AskPanel() {
           className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5"
           data-testid="assistant-pinned-banner"
         >
+          {/* What the pin actually decides once a group can hold several
+              servers (refs #337): the model, its settings and the thread come
+              from this profile, while the lookups cover every server in the
+              group. Saying "pinned to isaac" there would read as a limit on
+              the answers, which it no longer is. */}
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-            {t('assistant.pinned_to', { profile: currentProfile?.name ?? '' })}
+            {t(coversAllServers ? 'assistant.covers_all_servers' : 'assistant.pinned_to', {
+              profile: currentProfile?.name ?? '',
+            })}
           </span>
           <ProfilePicker
             profiles={scope?.profiles ?? []}

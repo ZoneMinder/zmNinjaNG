@@ -65,6 +65,18 @@ Ask it to change something, such as "arm the backyard camera" or "delete event 1
 
 Ninjii only knows what its tools can look up: your monitors, events, groups, tags, and server health. Ask it something unrelated to this ZoneMinder server and it answers as an ordinary assistant would, without pretending to have looked anything up.
 
+## Asking about several servers
+
+When you are looking at a group of servers, Ninjii knows the group's servers by name and answers about all of them.
+
+Name a server and it looks there only: "how many events on isaac today". Name none and it asks every server in the group and reports each one separately, so a total always says which server it came from. Name two and you get the comparison: "compare events in isaac and home today". The names it knows are your profile names, exactly as they appear on the Profiles screen, so renaming a profile renames it for Ninjii too.
+
+Every event and monitor card underneath the answer is labelled with the server it came from, and opening one takes you to that server's screen. Two servers can each have a camera called "Front Door", and the label is how you tell those apart.
+
+The picker at the top of the chat window still names one server, and that is deliberate: it decides which server's assistant settings run the conversation (the backend, model and history length), not which servers get asked. Its own conversation history stays with it, so switching it gives you a separate thread.
+
+A group with one enabled server behaves exactly like a single server: no names, no per-server breakdown.
+
 ## The assistant cannot change anything
 
 The assistant is read-only. It can look things up, and that is all. It cannot arm or disarm a monitor, trigger or cancel an alarm, change a monitor's function, change the run state, or delete or archive an event.

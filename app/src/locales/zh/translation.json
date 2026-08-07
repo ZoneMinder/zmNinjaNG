@@ -1463,6 +1463,7 @@
     "backend_ollama": "Ollama",
     "placeholder": "询问你的摄像头...",
     "pinned_to": "已固定到 {{profile}}",
+    "covers_all_servers": "模型来自 {{profile}} · 回答涵盖所有服务器",
     "send": "发送",
     "abort": "停止",
     "thinking": "思考中...",

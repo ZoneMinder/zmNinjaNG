@@ -11,6 +11,7 @@
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolCall, ToolContext, ToolDefinition, ToolResult } from './types';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
+import { executeScoped } from './server-scope';
 import { captureApiCalls } from './api-capture';
 import { extractShowDirective, filterDisplayByShow } from './display';
 import { buildGroundingCorrection, fallbackAnswerFromData, retryIsUnusable } from './grounding';
@@ -410,7 +411,11 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     // anything, so there is no runtime decision about whether to run.
     host.onActivity({ toolName: call.name, status: 'running', input: call.input });
     try {
-      const { result: r, calls: apiCalls } = await captureApiCalls(() => def.execute(input, ctx));
+      // executeScoped, not def.execute: inside a server group this runs the
+      // tool once per server (or once against the one the model named) and
+      // merges the results. With no group on the context it calls
+      // def.execute(input, ctx) and nothing about this path changes (refs #337).
+      const { result: r, calls: apiCalls } = await captureApiCalls(() => executeScoped(def, input, ctx));
       trace({ kind: 'tool', name: call.name, input: call.input, output: r.output, isError: r.isError, apiCalls });
       if (!r.isError) toolOutputs.push(r.output);
       host.onActivity({ toolName: call.name, status: r.isError ? 'error' : 'done', input: call.input });

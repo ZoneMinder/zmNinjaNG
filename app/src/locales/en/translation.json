@@ -1463,6 +1463,7 @@
     "backend_ollama": "Ollama",
     "placeholder": "Ask about your cameras...",
     "pinned_to": "Pinned to {{profile}}",
+    "covers_all_servers": "Model from {{profile}} · answers cover all servers",
     "send": "Send",
     "abort": "Stop",
     "thinking": "Thinking...",

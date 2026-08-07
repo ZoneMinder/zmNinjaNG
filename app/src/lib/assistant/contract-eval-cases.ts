@@ -112,3 +112,38 @@ export const TOOL_CASES: ToolCase[] = [
 /** The object vocabulary the cases are written against ("how many vehicles"
  *  expects car+truck). Shared with the harness so both build the same prompt. */
 export const CONTRACT_EVAL_OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
+
+/**
+ * The servers the group cases below are written against (refs #337).
+ *
+ * Two names a model has no prior for, so a pass means it read the roster in
+ * the prompt rather than recognising a word it already knew.
+ */
+export const SERVER_EVAL_SERVERS = ['isaac', 'home'];
+
+/**
+ * Cases that only exist while the app is showing a group of servers.
+ *
+ * Deliberately a SEPARATE list rather than more entries in `TOOL_CASES`: these
+ * need a prompt naming the servers and a registry carrying the `server`
+ * argument, and `scripts/prompt-eval.mts` builds neither. Folding them into
+ * the shared list would score them there against a prompt that never mentions
+ * a server, reporting a model failure that is really a harness one. The
+ * on-device runner (`contract-eval.ts`) builds the scoped pair and runs these
+ * after the shared list.
+ */
+export const SERVER_TOOL_CASES: ToolCase[] = [
+  // The question this whole feature came from: two profile names in one
+  // sentence, which used to reach the model as two meaningless nouns.
+  {
+    q: 'compare events in isaac and home today',
+    tool: 'list_events',
+    allCalls: true,
+    args: (a) => a.server === 'isaac' || a.server === 'home',
+  },
+  { q: 'how many events on isaac today', tool: 'list_events', args: (a) => a.server === 'isaac' },
+  { q: 'which cameras are recording on home', tool: 'list_monitors', args: (a) => a.server === 'home' },
+  // The other half of the contract: a question that names no server must NOT
+  // pick one, or the answer silently covers a fraction of what was asked.
+  { q: 'what happened today', tool: 'list_events', args: (a) => a.server === undefined },
+];
