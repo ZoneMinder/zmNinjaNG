@@ -67,7 +67,7 @@ jobs:
             dist/linux-arm64/*.AppImage
             dist/linux-arm64/*.deb
             dist/linux-arm64/*.rpm
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload Electron to Release
         uses: softprops/action-gh-release@v1

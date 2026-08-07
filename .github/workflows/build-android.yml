@@ -92,21 +92,21 @@ jobs:
         with:
           name: zmNinjaNg-android-apk-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*.apk
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload AAB artifact
         uses: actions/upload-artifact@v4
         with:
           name: zmNinjaNg-android-aab-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*.aab
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload R8 mapping artifact
         uses: actions/upload-artifact@v4
         with:
           name: zmNinjaNg-android-mapping-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*-mapping.txt
-          retention-days: 90
+          retention-days: 7
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
@@ -115,5 +115,6 @@ jobs:
           files: |
             dist/android/*.apk
             dist/android/*.aab
+            dist/android/*-mapping.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

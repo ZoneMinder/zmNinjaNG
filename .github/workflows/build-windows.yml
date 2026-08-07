@@ -61,7 +61,7 @@ jobs:
         with:
           name: zmNinjaNg-windows-electron-${{ github.event.inputs.version || github.ref_name }}
           path: dist/windows/*.exe
-          retention-days: 30
+          retention-days: 7
 
       - name: Upload Electron to Release
         uses: softprops/action-gh-release@v1
