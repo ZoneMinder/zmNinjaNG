@@ -119,7 +119,7 @@ export const CONTRACT_EVAL_OBJECT_LABELS = ['car', 'carrot', 'person', 'truck'];
  * Two names a model has no prior for, so a pass means it read the roster in
  * the prompt rather than recognising a word it already knew.
  */
-export const SERVER_EVAL_SERVERS = ['isaac', 'home'];
+export const SERVER_EVAL_SERVERS = ['warehouse', 'cabin'];
 
 /**
  * Cases that only exist while the app is showing a group of servers.
@@ -136,13 +136,13 @@ export const SERVER_TOOL_CASES: ToolCase[] = [
   // The question this whole feature came from: two profile names in one
   // sentence, which used to reach the model as two meaningless nouns.
   {
-    q: 'compare events in isaac and home today',
+    q: 'compare events in warehouse and cabin today',
     tool: 'list_events',
     allCalls: true,
-    args: (a) => a.server === 'isaac' || a.server === 'home',
+    args: (a) => a.server === 'warehouse' || a.server === 'cabin',
   },
-  { q: 'how many events on isaac today', tool: 'list_events', args: (a) => a.server === 'isaac' },
-  { q: 'which cameras are recording on home', tool: 'list_monitors', args: (a) => a.server === 'home' },
+  { q: 'how many events on warehouse today', tool: 'list_events', args: (a) => a.server === 'warehouse' },
+  { q: 'which cameras are recording on cabin', tool: 'list_monitors', args: (a) => a.server === 'cabin' },
   // The other half of the contract: a question that names no server must NOT
   // pick one, or the answer silently covers a fraction of what was asked.
   { q: 'what happened today', tool: 'list_events', args: (a) => a.server === undefined },

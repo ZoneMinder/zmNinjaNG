@@ -60,7 +60,7 @@ export type RequestKind = 'zoneminder' | 'chat' | 'action';
  *  constrained JSON. Editing the existing list instead costs no length and
  *  measured 34/36. Add nothing here without re-running `prompt-eval.mts
  *  triage`. */
-const TRIAGE_PROMPT = [
+const triagePromptLines = (servers: readonly string[]): string[] => [
   'You classify one user message for a ZoneMinder security-camera app. Reply with EXACTLY one word.',
   '',
   'Decide by WHAT THE USER WANTS DONE and WHAT IT CONCERNS, whatever language the message is in:',
@@ -73,13 +73,30 @@ const TRIAGE_PROMPT = [
   '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
   '  "what happened <any period>", "how many <thing> came <any period>", "did anyone come by",',
   '  "show me <camera>".',
+  // Refs #337, observed live: "compare warehouse and cabin" classified CHAT, and
+  // the tool-less turn answered it with a greeting. The names of the user's
+  // own servers are the one piece of context that decides such a message, and
+  // nothing else in this prompt can supply it. Written INTO the ZONEMINDER
+  // list, not appended as a block: the comment above records that an appended
+  // block costs accuracy while editing this list costs none.
+  ...(servers.length >= 2
+    ? [`  A message naming one of this view's servers (${servers.join(', ')}) is about THIS system.`]
+    : []),
   'ACTION - a request to CHANGE something here: arm or disarm a monitor, enable or disable a camera,',
   '  trigger or cancel an alarm, change the run state or a monitor function, delete or archive an event.',
   'CHAT - anything NOT about this system: greetings, thanks, small talk, questions about you, general',
   '  knowledge, or summarizing something that is not this system\'s activity.',
   '',
   'Reply with one word: ZONEMINDER, ACTION, or CHAT.',
-].join('\n');
+];
+
+/** The classifier's prompt for a turn covering `servers`. Fewer than two names
+ *  it identically to the string this file has always sent. */
+function buildTriagePrompt(servers: readonly string[]): string {
+  return triagePromptLines(servers).join('\n');
+}
+
+const TRIAGE_PROMPT = buildTriagePrompt([]);
 
 /** The verdict as a schema, for a backend that can constrain generation to it
  *  (see `AssistantProvider.complete`). Constrained, the reply is exactly
@@ -137,6 +154,10 @@ export async function classifyRequest(
    *  accepted. */
   onTrace?: (entry: TraceEntry) => void,
   onStatus?: (status: AssistantStatus) => void,
+  /** Servers this view combines (refs #337). Their names go into the prompt,
+   *  because a message that names one is about this system and nothing else
+   *  here can tell the classifier that. */
+  servers: readonly string[] = [],
 ): Promise<RequestKind> {
   try {
     // `complete`, not `chat`: a classifier handed the tool catalog, the
@@ -144,7 +165,7 @@ export async function classifyRequest(
     // instead of returning a verdict. The schema constrains a backend that
     // can enforce it to `{"kind":"..."}`; the parser still accepts the loose
     // one-word reply from a backend that cannot.
-    const result = await provider.complete(TRIAGE_PROMPT, question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>, onStatus);
+    const result = await provider.complete(buildTriagePrompt(servers), question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>, onStatus);
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
     }

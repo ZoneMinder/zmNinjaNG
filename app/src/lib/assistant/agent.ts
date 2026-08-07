@@ -350,7 +350,7 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
 
     // A tool called twice with identical arguments in one turn cannot return
     // anything new, so re-running it only burns iterations until the cap.
-    // Observed: asked "how many people came home today", the model called
+    // Observed: asked "how many people came cabin today", the model called
     // count_events {"interval":"1 day"} three times (that tool reports counts
     // only, never object types) and then answered from data that could not
     // contain the answer. Refusing the repeat tells it to change course

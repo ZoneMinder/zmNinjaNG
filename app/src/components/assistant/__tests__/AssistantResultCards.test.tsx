@@ -125,25 +125,25 @@ describe('AssistantResultCards across servers', () => {
     render(
       <AssistantResultCards
         entities={[
-          fromServer(eventCard('77', '3'), 'isaac', 'p-isaac'),
-          fromServer(eventCard('77', '3'), 'home', 'p-home'),
+          fromServer(eventCard('77', '3'), 'warehouse', 'p-warehouse'),
+          fromServer(eventCard('77', '3'), 'cabin', 'p-cabin'),
         ]}
         host={host}
       />,
     );
     const labels = screen.getAllByTestId('assistant-card-server').map((el) => el.textContent);
-    expect(labels).toEqual(['isaac', 'home']);
+    expect(labels).toEqual(['warehouse', 'cabin']);
   });
 
   it('renders no live preview for a monitor on another server', () => {
     // Monitor id 3 exists in the pinned server's query; this card is server
-    // "home"'s monitor 3, a different camera entirely.
-    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'home', 'p-home')]} host={host} />);
+    // "cabin"'s monitor 3, a different camera entirely.
+    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'cabin', 'p-cabin')]} host={host} />);
     expect(screen.queryByTestId('assistant-card-monitor-live')).not.toBeInTheDocument();
   });
 
   it('still previews a card belonging to the pinned server', () => {
-    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'isaac', 'p1')]} host={host} />);
+    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'warehouse', 'p1')]} host={host} />);
     expect(screen.getByTestId('assistant-card-monitor-live')).toBeInTheDocument();
   });
 });

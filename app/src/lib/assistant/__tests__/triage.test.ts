@@ -142,3 +142,34 @@ describe('buildNoToolPrompt', () => {
     expect(prompt).toContain('you have retrieved nothing');
   });
 });
+
+/**
+ * Refs #337, observed live: "compare warehouse and cabin" triaged CHAT, because
+ * nothing in the triage prompt said those two words are the user's own
+ * servers. The turn then ran with no tools and answered with a greeting. The
+ * roster has to reach the classifier, not just the answering prompt.
+ */
+describe('classifyRequest inside a server group', () => {
+  it('names the servers in scope so a question naming one is about this system', async () => {
+    const provider = providerSaying('ZONEMINDER');
+    await classifyRequest(provider, 'compare warehouse and cabin', new AbortController().signal, undefined, undefined, [
+      'cabin',
+      'warehouse',
+    ]);
+
+    const [system] = vi.mocked(provider.complete).mock.calls[0];
+    expect(system).toContain('cabin, warehouse');
+  });
+
+  it('sends the unchanged prompt when there is no group', async () => {
+    const provider = providerSaying('CHAT');
+    await classifyRequest(provider, 'hello', new AbortController().signal, undefined, undefined, ['cabin']);
+    const [withOne] = vi.mocked(provider.complete).mock.calls[0];
+
+    const bare = providerSaying('CHAT');
+    await classifyRequest(bare, 'hello', new AbortController().signal);
+    const [withNone] = vi.mocked(bare.complete).mock.calls[0];
+
+    expect(withOne).toBe(withNone);
+  });
+});

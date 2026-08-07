@@ -293,11 +293,7 @@ export default function ProfileForm() {
 
       // Generate profile name if not provided
       const finalProfileName = profileName.trim() || (
-        confirmedPortalUrl.includes('demo.zoneminder.com')
-          ? 'Demo Server'
-          : confirmedPortalUrl.includes('isaac')
-            ? 'Isaac Server'
-            : 'My ZoneMinder'
+        confirmedPortalUrl.includes('demo.zoneminder.com') ? 'Demo Server' : 'My ZoneMinder'
       );
 
       log.profileForm('Adding new profile', LogLevel.INFO, { profileName: finalProfileName });

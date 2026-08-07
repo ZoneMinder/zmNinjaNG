@@ -21,7 +21,7 @@ import { buildObjectLabelLine } from './object-labels';
  * Three sentences, each answering a question the model cannot answer from the
  * conversation alone: which words in the question are server names, how to
  * read one server, and what a result looks like when it read all of them.
- * Without the first, "compare events in isaac and home" is two unknown nouns
+ * Without the first, "compare events in warehouse and cabin" is two unknown nouns
  * and the turn queries one server and calls it the answer.
  *
  * The comparison sentence deliberately mirrors the period-comparison rule

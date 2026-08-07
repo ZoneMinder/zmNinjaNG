@@ -13,26 +13,26 @@ import { executeScoped, resolveServerArg, contextForServer } from '../server-sco
 import { asProfileId } from '../../../api/types';
 import type { ScopedServer, ToolContext, ToolDefinition } from '../types';
 
-const isaac: ScopedServer = {
-  profileId: asProfileId('p-isaac'),
-  name: 'isaac',
-  portalUrl: 'http://isaac',
-  accessToken: 'tok-isaac',
+const warehouse: ScopedServer = {
+  profileId: asProfileId('p-warehouse'),
+  name: 'warehouse',
+  portalUrl: 'http://warehouse',
+  accessToken: 'tok-warehouse',
   timezone: 'America/New_York',
 };
-const home: ScopedServer = {
-  profileId: asProfileId('p-home'),
-  name: 'home',
-  portalUrl: 'http://home',
-  accessToken: 'tok-home',
+const cabin: ScopedServer = {
+  profileId: asProfileId('p-cabin'),
+  name: 'cabin',
+  portalUrl: 'http://cabin',
+  accessToken: 'tok-cabin',
   timezone: 'Europe/Berlin',
 };
 
 function ctxWith(servers?: ScopedServer[]): ToolContext {
   return {
-    profileId: asProfileId('p-isaac'),
-    portalUrl: 'http://isaac',
-    accessToken: 'tok-isaac',
+    profileId: asProfileId('p-warehouse'),
+    portalUrl: 'http://warehouse',
+    accessToken: 'tok-warehouse',
     timezone: 'America/New_York',
     servers,
     queryClient: {} as ToolContext['queryClient'],
@@ -70,34 +70,34 @@ function probeTool(): ToolDefinition {
 }
 
 describe('resolveServerArg', () => {
-  const servers = [isaac, home];
+  const servers = [warehouse, cabin];
 
   it('matches a name exactly, ignoring case and surrounding space', () => {
-    expect(resolveServerArg(' Isaac ', servers)).toEqual({ server: isaac });
+    expect(resolveServerArg(' Warehouse ', servers)).toEqual({ server: warehouse });
   });
 
   it('matches an unambiguous prefix', () => {
-    expect(resolveServerArg('hom', servers)).toEqual({ server: home });
+    expect(resolveServerArg('cab', servers)).toEqual({ server: cabin });
   });
 
   it('names the real servers when the model invents one', () => {
     const result = resolveServerArg('basement', servers);
-    expect('error' in result && result.error).toContain('isaac');
-    expect('error' in result && result.error).toContain('home');
+    expect('error' in result && result.error).toContain('warehouse');
+    expect('error' in result && result.error).toContain('cabin');
   });
 
   it('refuses an ambiguous prefix rather than guessing', () => {
-    const result = resolveServerArg('h', [home, { ...home, name: 'hallway' }]);
+    const result = resolveServerArg('cab', [cabin, { ...cabin, name: 'cabana' }]);
     expect('error' in result).toBe(true);
   });
 });
 
 describe('contextForServer', () => {
   it('swaps in the server\'s own session id and display inputs', () => {
-    const scoped = contextForServer(ctxWith([isaac, home]), home);
-    expect(scoped.profileId).toBe('p-home');
-    expect(scoped.portalUrl).toBe('http://home');
-    expect(scoped.accessToken).toBe('tok-home');
+    const scoped = contextForServer(ctxWith([warehouse, cabin]), cabin);
+    expect(scoped.profileId).toBe('p-cabin');
+    expect(scoped.portalUrl).toBe('http://cabin');
+    expect(scoped.accessToken).toBe('tok-cabin');
     expect(scoped.timezone).toBe('Europe/Berlin');
   });
 });
@@ -108,57 +108,57 @@ describe('executeScoped', () => {
     const result = await executeScoped(tool, { limit: 5 }, ctxWith());
 
     expect(tool.execute).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(result.output).summary).toBe('ran on p-isaac');
+    expect(JSON.parse(result.output).summary).toBe('ran on p-warehouse');
     // No group, so no per-server wrapper and no rewritten card path.
     expect(result.display?.[0].navigatePath).toBe('/events/7');
   });
 
   it('runs against only the named server when the model names one', async () => {
     const tool = probeTool();
-    const result = await executeScoped(tool, { server: 'home' }, ctxWith([isaac, home]));
+    const result = await executeScoped(tool, { server: 'cabin' }, ctxWith([warehouse, cabin]));
 
     expect(tool.execute).toHaveBeenCalledTimes(1);
     const parsed = JSON.parse(result.output);
     expect(parsed.servers).toHaveLength(1);
-    expect(parsed.servers[0].server).toBe('home');
-    expect(parsed.servers[0].result.portalUrl).toBe('http://home');
+    expect(parsed.servers[0].server).toBe('cabin');
+    expect(parsed.servers[0].result.portalUrl).toBe('http://cabin');
     // `server` is the wrapper's own argument, never forwarded to the tool.
     expect(parsed.servers[0].result.input).toEqual({});
   });
 
   it('reports the valid server names instead of querying one when the name is unknown', async () => {
     const tool = probeTool();
-    const result = await executeScoped(tool, { server: 'basement' }, ctxWith([isaac, home]));
+    const result = await executeScoped(tool, { server: 'basement' }, ctxWith([warehouse, cabin]));
 
     expect(tool.execute).not.toHaveBeenCalled();
     expect(result.isError).toBe(true);
-    expect(result.output).toContain('isaac');
+    expect(result.output).toContain('warehouse');
   });
 
   it('fans out over every server when the model names none', async () => {
     const tool = probeTool();
-    const result = await executeScoped(tool, {}, ctxWith([isaac, home]));
+    const result = await executeScoped(tool, {}, ctxWith([warehouse, cabin]));
 
     expect(tool.execute).toHaveBeenCalledTimes(2);
     const parsed = JSON.parse(result.output);
-    expect(parsed.servers.map((s: { server: string }) => s.server)).toEqual(['isaac', 'home']);
+    expect(parsed.servers.map((s: { server: string }) => s.server)).toEqual(['warehouse', 'cabin']);
     expect(parsed.servers.map((s: { result: { summary: string } }) => s.result.summary)).toEqual([
-      'ran on p-isaac',
-      'ran on p-home',
+      'ran on p-warehouse',
+      'ran on p-cabin',
     ]);
     // The grounding fallback reads a top-level `summary` (grounding.ts), so the
     // merged result carries one naming every server.
-    expect(parsed.summary).toContain('isaac');
-    expect(parsed.summary).toContain('home');
+    expect(parsed.summary).toContain('warehouse');
+    expect(parsed.summary).toContain('cabin');
   });
 
   it('labels each card with its server and points it at that server\'s route', async () => {
-    const result = await executeScoped(probeTool(), {}, ctxWith([isaac, home]));
+    const result = await executeScoped(probeTool(), {}, ctxWith([warehouse, cabin]));
 
-    expect(result.display?.map((d) => d.server)).toEqual(['isaac', 'home']);
+    expect(result.display?.map((d) => d.server)).toEqual(['warehouse', 'cabin']);
     expect(result.display?.map((d) => d.navigatePath)).toEqual([
-      '/all/events/p-isaac/7',
-      '/all/events/p-home/7',
+      '/all/events/p-warehouse/7',
+      '/all/events/p-cabin/7',
     ]);
     // Raw ZM ids collide across servers, so the card cache key has to be
     // composite (aggregation contract).
@@ -168,11 +168,11 @@ describe('executeScoped', () => {
   it('keeps the servers that worked when one of them fails', async () => {
     const tool = probeTool();
     vi.mocked(tool.execute).mockImplementation(async (_input, ctx) => {
-      if (ctx.profileId === 'p-home') throw new Error('offline');
-      return { output: JSON.stringify({ summary: 'ran on isaac', matchCount: 2 }) };
+      if (ctx.profileId === 'p-cabin') throw new Error('offline');
+      return { output: JSON.stringify({ summary: 'ran on warehouse', matchCount: 2 }) };
     });
 
-    const result = await executeScoped(tool, {}, ctxWith([isaac, home]));
+    const result = await executeScoped(tool, {}, ctxWith([warehouse, cabin]));
 
     expect(result.isError).toBeFalsy();
     const parsed = JSON.parse(result.output);
@@ -184,7 +184,7 @@ describe('executeScoped', () => {
     const tool = probeTool();
     vi.mocked(tool.execute).mockRejectedValue(new Error('offline'));
 
-    const result = await executeScoped(tool, {}, ctxWith([isaac, home]));
+    const result = await executeScoped(tool, {}, ctxWith([warehouse, cabin]));
 
     expect(result.isError).toBe(true);
     expect(result.output).toContain('offline');

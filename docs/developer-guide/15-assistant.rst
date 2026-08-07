@@ -121,7 +121,7 @@ With a group, three things change together, and they have to agree or the
 feature is worse than not having it:
 
 - The system prompt gains a roster (``serverLines`` in ``system-prompt.ts``)
-  naming the servers, so "isaac" is a server name to the model rather than an
+  naming the servers, so "warehouse" is a server name to the model rather than an
   unknown noun.
 - The registry gains a ``server`` argument whose ``enum`` is those same names
   (``withServerArg`` in ``tools.ts``), which makes an invented server name
@@ -132,6 +132,14 @@ feature is worse than not having it:
   through ``resolveServerArg``, and runs the tool once against
   ``contextForServer``. With no ``server`` it runs once per server in parallel
   and merges.
+
+The roster reaches the classifier too, and has to. ``classifyRequest``
+(``triage.ts``) decides whether a turn gets tools at all, and it ran before
+anything knew what "warehouse" was: "compare warehouse and cabin" classified CHAT and
+the tool-less turn answered it with a greeting. The names go into the existing
+ZONEMINDER list rather than an appended block, for the reason that file's own
+comment gives - an appended block measured worse - and drop out entirely below
+two servers.
 
 The merged payload is ``{summary, servers: [{server, result | error}]}``.
 ``summary`` is a top-level string on purpose: ``fallbackAnswerFromData``

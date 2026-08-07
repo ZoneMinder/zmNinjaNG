@@ -204,7 +204,7 @@ export interface ResolvedTimeframe {
  * (refs #337).
  *
  * The display fields repeat the same-named `ToolContext` fields because they
- * differ per server: a card built for `home` with `isaac`'s portal URL and
+ * differ per server: a card built for `cabin` with `warehouse`'s portal URL and
  * token renders a broken thumbnail. `contextForServer` (server-scope.ts)
  * swaps this whole set in before a tool runs, so tools stay single-server and
  * never learn that a group exists.

@@ -69,7 +69,7 @@ Ninjii only knows what its tools can look up: your monitors, events, groups, tag
 
 When you are looking at a group of servers, Ninjii knows the group's servers by name and answers about all of them.
 
-Name a server and it looks there only: "how many events on isaac today". Name none and it asks every server in the group and reports each one separately, so a total always says which server it came from. Name two and you get the comparison: "compare events in isaac and home today". The names it knows are your profile names, exactly as they appear on the Profiles screen, so renaming a profile renames it for Ninjii too.
+Name a server and it looks there only: "how many events on warehouse today". Name none and it asks every server in the group and reports each one separately, so a total always says which server it came from. Name two and you get the comparison: "compare events in warehouse and cabin today". The names it knows are your profile names, exactly as they appear on the Profiles screen, so renaming a profile renames it for Ninjii too.
 
 Every event and monitor card underneath the answer is labelled with the server it came from, and opening one takes you to that server's screen. Two servers can each have a camera called "Front Door", and the label is how you tell those apart.
 
@@ -81,7 +81,7 @@ A group with one enabled server behaves exactly like a single server: no names, 
 
 The assistant is read-only. It can look things up, and that is all. It cannot arm or disarm a monitor, trigger or cancel an alarm, change a monitor's function, change the run state, or delete or archive an event.
 
-This is deliberate. The assistant works by having a language model choose which action matches your words, and a model can misread a request: "clear out today's events" is one phrasing away from deleting them, and "I'm home" is one phrasing away from changing your run state. Earlier versions asked you to confirm each action first, but that put the entire safeguard on a single tap, in a dialog that looks the same whether the model understood you or not. Deleting an event cannot be undone, and a monitor left disarmed records nothing.
+This is deliberate. The assistant works by having a language model choose which action matches your words, and a model can misread a request: "clear out today's events" is one phrasing away from deleting them, and "I'm cabin" is one phrasing away from changing your run state. Earlier versions asked you to confirm each action first, but that put the entire safeguard on a single tap, in a dialog that looks the same whether the model understood you or not. Deleting an event cannot be undone, and a monitor left disarmed records nothing.
 
 Ask for one of these and the assistant will say it cannot do it and point you to the screen where you can: monitors and arming on **Monitors**, run state on **Server**, deleting and archiving on the event itself. Doing it there means you picked the target yourself.
 

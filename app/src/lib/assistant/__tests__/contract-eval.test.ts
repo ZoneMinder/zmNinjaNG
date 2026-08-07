@@ -89,9 +89,9 @@ function passingCall(q: string): { name: string; input: Record<string, unknown> 
     'is the backyard camera alarmed': {},
     // The group cases (refs #337): a named server scopes the call, and a
     // question naming none must leave `server` off.
-    'compare events in isaac and home today': { when: 'today', server: 'isaac' },
-    'how many events on isaac today': { when: 'today', server: 'isaac' },
-    'which cameras are recording on home': { server: 'home' },
+    'compare events in warehouse and cabin today': { when: 'today', server: 'warehouse' },
+    'how many events on warehouse today': { when: 'today', server: 'warehouse' },
+    'which cameras are recording on cabin': { server: 'cabin' },
     'what happened today': { when: 'today' },
   };
   return { name: c.tool, input: inputs[q] ?? {} };

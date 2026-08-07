@@ -619,7 +619,10 @@ export function AskPanel() {
       // language interpretation the model does better.
       const kind: RequestKind = isAssistantTestMode()
         ? 'zoneminder'
-        : await classifyRequest(provider, text, controller.signal, collectTrace, (s) => host.onStatus?.(s));
+        : // serverNames too: a question that names a server ("compare warehouse and
+          // cabin") is about this system, and without the roster the classifier
+          // read those as unrelated words and routed the turn to chat (refs #337).
+          await classifyRequest(provider, text, controller.signal, collectTrace, (s) => host.onStatus?.(s), serverNames);
       log.assistant('Request classified', LogLevel.DEBUG, { kind });
 
       // Every timeframe the question names is extracted and resolved BEFORE the
@@ -741,7 +744,7 @@ export function AskPanel() {
           {/* What the pin actually decides once a group can hold several
               servers (refs #337): the model, its settings and the thread come
               from this profile, while the lookups cover every server in the
-              group. Saying "pinned to isaac" there would read as a limit on
+              group. Saying "pinned to warehouse" there would read as a limit on
               the answers, which it no longer is. */}
           <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
             {t(coversAllServers ? 'assistant.covers_all_servers' : 'assistant.pinned_to', {

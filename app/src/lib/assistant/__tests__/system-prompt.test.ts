@@ -91,23 +91,23 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('SHOW: events=');
   });
 
-  // Refs #337: inside a server group the model has no way to know "isaac" and
-  // "home" are servers unless the prompt names them, and no reason to set the
+  // Refs #337: inside a server group the model has no way to know "warehouse" and
+  // "cabin" are servers unless the prompt names them, and no reason to set the
   // `server` argument unless it is told what omitting it means.
   it('names the servers in scope and how to scope a call to one', () => {
-    const p = buildSystemPrompt({ ...base, servers: ['isaac', 'home'] });
-    expect(p).toContain('isaac, home');
+    const p = buildSystemPrompt({ ...base, servers: ['warehouse', 'cabin'] });
+    expect(p).toContain('warehouse, cabin');
     expect(p).toContain('"server"');
     expect(p).toContain('Omit');
   });
 
   it('teaches a two-server comparison as two calls differing only in server', () => {
-    const p = buildSystemPrompt({ ...base, servers: ['isaac', 'home'] });
-    expect(p).toContain('"compare isaac and home"');
+    const p = buildSystemPrompt({ ...base, servers: ['warehouse', 'cabin'] });
+    expect(p).toContain('"compare warehouse and cabin"');
   });
 
   it('says nothing about servers on a single-server install', () => {
-    expect(buildSystemPrompt({ ...base, servers: ['isaac'] })).toBe(buildSystemPrompt(base));
+    expect(buildSystemPrompt({ ...base, servers: ['warehouse'] })).toBe(buildSystemPrompt(base));
   });
 
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {

@@ -77,7 +77,7 @@ describe('specializeToolSchemas', () => {
  * a group must see an enum, so guided decoding cannot invent a server name.
  */
 describe('withServerArg', () => {
-  const NAMES = ['isaac', 'home'];
+  const NAMES = ['warehouse', 'cabin'];
 
   function serverSpec(tools: ToolDefinition[], toolName = 'list_events'): Record<string, unknown> | undefined {
     const tool = tools.find((t) => t.name === toolName);
@@ -97,7 +97,7 @@ describe('withServerArg', () => {
   });
 
   it('leaves the registry untouched with fewer than two servers', () => {
-    expect(withServerArg(TOOLS, ['isaac'])).toBe(TOOLS);
+    expect(withServerArg(TOOLS, ['warehouse'])).toBe(TOOLS);
     expect(withServerArg(TOOLS, [])).toBe(TOOLS);
   });
 
