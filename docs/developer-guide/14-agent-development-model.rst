@@ -10,9 +10,10 @@ This chapter explains why that works here, what enforces correctness
 instead of eyeballs on diffs, and where a human still reviews
 deliberately.
 
-.. admontition:: Proving it out
+.. admonition:: Proving it out
 
-   **Does this actually work? Read this this as followup after you read the guide** The
+   **Does this actually work?** Read these as a follow-up once you have
+   read the guide. The
    `all-profiles retrospective
    <https://github.com/ZoneMinder/zmNinjaNg/blob/main/docs/superpowers/analysis/2026-08-04-all-profiles-retrospective.md>`_
    is a commit-by-commit validation of this model over one four-day
