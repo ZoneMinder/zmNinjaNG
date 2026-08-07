@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TOOLS, specializeToolSchemas } from '../tools';
+import { TOOLS, specializeToolSchemas, withServerArg } from '../tools';
 import type { ToolDefinition } from '../types';
 
 const LABELS = ['car', 'person', 'truck'];
@@ -68,5 +68,42 @@ describe('specializeToolSchemas', () => {
       Record<string, unknown>
     >;
     expect(spec.objectType.anyOf).toEqual([{ type: 'string', enum: LABELS }]);
+  });
+});
+
+/**
+ * The `server` argument only exists inside a server group (refs #337): a
+ * single-profile install must see the registry byte-identical to before, and
+ * a group must see an enum, so guided decoding cannot invent a server name.
+ */
+describe('withServerArg', () => {
+  const NAMES = ['warehouse', 'cabin'];
+
+  function serverSpec(tools: ToolDefinition[], toolName = 'list_events'): Record<string, unknown> | undefined {
+    const tool = tools.find((t) => t.name === toolName);
+    const properties = tool?.schema.properties as Record<string, Record<string, unknown>> | undefined;
+    return properties?.server;
+  }
+
+  it('adds a server argument constrained to the servers in scope', () => {
+    const spec = serverSpec(withServerArg(TOOLS, NAMES));
+    expect(spec?.type).toBe('string');
+    expect(spec?.enum).toEqual(NAMES);
+  });
+
+  it('adds it to every tool, so any read can be scoped to one server', () => {
+    const scoped = withServerArg(TOOLS, NAMES);
+    expect(scoped.every((t) => serverSpec(scoped, t.name) !== undefined)).toBe(true);
+  });
+
+  it('leaves the registry untouched with fewer than two servers', () => {
+    expect(withServerArg(TOOLS, ['warehouse'])).toBe(TOOLS);
+    expect(withServerArg(TOOLS, [])).toBe(TOOLS);
+  });
+
+  it('composes with specializeToolSchemas without losing objectType constraints', () => {
+    const both = withServerArg(specializeToolSchemas(TOOLS, LABELS), NAMES);
+    expect(objectTypeSpec(both).anyOf).toBeDefined();
+    expect(serverSpec(both)?.enum).toEqual(NAMES);
   });
 });

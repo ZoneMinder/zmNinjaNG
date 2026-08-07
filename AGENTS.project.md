@@ -42,10 +42,10 @@ Never: constructing `ApiClient` outside the session registry, its gate factory, 
 Gate: `app/src/tests/agents-contracts.test.ts`.
 
 ### Assistant tool loop
-Owns: whether an assistant turn may answer a data question.
-Path: the turn schema makes the answer branch unreachable until a real tool result exists; execution authority is the turn's own `opts.tools`, not the registry.
-Never: prompt-only grounding guards; raw tool-error text fed back to the model; unparsed tool-call markup rendered as an answer.
-Gate: `app/src/lib/assistant/__tests__/agent.test.ts`; `app/src/lib/assistant/__tests__/grounding.test.ts`.
+Owns: whether a turn may answer a data question, and which server answers.
+Path: the turn schema blocks the answer branch until a real tool result exists; execution authority is the turn's own `opts.tools`, not the registry; multi-server turns route through `executeScoped` (`app/src/lib/assistant/server-scope.ts`), so tools stay single-server.
+Never: prompt-only grounding guards; raw tool-error text to the model; unparsed tool-call markup as an answer; a tool reaching a second server; server names without a schema enum.
+Gate: `app/src/lib/assistant/__tests__/agent.test.ts`; `app/src/lib/assistant/__tests__/grounding.test.ts`; `app/src/lib/assistant/__tests__/server-scope.test.ts`.
 
 ### Server queries
 Owns: React Query keys, invalidation, and caching.

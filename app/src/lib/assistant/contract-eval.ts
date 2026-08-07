@@ -18,16 +18,22 @@
  * Nothing here reimplements a prompt.
  */
 import { buildSystemPrompt } from './system-prompt';
-import { TOOLS } from './tools';
+import { TOOLS, withServerArg } from './tools';
 import { stripOmittedArgs, coerceLabelList } from './tool-helpers';
-import { TOOL_CASES, CONTRACT_EVAL_OBJECT_LABELS, type ToolCase } from './contract-eval-cases';
+import {
+  TOOL_CASES,
+  SERVER_TOOL_CASES,
+  SERVER_EVAL_SERVERS,
+  CONTRACT_EVAL_OBJECT_LABELS,
+  type ToolCase,
+} from './contract-eval-cases';
 import type { AssistantProvider, ExecutedToolCall, ToolCall } from './types';
 import { log, LogLevel } from '../logger';
 
 /** How many cases this eval actually scores. Exported so a caller running it
  *  alongside another stage knows the combined total BEFORE either starts, and can
  *  show one progress bar that does not reach 100% and then jump back. */
-export const CONTRACT_EVAL_CASE_COUNT = TOOL_CASES.length;
+export const CONTRACT_EVAL_CASE_COUNT = TOOL_CASES.length + SERVER_TOOL_CASES.length;
 
 /** One case that did not meet its expectation, kept compact for the log line. */
 export interface ContractEvalFailure {
@@ -127,10 +133,24 @@ export async function runContractEval(
     objectLabels: CONTRACT_EVAL_OBJECT_LABELS,
   } as never);
 
+  // The same prompt and registry a turn inside a server group gets (refs #337):
+  // the roster line plus the `server` argument, pinned to those names. Built
+  // once, used only by the group cases below.
+  const scopedSystem = buildSystemPrompt({
+    now,
+    timezone,
+    zmVersion: '1.39.1',
+    locale: 'en-US',
+    objectLabels: CONTRACT_EVAL_OBJECT_LABELS,
+    servers: SERVER_EVAL_SERVERS,
+  } as never);
+  const scopedTools = withServerArg(TOOLS, SERVER_EVAL_SERVERS);
+  const isScoped = (c: ToolCase) => SERVER_TOOL_CASES.includes(c);
+
   // Every case, including the ones triage would intercept in production: deciding
   // that NO lookup is needed is half of planning, and skipping those measured only
   // the half the model finds easier.
-  const scored = TOOL_CASES;
+  const scored = [...TOOL_CASES, ...SERVER_TOOL_CASES];
   const failures: ContractEvalFailure[] = [];
   let pass = 0;
   let done = 0;
@@ -146,7 +166,9 @@ export async function runContractEval(
     for (let attempt = 0; ; attempt++) {
       const executed: Array<{ name: string; input: Record<string, unknown> }> = [];
       try {
-        const turn = await provider.chat([{ role: 'user', text: c.q }], TOOLS, system, signal, undefined, async (name, input) => {
+        const caseTools = isScoped(c) ? scopedTools : TOOLS;
+        const caseSystem = isScoped(c) ? scopedSystem : system;
+        const turn = await provider.chat([{ role: 'user', text: c.q }], caseTools, caseSystem, signal, undefined, async (name, input) => {
           executed.push({ name, input });
           return cannedResult(name, input);
         });

@@ -46,8 +46,13 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
     <div className="flex flex-wrap gap-2" data-testid="assistant-result-cards">
       {entities.map((entity) => {
         const open = () => host.navigate(entity.navigatePath);
+        // `monitors` is the PINNED profile's query, so a card from another
+        // server in the group must not resolve against it: monitor 3 exists on
+        // both servers and is a different camera on each, which would stream
+        // the wrong one (refs #337).
+        const isPinnedServer = !entity.profileId || entity.profileId === currentProfile?.id;
         const liveMonitor =
-          entity.kind === 'monitor' && livePreviews
+          entity.kind === 'monitor' && livePreviews && isPinnedServer
             ? monitors.find((m) => m.Monitor.Id === entity.id)?.Monitor
             : undefined;
         // Set only when this card can actually stream: an event card, previews
@@ -67,7 +72,9 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
         );
         return (
           <div
-            key={`${entity.kind}-${entity.id}`}
+            // profileId in the key: the same ZM id can arrive from two servers
+            // in one result, and a duplicate key drops one of the cards.
+            key={`${entity.kind}-${entity.profileId ?? ''}-${entity.id}`}
             role="button"
             tabIndex={0}
             onClick={open}
@@ -120,6 +127,18 @@ export function AssistantResultCards({ entities, host }: AssistantResultCardsPro
               </div>
             )}
             <div className="min-w-0 flex-1">
+              {/* Which server this row came from, in a group (refs #337).
+                  "Front Door" is ambiguous the moment two servers are in
+                  scope, and the answer text above names servers too. */}
+              {entity.server && (
+                <p
+                  className="truncate text-[10px] uppercase tracking-wide text-muted-foreground"
+                  title={entity.server}
+                  data-testid="assistant-card-server"
+                >
+                  {entity.server}
+                </p>
+              )}
               <p className="truncate text-xs font-medium" title={entity.title}>
                 {entity.title}
               </p>

@@ -1463,6 +1463,7 @@
     "backend_ollama": "Ollama",
     "placeholder": "Frage zu deinen Kameras...",
     "pinned_to": "Angeheftet an {{profile}}",
+    "covers_all_servers": "Modell von {{profile}} · Antworten umfassen alle Server",
     "send": "Senden",
     "abort": "Stopp",
     "thinking": "Denkt nach...",

@@ -108,3 +108,42 @@ describe('AssistantResultCards event hover playback', () => {
     expect(screen.queryByTestId('hover-preview-stub')).not.toBeInTheDocument();
   });
 });
+
+/**
+ * Cards from a group of servers (refs #337). Two servers can both have a
+ * "Front Door" and both have a monitor 3, so a card has to say which server it
+ * came from, and must not borrow the pinned server's monitor to stream from.
+ */
+describe('AssistantResultCards across servers', () => {
+  const fromServer = (entity: DisplayEntity, server: string, profileId: string): DisplayEntity => ({
+    ...entity,
+    server,
+    profileId: profileId as DisplayEntity['profileId'],
+  });
+
+  it('names the owning server on each card', () => {
+    render(
+      <AssistantResultCards
+        entities={[
+          fromServer(eventCard('77', '3'), 'warehouse', 'p-warehouse'),
+          fromServer(eventCard('77', '3'), 'cabin', 'p-cabin'),
+        ]}
+        host={host}
+      />,
+    );
+    const labels = screen.getAllByTestId('assistant-card-server').map((el) => el.textContent);
+    expect(labels).toEqual(['warehouse', 'cabin']);
+  });
+
+  it('renders no live preview for a monitor on another server', () => {
+    // Monitor id 3 exists in the pinned server's query; this card is server
+    // "cabin"'s monitor 3, a different camera entirely.
+    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'cabin', 'p-cabin')]} host={host} />);
+    expect(screen.queryByTestId('assistant-card-monitor-live')).not.toBeInTheDocument();
+  });
+
+  it('still previews a card belonging to the pinned server', () => {
+    render(<AssistantResultCards entities={[fromServer(monitorCard('3'), 'warehouse', 'p1')]} host={host} />);
+    expect(screen.getByTestId('assistant-card-monitor-live')).toBeInTheDocument();
+  });
+});

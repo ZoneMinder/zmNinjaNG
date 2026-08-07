@@ -99,6 +99,66 @@ model corrects from within the same turn; what passes runs through
 ``captureApiCalls`` so the transcript records the ZoneMinder requests the
 tool actually made.
 
+Answering about a group of servers (``server-scope.ts``)
+-------------------------------------------------------
+
+Every tool in ``tools-readonly.ts`` is written against one server: it calls
+``getSession(ctx.profileId)`` and builds card thumbnails from the single
+``portalUrl``/``accessToken`` pair on the context. A virtual profile combines
+several servers, so something has to decide which of them a call runs against.
+That decision does not live in the tools. It lives one level up, at the single
+line in ``agent.ts`` where a call executes, which calls ``executeScoped``
+instead of ``def.execute``.
+
+``ToolContext.servers`` carries the roster (``ScopedServer``: profile id, name,
+portal URL, token, streaming port, thumbnail chain, timezone), built once per
+question by ``buildScopedServers`` (``scoped-servers.ts``) from the profiles in
+scope. Fewer than two entries means no group, and ``executeScoped`` hands the
+tool the context untouched: a single-profile install runs the path it always
+ran, byte for byte.
+
+With a group, three things change together, and they have to agree or the
+feature is worse than not having it:
+
+- The system prompt gains a roster (``serverLines`` in ``system-prompt.ts``)
+  naming the servers, so "warehouse" is a server name to the model rather than an
+  unknown noun.
+- The registry gains a ``server`` argument whose ``enum`` is those same names
+  (``withServerArg`` in ``tools.ts``), which makes an invented server name
+  undecodable on a guided-decoding backend rather than merely correctable
+  afterwards. Same mechanism as ``specializeToolSchemas`` for object labels.
+- ``executeScoped`` strips ``server`` from the input (tools declare
+  ``additionalProperties: false`` and know nothing about groups), resolves it
+  through ``resolveServerArg``, and runs the tool once against
+  ``contextForServer``. With no ``server`` it runs once per server in parallel
+  and merges.
+
+The roster reaches the classifier too, and has to. ``classifyRequest``
+(``triage.ts``) decides whether a turn gets tools at all, and it ran before
+anything knew what "warehouse" was: "compare warehouse and cabin" classified CHAT and
+the tool-less turn answered it with a greeting. The names go into the existing
+ZONEMINDER list rather than an appended block, for the reason that file's own
+comment gives - an appended block measured worse - and drop out entirely below
+two servers.
+
+The merged payload is ``{summary, servers: [{server, result | error}]}``.
+``summary`` is a top-level string on purpose: ``fallbackAnswerFromData``
+(``grounding.ts``) reads exactly that field when a model fails to write an
+answer, and a group turn must not lose that safety net. A server that fails
+rides in the payload next to the ones that answered; only an all-failed call is
+an error, because "the other three servers saw nothing" is still an answer.
+
+Result cards from a group carry ``server`` and ``profileId``
+(``DisplayEntity``), which ``AssistantResultCards`` renders as a label and uses
+to route to ``/all/events/:profileId/:id``. The cache key becomes
+``profileId:id`` for the reason the aggregation contract gives: raw ZoneMinder
+ids collide across servers. The same rule is why a monitor card from another
+server gets no live preview - ``useMonitors`` is the pinned profile's query,
+and monitor 3 is a different camera on each server.
+
+The pinned profile still decides the backend, its settings and the thread; it
+no longer decides which servers get asked.
+
 Picking the backend (``providers/provider.ts``)
 -----------------------------------------------
 
