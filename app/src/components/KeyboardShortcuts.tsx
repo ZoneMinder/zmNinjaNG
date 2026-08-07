@@ -23,6 +23,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { useProfileScope } from '../hooks/useProfileScope';
+import { useAssistantEnabled } from '../hooks/useAssistantEnabled';
 import { useScopedMonitors } from '../hooks/useScopedMonitors';
 import { Platform } from '../lib/platform';
 import { useKioskStore } from '../stores/kioskStore';
@@ -58,7 +59,10 @@ export function KeyboardShortcuts() {
   // is nothing to navigate to.
   const scope = useProfileScope();
   const isAllMode = scope?.mode === 'all';
-  const assistantEnabled = scope?.settings.assistantEnabled ?? false;
+  // Resolved over the scope's profiles, not `scope.settings`: an aggregate's
+  // own bucket never holds assistantEnabled, so reading it here made `?` fall
+  // through to the help overlay inside every group (refs #337).
+  const { enabled: assistantEnabled } = useAssistantEnabled();
   const isLocked = useKioskStore((state) => state.isLocked);
   const { isTvMode } = useTvMode();
 

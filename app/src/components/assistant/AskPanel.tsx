@@ -28,6 +28,7 @@ import type { ProfileId } from '../../api/types';
 import { getSession } from '../../services/sessions';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
+import { useAssistantEnabled } from '../../hooks/useAssistantEnabled';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { runAssistantTurn, isContextNearlyFull } from '../../lib/assistant/agent';
@@ -297,7 +298,12 @@ export function AskPanel() {
   const scope = useProfileScope();
   const isAllMode = scope?.mode === 'all';
   const [pinnedProfileId, setPinnedProfileId] = useState<ProfileId | undefined>(undefined);
-  const defaultPinnedId = isAllMode ? (pinnedProfileId ?? scope.profiles[0]?.id) : undefined;
+  // The member that actually carries assistant configuration, falling back to
+  // the first in scope. Pinning blindly to profiles[0] opened the panel
+  // against an unconfigured backend whenever the user enabled the assistant on
+  // some other member of the group (refs #337).
+  const { profileId: configuredProfileId } = useAssistantEnabled();
+  const defaultPinnedId = isAllMode ? (pinnedProfileId ?? configuredProfileId) : undefined;
   const { profile: pinnedProfile, settings: pinnedSettings } = useProfileById(defaultPinnedId);
   // Single mode: the page's own current profile/settings, byte-identical to
   // before. All mode: the pinned profile (defaults to the first in scope).

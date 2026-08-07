@@ -42,6 +42,13 @@ const useProfileScopeMock = vi.fn<() => unknown>(() => singleScope);
 vi.mock('../../hooks/useProfileScope', () => ({
   useProfileScope: () => useProfileScopeMock(),
 }));
+// The Ask item's gate. Not the scope's settings any more: an aggregate's own
+// bucket never holds assistantEnabled, so the gate resolves over the scope's
+// profiles instead (refs #337).
+const useAssistantEnabledMock = vi.fn(() => ({ enabled: false, profileId: 'p1' }));
+vi.mock('../../hooks/useAssistantEnabled', () => ({
+  useAssistantEnabled: () => useAssistantEnabledMock(),
+}));
 
 // Groups are per-server entities with no cross-server aggregation, so All mode
 // gets an empty list here - the same thing the real useGroups returns while the
@@ -66,6 +73,7 @@ describe('CommandPalette', () => {
     useCommandPaletteStore.setState({ open: true });
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
     useProfileScopeMock.mockReturnValue(singleScope);
+    useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue({ monitors: singleMonitors });
     groupsMock.mockReturnValue({ groups: [{ Group: { Id: '1', Name: 'Front Cameras' } }] });
   });
@@ -147,7 +155,7 @@ describe('CommandPalette', () => {
   });
 
   it('shows the Ask item when the assistant is enabled and opens the floating assistant window on click', () => {
-    useProfileScopeMock.mockReturnValue({ ...singleScope, settings: { assistantEnabled: true } });
+    useAssistantEnabledMock.mockReturnValue({ enabled: true, profileId: 'p1' });
     render(<CommandPalette />);
     fireEvent.click(screen.getByTestId('command-item-ask'));
     // Clicking Ask closes the palette and opens the standalone assistant

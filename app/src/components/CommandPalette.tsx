@@ -24,6 +24,7 @@ import { Command } from 'lucide-react';
 import { useGroups } from '../hooks/useGroups';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { useProfileScope } from '../hooks/useProfileScope';
+import { useAssistantEnabled } from '../hooks/useAssistantEnabled';
 import { useScopedMonitors } from '../hooks/useScopedMonitors';
 import { getExcludedMonitorIdSet } from '../lib/profile/profile-settings';
 import { NAV_SHORTCUTS } from '../lib/keyboard-shortcuts';
@@ -54,7 +55,9 @@ export function CommandPalette() {
   const openAssistant = useAssistantPanelStore((s) => s.open);
   const scope = useProfileScope();
   const isAllMode = scope?.mode === 'all';
-  const settings = scope?.settings;
+  // Not `scope.settings.assistantEnabled`: an aggregate's own bucket never holds it,
+  // so reading it here hid the Ask item inside every group (refs #337).
+  const { enabled: assistantEnabled } = useAssistantEnabled();
   const { setSelectedGroup } = useGroupFilter();
   // Groups are per-server entities with no cross-server aggregation (that is
   // the montage work's parked scope), so this list is empty in All mode - the
@@ -189,7 +192,7 @@ export function CommandPalette() {
           />
         </div>
         <div className="max-h-[50vh] overflow-y-auto py-1" data-testid="command-palette-results" role="listbox" id={LISTBOX_ID}>
-          {settings?.assistantEnabled && (
+          {assistantEnabled && (
             <button
               type="button"
               onClick={() => {

@@ -53,6 +53,13 @@ const useProfileScopeMock = vi.fn<() => unknown>(() => singleScope);
 vi.mock('../../hooks/useProfileScope', () => ({
   useProfileScope: () => useProfileScopeMock(),
 }));
+// The `?` key's gate. Not the scope's settings any more: an aggregate's own
+// bucket never holds assistantEnabled, so the gate resolves over the scope's
+// profiles instead (refs #337).
+const useAssistantEnabledMock = vi.fn(() => ({ enabled: false, profileId: 'p1' }));
+vi.mock('../../hooks/useAssistantEnabled', () => ({
+  useAssistantEnabled: () => useAssistantEnabledMock(),
+}));
 
 // Two servers, same monitor id 3: the jump must resolve to the FIRST one in
 // profile-then-server order, exactly what the Monitors page lists.
@@ -67,6 +74,7 @@ describe('KeyboardShortcuts "?" key', () => {
   beforeEach(() => {
     navigateMock.mockClear();
     useProfileScopeMock.mockReturnValue(singleScope);
+    useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue({ monitors: [] });
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
   });
@@ -80,10 +88,7 @@ describe('KeyboardShortcuts "?" key', () => {
   });
 
   it('opens the assistant panel and does not open the help overlay when the assistant is enabled', () => {
-    useProfileScopeMock.mockReturnValue({
-      ...singleScope,
-      settings: { assistantEnabled: true, tvMode: false },
-    });
+    useAssistantEnabledMock.mockReturnValue({ enabled: true, profileId: 'p1' });
     render(<KeyboardShortcuts />);
     press('?');
 
@@ -104,6 +109,7 @@ describe('KeyboardShortcuts in All mode (refs #337)', () => {
   beforeEach(() => {
     navigateMock.mockClear();
     useProfileScopeMock.mockReturnValue(allScope);
+    useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue(twoServers);
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
   });
