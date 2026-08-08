@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-2.2.0",
+    "title": "New profile groups, activity view, and fixes",
+    "body": "- Added profile groups so you can combine several servers and view them together as one.\n- Added an All Profiles mode that shows monitors and events from every server at once.\n- Added a Live Activity view that shows only the monitors with motion right now.\n- Added an option to turn analysis frames on or off while watching a live stream.\n- Added a per monitor option to force ZMS playback for events that do not play natively.\n- Added the ability to disable a profile so it stays in your list but is skipped everywhere.\n- Icon only buttons now show a label or tooltip when tapped on touch devices.\n- The interface now hides features your ZoneMinder account does not have rights to use.\n- The ZMS Playback label no longer covers the picture while an event plays.\n- Monitors that were deleted on the server no longer appear in the dashboard or the Hide Monitors list.\n- Fixed scrolling inside the Edit Server profile screen.\n- Reordering monitors in Montage on a touchscreen no longer fights with scrolling.\n- Watching a monitor no longer floods a reverse proxy with repeated errors.\n- Event frames now appear below the video instead of above it.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.2.0)",
+    "publishedAt": "2026-08-08T14:37:40.693Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.2.0",
+    "minAppVersion": "2.2.0"
+  },
+  {
     "id": "release-2.1.0",
     "title": "Event frame views, on-device assistant, fixes",
     "body": "- Added a way to view objdetect, alarm, and snapshot frames for an event, like the older zmNinja.\n- Added an on-device assistant backend on iOS and Android, so the assistant can run models locally without a server.\n- Assistant backend choices are now named by who supplies the model, so it is clearer what you are picking.\n- The assistant now understands phrases like \"3 days ago\" instead of falling back to today.\n- The assistant no longer fails with an error when a local model lacks tool support; it now works with those models over Ollama.\n- Fixed the event server connection dropping after the app was in the background and reopened.\n- Connection failures now name the server that could not be reached instead of showing raw error text.\n- Passwords and tokens are now stripped from logs, including ones sent back by ZoneMinder.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.1.0)",
