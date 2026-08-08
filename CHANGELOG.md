@@ -1,5 +1,39 @@
 # Changelog
 
+## [zmNinjaNg-2.2.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.2.0) (2026-08-08)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.1.0...zmNinjaNg-2.2.0)
+
+**Implemented enhancements:**
+
+- Allow combining one or more profiles together [\#341](https://github.com/ZoneMinder/zmNinjaNg/issues/341)
+- All Profiles mode: virtual profile aggregating every server [\#337](https://github.com/ZoneMinder/zmNinjaNg/issues/337)
+- Icon-only buttons have no explanation on touch devices [\#332](https://github.com/ZoneMinder/zmNinjaNg/issues/332)
+- Toggle analysis frames on live streams [\#329](https://github.com/ZoneMinder/zmNinjaNg/issues/329)
+- Force ZMS playback per monitor as an option \(was: Don't show 'Video not natively playable' toast on every event\) [\#315](https://github.com/ZoneMinder/zmNinjaNg/issues/315)
+- feat: Live Activity view to only show monitors with active motion [\#313](https://github.com/ZoneMinder/zmNinjaNg/issues/313)
+
+**Fixed bugs:**
+
+- Permissions: gate the UI on the ZoneMinder account's actual rights [\#344](https://github.com/ZoneMinder/zmNinjaNg/issues/344)
+- Hide or Option to hide ZMS Playback text when playing events [\#340](https://github.com/ZoneMinder/zmNinjaNg/issues/340)
+- Watching a monitor yields me a lot of errors on my proxy [\#331](https://github.com/ZoneMinder/zmNinjaNg/issues/331)
+- Old/deleted monitors show up in Hide Monitors [\#324](https://github.com/ZoneMinder/zmNinjaNg/issues/324)
+- Old/deleted monitors show up in Dashboard [\#323](https://github.com/ZoneMinder/zmNinjaNg/issues/323)
+- Can't scroll in Edit Server profile popup screen [\#322](https://github.com/ZoneMinder/zmNinjaNg/issues/322)
+- Difficult to scroll when editing order of monitors on Montage on touchscreen [\#321](https://github.com/ZoneMinder/zmNinjaNg/issues/321)
+
+**Refactoring:**
+
+- e2e: tolerated-failure set needs an expiry \(shared live server flakiness\) [\#342](https://github.com/ZoneMinder/zmNinjaNg/issues/342)
+
+**Closed issues:**
+
+- Profiles: disable toggle \(listed but unselectable; All mode ignores\) [\#343](https://github.com/ZoneMinder/zmNinjaNg/issues/343)
+- Android: document local network permission, declare ACCESS\_LOCAL\_NETWORK ahead of targetSdk 37 [\#333](https://github.com/ZoneMinder/zmNinjaNg/issues/333)
+- Improve discoverability: landing page metadata and repo SEO [\#317](https://github.com/ZoneMinder/zmNinjaNg/issues/317)
+- Can Event Frames be moved under the video? [\#314](https://github.com/ZoneMinder/zmNinjaNg/issues/314)
+
 ## [zmNinjaNg-2.1.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.1.0) (2026-07-30)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.0.0...zmNinjaNg-2.1.0)
