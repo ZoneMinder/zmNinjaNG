@@ -38,10 +38,13 @@ import { cn } from '../../lib/utils';
 interface ZmsEventPlayerProps {
   portalUrl: string;
   eventId: string;
-  /** Profile that owns this event. Required for token freshness inside a
-   *  server group, where there is no current profile to fall back to
-   *  (refs #337). */
-  profileId?: ProfileId;
+  /** Profile that owns this event, for token freshness. Required - not
+   *  optional - because inside a server group there is no current profile to
+   *  fall back to, and a call site that forgets it gets a player that never
+   *  streams. EventDetail renders this component from two branches and only
+   *  one of them was fixed the first time (refs #337). Pass `undefined`
+   *  deliberately if a caller genuinely has no owning profile. */
+  profileId: ProfileId | undefined;
   token?: string;
   apiUrl?: string;
   totalFrames: number;

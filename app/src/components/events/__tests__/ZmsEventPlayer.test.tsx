@@ -81,6 +81,7 @@ function renderPlayer(
     <ZmsEventPlayer
       portalUrl="https://zm.test"
       eventId="42"
+      profileId={undefined}
       token="tok"
       totalFrames={100}
       alarmFrames={0}
@@ -160,13 +161,13 @@ describe('ZmsEventPlayer', () => {
     const { rerender } = renderPlayer();
 
     rerender(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={0} eventLength={10} suspended />
     );
     expect(callsForCommand('1')).toHaveLength(1);
 
     rerender(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={0} eventLength={10} suspended={false} />
     );
     expect(callsForCommand('2')).toHaveLength(1);
@@ -178,11 +179,11 @@ describe('ZmsEventPlayer', () => {
     expect(callsForCommand('1')).toHaveLength(1);
 
     rerender(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={0} eventLength={10} suspended />
     );
     rerender(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={0} eventLength={10} suspended={false} />
     );
 
@@ -194,7 +195,7 @@ describe('ZmsEventPlayer', () => {
   // (refs #272); only the quick-jump button remains here for seeking to it.
   it('shows no alarm-frame thumbnail, only the quick-jump button', () => {
     render(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={5} alarmFrameId="10" maxScoreFrameId="20" eventLength={10} />
     );
 
@@ -205,7 +206,7 @@ describe('ZmsEventPlayer', () => {
 
   it('drops the max-score card when it is the same frame as the alarm', () => {
     render(
-      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" token="tok" totalFrames={100}
+      <ZmsEventPlayer portalUrl="https://zm.test" eventId="42" profileId={undefined} token="tok" totalFrames={100}
         alarmFrames={5} alarmFrameId="10" maxScoreFrameId="10" eventLength={10} />
     );
 
@@ -400,6 +401,7 @@ describe('ZmsEventPlayer', () => {
         <ZmsEventPlayer
           portalUrl="https://zm.test"
           eventId="42"
+          profileId={undefined}
           token="tok"
           totalFrames={100}
           alarmFrames={0}

@@ -653,6 +653,7 @@ export default function EventDetail() {
               <ZmsEventPlayer
                 portalUrl={resolvedPortalUrl}
                 eventId={event.Event.Id}
+                profileId={ownerProfileId}
                 token={accessToken || undefined}
                 suspended={frameViewerOpen}
                 apiUrl={ownerProfile.apiUrl}
