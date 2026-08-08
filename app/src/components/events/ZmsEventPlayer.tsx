@@ -32,11 +32,16 @@ import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/zoom-controls';
 import { useBandwidthSettings } from '../../hooks/useBandwidthSettings';
 import { useFreshAccessToken } from '../../hooks/useFreshAccessToken';
+import type { ProfileId } from '../../api/types';
 import { cn } from '../../lib/utils';
 
 interface ZmsEventPlayerProps {
   portalUrl: string;
   eventId: string;
+  /** Profile that owns this event. Required for token freshness inside a
+   *  server group, where there is no current profile to fall back to
+   *  (refs #337). */
+  profileId?: ProfileId;
   token?: string;
   apiUrl?: string;
   totalFrames: number;
@@ -68,6 +73,7 @@ interface ZmsEventPlayerProps {
 export function ZmsEventPlayer({
   portalUrl,
   eventId,
+  profileId,
   token,
   apiUrl,
   totalFrames,
@@ -86,7 +92,14 @@ export function ZmsEventPlayer({
 }: ZmsEventPlayerProps) {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
-  const { isFresh: isAccessTokenFresh } = useFreshAccessToken();
+  // Parented to the event's OWNING profile (refs #337). Unparented this
+  // resolves to the current profile, which inside a server group is an
+  // aggregate id and therefore no profile at all: the auth store answers with
+  // its empty slice (requiresAuth true, no token), `isFresh` never turns true,
+  // and the stream URL below stays empty forever - JPEG-only events never
+  // played in a group. The token itself already comes from the caller, which
+  // resolved it against the same profile.
+  const { isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);
   const [currentFrame, setCurrentFrame] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
   const [badgeVisible, setBadgeVisible] = useState(true);
@@ -485,6 +498,10 @@ export function ZmsEventPlayer({
             <VideoOff className="h-10 w-10 text-muted-foreground/30" />
           </div>
           <div ref={zoomPan.innerRef} className="relative z-10">
+            {/* Nothing to render until there is a URL: an <img src=""> paints
+                the browser's own broken-image glyph and alt text on top of the
+                no-video placeholder this markup already provides. */}
+            {zmsUrl && (
             <img
               src={zmsUrl}
               alt={t('event_detail.event_playback')}
@@ -495,6 +512,7 @@ export function ZmsEventPlayer({
                 (e.target as HTMLImageElement).style.display = '';
               }}
             />
+            )}
           </div>
 
           {/* Fallback notice - fades out after a few seconds so it stops covering the picture (issue #340) */}

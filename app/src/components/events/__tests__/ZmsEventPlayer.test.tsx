@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
+import { asProfileId, type ProfileId } from '../../../api/types';
 import { ZM_INTEGRATION, EVENT_SEEK_FLUSH_DELAY_MS } from '../../../lib/zmninja-ng-constants';
 
 const httpGetMock = vi.fn().mockResolvedValue({ data: {} });
@@ -35,8 +36,15 @@ vi.mock('../../../hooks/useBandwidthSettings', () => ({
   useBandwidthSettings: () => ({ zmsStatusInterval: 600000 }),
 }));
 
+// Parented by profile id, like the real hook: an aggregate is not a profile,
+// so an unparented call resolves to the empty auth slice and never goes fresh
+// (refs #337).
+const freshByProfile: Record<string, boolean> = {};
+const freshAccessTokenMock = vi.fn((profileId?: string) => ({
+  isFresh: freshByProfile[profileId ?? 'current'] ?? true,
+}));
 vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ isFresh: true }),
+  useFreshAccessToken: (profileId?: string) => freshAccessTokenMock(profileId),
 }));
 
 vi.mock('../../../hooks/useCurrentProfile', () => ({
@@ -66,7 +74,9 @@ vi.mock('../../../api/events', () => ({
   getEventImageUrl: vi.fn().mockReturnValue('https://zm.test/image.jpg'),
 }));
 
-function renderPlayer(props: { suspended?: boolean; showNotice?: boolean } = {}) {
+function renderPlayer(
+  props: { suspended?: boolean; showNotice?: boolean; profileId?: ProfileId } = {}
+) {
   return render(
     <ZmsEventPlayer
       portalUrl="https://zm.test"
@@ -116,6 +126,7 @@ describe('ZmsEventPlayer', () => {
   beforeEach(() => {
     cleanup();
     httpGetMock.mockClear();
+    freshAccessTokenMock.mockClear();
   });
 
   afterEach(() => {
@@ -411,5 +422,38 @@ describe('ZmsEventPlayer', () => {
     const quits = quitCalls();
     expect(quits).toHaveLength(1);
     expect(connkeyOf(quits[0][0] as string)).toBe(streamConnkey);
+  });
+});
+
+/**
+ * Refs #337. Inside a server group there is no current profile, so the
+ * player's own token-freshness check has to name the event's owning profile.
+ * Unparented it resolved to the empty auth slice (requiresAuth true, no
+ * token), the stream URL stayed empty, and JPEG-only playback never started.
+ */
+describe('ZmsEventPlayer token freshness', () => {
+  beforeEach(() => {
+    cleanup();
+    freshAccessTokenMock.mockClear();
+  });
+
+  it('asks about the owning profile, not the current one', () => {
+    renderPlayer({ profileId: asProfileId('p-owner') });
+    expect(freshAccessTokenMock).toHaveBeenCalledWith('p-owner');
+  });
+
+  it('streams the event once that profile has a fresh token', () => {
+    renderPlayer({ profileId: asProfileId('p-owner') });
+    expect(getStreamImg().getAttribute('src')).toContain('zm.test');
+  });
+
+  // An <img src=""> paints the browser's broken-image glyph and its alt text
+  // over the no-video placeholder, which is what the placeholder is for.
+  it('renders no image at all while the URL is unavailable', () => {
+    freshByProfile['p-cold'] = false;
+    renderPlayer({ profileId: asProfileId('p-cold') });
+
+    expect(screen.queryByAltText('event_detail.event_playback')).toBeNull();
+    delete freshByProfile['p-cold'];
   });
 });
