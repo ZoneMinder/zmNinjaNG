@@ -83,7 +83,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // count_events measures ONE rolling window, so it cannot rank hours;
     // asked for a busiest hour it reported "the last hour" (refs #264). The
     // list_events result carries an app-computed busiest-hour clause.
-    'For "busiest hour" or "most active hour" questions, call list_events with the day asked about: the result\'s busiestHour field is the answer, quote its label and count exactly, and end with a SHOW line listing the ids of that hour\'s events (see the SHOW rule below).',
+    'For "busiest hour" or "most active hour" questions, call list_events with the day asked about: the result\'s busiestHour field is the answer, quote its label and count exactly, and end with a SHOW line listing ONLY the ids of that hour\'s events, never every row (see the SHOW rule below). No busiestHour field means the result is one page of a larger window and the hours cannot be ranked: say that, and ask for a day.',
     // count_events reports per-monitor counts and nothing about what was
     // detected; asked "how many vehicles came today" the model called it
     // anyway and reported all events as vehicles. The loop enforces this too

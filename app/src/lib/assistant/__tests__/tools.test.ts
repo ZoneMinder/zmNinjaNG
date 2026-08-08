@@ -1097,6 +1097,24 @@ describe('list_events when resolution (refs #246)', () => {
     );
   });
 
+  // Observed live: "what were the busiest hours?" reached list_events as
+  // when:"the busiest hours", the interpreter returned fields naming no
+  // window, and the query ran with NO time filter over every event ever
+  // recorded - then reported a "busiest hour" from the newest 25 rows. A
+  // phrase that resolves to nothing must correct the model, not silently
+  // widen the question.
+  it('refuses a `when` phrase that resolves to no window at all', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'the busiest hours' },
+      { ...ctx(), interpretWhen: vi.fn(async () => ({})), timezone: 'America/New_York' },
+    );
+
+    expect(r.isError).toBe(true);
+    expect(r.output).toContain('the busiest hours');
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
   it('falls back to the browser timezone when ctx.timezone is unset', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({ when: 'last hour' }, ctx());
@@ -1175,6 +1193,28 @@ describe('list_events when resolution (refs #246)', () => {
     expect(parsed.summary).not.toContain('Busiest hour');
     expect(parsed.busiestHour).toEqual({ label: '2026-07-15 08:00:00', count: 2 });
     expect(parsed.countsByHour).toEqual({ '2026-07-15 08:00:00': 2, '2026-07-15 11:00:00': 1 });
+  });
+
+  // Same incident as the no-window case above: with 515 matches and 25 rows
+  // shown, the "busiest hour" was the busiest hour OF THE NEWEST 25 EVENTS,
+  // presented as fact. A ranking off a truncated page is not one, so the
+  // fields go away and the model has nothing to quote.
+  it('omits the hour ranking when the rows are only a page of the matches', async () => {
+    vi.mocked(getEvents).mockResolvedValueOnce({
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 08:10:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-07-15 08:40:00', Length: '30', Notes: 'detected:person' } },
+      ],
+      pagination: { page: 1, pageCount: 9, current: 1, count: 2, prevPage: false, nextPage: true, limit: 25, totalCount: 515 },
+    } as never);
+
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+    const parsed = JSON.parse(r.output);
+    expect(parsed.moreMatchesExist).toBe(true);
+    expect(parsed.busiestHour).toBeUndefined();
+    expect(parsed.countsByHour).toBeUndefined();
   });
 
   // The model reported ten rows as "8 Front Yard, 2 Garage Outdoor" when the

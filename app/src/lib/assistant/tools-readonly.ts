@@ -321,6 +321,18 @@ const listEventsTool: ToolDefinition = {
         if ('error' in fields && fields.error) throw new Error(String(fields.error));
         const window = resolveWindow(fields as WindowFields, new Date(), timezone);
         if (window && 'error' in window) throw new Error(window.error);
+        // Fields that name no window at all (observed live: "the busiest
+        // hours" was extracted as a timeframe and interpreted into nothing).
+        // Continuing here drops the filter and answers over EVERY recorded
+        // event while still calling it the asked-about period, which is the
+        // wrong-window-with-real-data failure every rule around `when` exists
+        // to prevent. Correct the model instead.
+        if (!window) {
+          throw new Error(
+            `"${whenPhrase}" does not name a time period this app can resolve. Either omit \`when\` to ` +
+              'search every recorded event, or pass the time words the user actually used.',
+          );
+        }
         resolvedWhen = window;
       }
 
@@ -521,12 +533,19 @@ const listEventsTool: ToolDefinition = {
         const hourEntries = Object.entries(hourBuckets(rawStarts.slice(0, rowsToShow.length))).sort(
           (a, b) => b[1] - a[1],
         );
+        // Only when the rows ARE the matches. A page of 25 out of 515 ranks the
+        // hours of the newest 25 events, and the model quotes that as the
+        // busiest hour of the whole window - observed live, where every one of
+        // a server's 25 rows fell in one hour and it reported that hour with a
+        // count of 25. Absent, the field cannot be quoted at all, and the
+        // summary (which says it is a partial result) is what gets read.
+        const rankable = !truncated && rowsToShow.length > 1;
         const busiestHour =
-          rowsToShow.length > 1 && hourEntries.length > 0
+          rankable && hourEntries.length > 0
             ? { label: String(formatTimestamp(hourEntries[0][0], ctx)), count: hourEntries[0][1] }
             : undefined;
         const countsByHour =
-          hourEntries.length > 1
+          rankable && hourEntries.length > 1
             ? Object.fromEntries(hourEntries.map(([key, count]) => [String(formatTimestamp(key, ctx)), count]))
             : undefined;
         // The counts, already written out. Supplying the numbers was not enough:

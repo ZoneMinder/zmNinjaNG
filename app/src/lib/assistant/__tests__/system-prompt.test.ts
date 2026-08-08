@@ -110,6 +110,15 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt({ ...base, servers: ['warehouse'] })).toBe(buildSystemPrompt(base));
   });
 
+  // A busiest-hour answer used to end with a SHOW line carrying every returned
+  // row, so the cards showed 25 events for an answer about one hour, and a
+  // truncated result still got a busiest hour quoted off its newest page.
+  it('scopes the busiest-hour SHOW line and says what an absent ranking means', () => {
+    const p = buildSystemPrompt(base);
+    expect(p).toContain("ONLY the ids of that hour's events, never every row");
+    expect(p).toContain('No busiestHour field');
+  });
+
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {
     const p = buildSystemPrompt(base);
     expect(p.toLowerCase()).not.toContain('"tool"');
