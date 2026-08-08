@@ -82,6 +82,28 @@ class NavigationService {
 // Singleton instance
 export const navigationService = new NavigationService();
 
+/** Every section-level route and what to call it. Module scope because two
+ *  things read it now: the entry banner below, and `resolveSwitchDestination`,
+ *  which uses membership here as its definition of "a page, not an entity". */
+const SECTION_VIEW_NAMES: Record<string, string> = {
+  '/': 'Home',
+  '/dashboard': 'Dashboard',
+  '/monitors': 'Monitors',
+  '/montage': 'Montage',
+  '/live-activity': 'Live Activity',
+  '/events': 'Events',
+  '/event-montage': 'Event Montage',
+  '/timeline': 'Timeline',
+  '/notifications': 'Notifications',
+  '/notification-settings': 'Notification Settings',
+  '/notification-history': 'Notification History',
+  '/server': 'Server',
+  '/profiles': 'Profiles',
+  '/settings': 'Settings',
+  '/logs': 'Logs',
+  '/kiosk': 'Kiosk',
+};
+
 /**
  * Map a pathname to the human-readable view name used in entry banners
  * and any other place that wants to refer to the current page in plain
@@ -91,25 +113,7 @@ export const navigationService = new NavigationService();
 export function viewNameForPath(pathname: string): string | null {
   const path = pathname.replace(/\/+$/, '') || '/';
 
-  const exact: Record<string, string> = {
-    '/': 'Home',
-    '/dashboard': 'Dashboard',
-    '/monitors': 'Monitors',
-    '/montage': 'Montage',
-    '/live-activity': 'Live Activity',
-    '/events': 'Events',
-    '/event-montage': 'Event Montage',
-    '/timeline': 'Timeline',
-    '/notifications': 'Notifications',
-    '/notification-settings': 'Notification Settings',
-    '/notification-history': 'Notification History',
-    '/server': 'Server',
-    '/profiles': 'Profiles',
-    '/settings': 'Settings',
-    '/logs': 'Logs',
-    '/kiosk': 'Kiosk',
-  };
-  if (path in exact) return exact[path];
+  if (path in SECTION_VIEW_NAMES) return SECTION_VIEW_NAMES[path];
 
   // Setup-flow paths suppress the banner: they're transient and not "views".
   if (path === '/setup' || path === '/profiles/new') return null;
@@ -144,6 +148,31 @@ export function viewNameForPath(pathname: string): string | null {
  * @param currentProfileId - The single-mode profile, undefined while
  *   aggregating.
  */
+/** Where a profile switch lands when the target remembered nothing usable. */
+const SWITCH_FALLBACK_ROUTE = '/monitors';
+
+/**
+ * Where to navigate after switching to a profile or group, given the page that
+ * profile last had open (its own `lastRoute` bucket).
+ *
+ * Every switch used to go to `/monitors` unconditionally, so the page the app
+ * already remembers per profile - and reopens on at startup - was thrown away
+ * the moment you switched (refs #337).
+ *
+ * Only section-level routes come back. A remembered `/monitors/3` or
+ * `/all/events/:profileId/:id` names an entity on the profile being LEFT:
+ * monitor 3 is a different camera on the target server, and an `/all/` route
+ * names a profile that need not be in the new scope at all. Kiosk is excluded
+ * separately: it is a locked full-screen mode rather than a page, and landing
+ * in it straight after a switch would strand the user.
+ */
+export function resolveSwitchDestination(lastRoute: string | undefined | null): string {
+  // '/' is the index redirect, which sends the app to `lastRoute` - returning
+  // it here would bounce the switch straight back through itself.
+  if (!lastRoute || lastRoute === '/kiosk' || lastRoute === '/') return SWITCH_FALLBACK_ROUTE;
+  return lastRoute in SECTION_VIEW_NAMES ? lastRoute : SWITCH_FALLBACK_ROUTE;
+}
+
 export function resolveLastRouteSaveTarget(
   pathname: string,
   fromNotification: boolean,

@@ -42,6 +42,7 @@ import type { Profile, VirtualProfile } from '../api/types';
 import { isAggregateProfileId } from '../api/types';
 import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
+import { resolveSwitchDestination } from '../lib/navigation';
 import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
 import { useToast } from '../hooks/use-toast';
 import { toast as sonnerToast } from 'sonner';
@@ -349,7 +350,15 @@ export default function Profiles() {
       sonnerToast.dismiss(loadingToast);
       sonnerToast.success(t('profiles.switched_to', { name }));
       setSwitchingProfileId(null);
-      navigate('/monitors');
+      // The page this profile (or group) was last on, not always /monitors:
+      // the app remembers one per profile and reopens on it at startup, and
+      // a switch used to throw that away (refs #337). Read after the switch,
+      // so the bucket is the one just selected.
+      navigate(
+        resolveSwitchDestination(
+          useSettingsStore.getState().getProfileSettings(profileId).lastRoute
+        )
+      );
     } catch {
       if (abort.signal.aborted) return;
       sonnerToast.dismiss(loadingToast);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveLastRouteSaveTarget } from '../navigation';
+import { resolveLastRouteSaveTarget, resolveSwitchDestination } from '../navigation';
 import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 
 const P1 = asProfileId('p1');
@@ -42,5 +42,51 @@ describe('resolveLastRouteSaveTarget', () => {
 
   it('saves nothing when there is truly no profile selected yet', () => {
     expect(resolveLastRouteSaveTarget('/live-activity', false, null, undefined)).toBeNull();
+  });
+});
+
+/**
+ * Where a profile switch lands (refs #337).
+ *
+ * The app already remembers a page per profile (and per group), and reopens
+ * on it at startup, but every switch hard-navigated to /monitors and threw
+ * that away. Restoring it has one hazard: a saved page can name an entity
+ * that only exists on the profile being left, so only section-level routes
+ * come back.
+ */
+describe('resolveSwitchDestination', () => {
+  it('returns the section the user was last on', () => {
+    expect(resolveSwitchDestination('/events')).toBe('/events');
+    expect(resolveSwitchDestination('/montage')).toBe('/montage');
+    expect(resolveSwitchDestination('/timeline')).toBe('/timeline');
+  });
+
+  it('falls back to monitors when nothing was remembered', () => {
+    expect(resolveSwitchDestination(undefined)).toBe('/monitors');
+    expect(resolveSwitchDestination('')).toBe('/monitors');
+  });
+
+  // The ids belong to the profile being left: monitor 3 is a different camera
+  // on the target, and /all/ deep routes name a profile that may not even be
+  // in the new scope.
+  it('drops a route naming an entity, in either mode', () => {
+    for (const path of ['/monitors/3', '/events/91', '/all/monitors/p1/3', '/all/events/p1/91']) {
+      expect(resolveSwitchDestination(path)).toBe('/monitors');
+    }
+  });
+
+  // Kiosk is a locked full-screen mode, not a page: landing in it because the
+  // last session ended there would strand the user right after a switch.
+  it('never lands a switch in kiosk mode', () => {
+    expect(resolveSwitchDestination('/kiosk')).toBe('/monitors');
+  });
+
+  it('drops a route that no longer exists', () => {
+    expect(resolveSwitchDestination('/gone')).toBe('/monitors');
+  });
+
+  // '/' is the index redirect, and it redirects to lastRoute.
+  it('never lands on the index redirect', () => {
+    expect(resolveSwitchDestination('/')).toBe('/monitors');
   });
 });

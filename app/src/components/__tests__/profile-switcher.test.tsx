@@ -12,10 +12,11 @@
  * test) are always present in the DOM.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { ProfileSwitcher } from '../profile-switcher';
-import { mintVirtualProfileId } from '../../api/types';
+import { mintVirtualProfileId, asProfileId } from '../../api/types';
+import { useSettingsStore } from '../../stores/settings';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -151,6 +152,21 @@ describe('ProfileSwitcher', () => {
       fireEvent.click(screen.getByTestId(`profile-switcher-virtual-${group}`));
 
       expect(switchProfileMock).toHaveBeenCalledWith(group);
+    });
+
+    // The group has its own lastRoute bucket, and a switch used to discard it
+    // and land on /monitors every time (refs #337).
+    it('lands on the page the group was last on', async () => {
+      setProfiles([profileA, profileB]);
+      mockProfileState.virtualProfiles = [
+        { id: group, name: 'Backyard', memberProfileIds: ['profile-a', 'profile-b'] },
+      ];
+      useSettingsStore.getState().updateProfileSettings(asProfileId(group), { lastRoute: '/timeline' });
+
+      render(<ProfileSwitcher />);
+      fireEvent.click(screen.getByTestId(`profile-switcher-virtual-${group}`));
+
+      await waitFor(() => expect(navigateMock).toHaveBeenCalledWith('/timeline'));
     });
 
     // A group can still be listed while holding nothing selectable, when the

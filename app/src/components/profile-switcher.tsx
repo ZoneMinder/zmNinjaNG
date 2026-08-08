@@ -22,9 +22,11 @@ import {
 import { Button } from './ui/button';
 import { Check, ChevronDown, Server, Plus, Loader2, Layers } from 'lucide-react';
 import { toast } from 'sonner';
-import { isAggregateProfileId } from '../api/types';
+import { asProfileId, isAggregateProfileId } from '../api/types';
 import { useAggregateLabel } from '../hooks/useAggregateLabel';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
+import { resolveSwitchDestination } from '../lib/navigation';
+import { useSettingsStore } from '../stores/settings';
 
 import { useTranslation } from 'react-i18next';
 
@@ -82,7 +84,15 @@ export function ProfileSwitcher() {
       toast.dismiss(loadingToast);
       toast.success(t('profiles.switched_to', { name }));
       setIsLoading(false);
-      navigate('/monitors');
+      // The page this profile (or group) was last on (refs #337): the app
+      // remembers one per profile and reopens on it at startup, and a switch
+      // used to discard it. Read after the switch, so the bucket is the one
+      // just selected.
+      navigate(
+        resolveSwitchDestination(
+          useSettingsStore.getState().getProfileSettings(asProfileId(profileId)).lastRoute
+        )
+      );
     } catch (error: unknown) {
       if (abort.signal.aborted) return;
 

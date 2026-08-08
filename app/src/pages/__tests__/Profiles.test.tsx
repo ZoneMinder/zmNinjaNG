@@ -15,18 +15,30 @@ vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: () => useCurrentProfileMock(),
 }));
 
+// The page a profile was last on, per profile id: a switch navigates there
+// rather than always to /monitors (refs #337).
+const savedRoutes: Record<string, string> = {};
+
 vi.mock('../../stores/settings', () => ({
   DEFAULT_SETTINGS: {
     viewMode: 'snapshot',
     displayMode: 'normal',
     theme: 'light',
   },
-  useSettingsStore: vi.fn((selector: any) => {
-    if (typeof selector === 'function') {
-      return selector({ profileSettings: {} });
+  useSettingsStore: Object.assign(
+    vi.fn((selector: any) => {
+      if (typeof selector === 'function') {
+        return selector({ profileSettings: {} });
+      }
+      return {};
+    }),
+    {
+      getState: () => ({
+        getProfileSettings: (id: string) => ({ lastRoute: savedRoutes[id] }),
+        updateProfileSettings: vi.fn(),
+      }),
     }
-    return {};
-  }),
+  ),
   mergeProfileSettings: vi.fn((raw?: Record<string, unknown>) => ({
     viewMode: 'snapshot',
     displayMode: 'normal',
@@ -248,6 +260,20 @@ describe('Profiles Page', () => {
 
       expect(switchProfileMock).toHaveBeenCalledWith(GROUP.id);
       expect(mockNavigate).toHaveBeenCalledWith('/monitors');
+    });
+
+    // The group keeps its own lastRoute bucket, and a switch used to discard
+    // it and land on /monitors every time (refs #337).
+    it('lands on the page the group was last on', async () => {
+      const user = userEvent.setup();
+      savedRoutes[GROUP.id] = '/events';
+      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+
+      render(<Profiles />);
+      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+
+      expect(mockNavigate).toHaveBeenCalledWith('/events');
+      delete savedRoutes[GROUP.id];
     });
 
     // With one selectable server there is nothing to group.
