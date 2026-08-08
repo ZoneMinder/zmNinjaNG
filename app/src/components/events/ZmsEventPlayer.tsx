@@ -206,6 +206,35 @@ export function ZmsEventPlayer({
     });
   }, [portalUrl, apiUrl, eventId, connKey, token, minStreamingPort, monitorId, isAccessTokenFresh]);
 
+  // The stream itself is an <img> load, so it never appears in the HTTP log the
+  // way commands and status queries do: without this line a stream that never
+  // starts is indistinguishable from one that was never requested. Host, port
+  // and connkey are the three that actually differ between a working and a
+  // broken setup (multi-port rewrites the port; refs #337).
+  useEffect(() => {
+    if (!zmsUrl) {
+      log.zmsEventPlayer('No stream URL yet: waiting for a fresh token', LogLevel.DEBUG, {
+        eventId,
+        monitorId,
+      });
+      return;
+    }
+    try {
+      const parsed = new URL(zmsUrl);
+      log.zmsEventPlayer('Stream URL built', LogLevel.DEBUG, {
+        origin: parsed.origin,
+        path: parsed.pathname,
+        eventId,
+        monitorId,
+        connkey: connKey,
+        rate: parsed.searchParams.get('rate'),
+        hasToken: parsed.searchParams.has('token'),
+      });
+    } catch {
+      log.zmsEventPlayer('Stream URL built (unparseable)', LogLevel.WARN, { eventId, monitorId });
+    }
+  }, [zmsUrl, eventId, monitorId, connKey]);
+
   // Send control command to the stream
   const sendCommand = useCallback(async (cmd: number, opts?: { offset?: number; rate?: number }) => {
     const url = getZmsControlUrl(portalUrl, cmd, connKey, {
@@ -299,6 +328,15 @@ export function ZmsEventPlayer({
         const resp = await httpGet<{ status?: { progress?: number; duration?: number } }>(url, { signal });
         if (signal.aborted || isScrubbingRef.current) return;
         const status = resp.data?.status;
+        if (!status || typeof status.progress !== 'number' || typeof status.duration !== 'number') {
+          // A running stream answers with progress/duration. Anything else means
+          // ZMS has no process for this connkey, which is what a stream that
+          // never started looks like from here (refs #337).
+          log.zmsEventPlayer('Status query returned no playback state', LogLevel.DEBUG, {
+            connkey: connKey,
+            keys: resp.data && typeof resp.data === 'object' ? Object.keys(resp.data) : typeof resp.data,
+          });
+        }
         if (status && typeof status.progress === 'number' && typeof status.duration === 'number' && status.duration > 0) {
           setStreamDuration(status.duration);
           const fraction = status.progress / status.duration;
@@ -506,8 +544,20 @@ export function ZmsEventPlayer({
               src={zmsUrl}
               alt={t('event_detail.event_playback')}
               className="w-full h-full object-contain"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              onError={(e) => {
+                // The only signal that ZMS refused the stream: no HTTP log line
+                // exists for an image load (refs #337).
+                log.zmsEventPlayer('Stream image failed to load', LogLevel.WARN, {
+                  eventId,
+                  monitorId,
+                  connkey: connKey,
+                });
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
               onLoad={(e) => {
+                if (!streamStartedRef.current) {
+                  log.zmsEventPlayer('Stream started', LogLevel.DEBUG, { eventId, monitorId, connkey: connKey });
+                }
                 streamStartedRef.current = true;
                 (e.target as HTMLImageElement).style.display = '';
               }}
