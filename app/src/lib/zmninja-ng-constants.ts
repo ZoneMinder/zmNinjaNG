@@ -795,6 +795,12 @@ export const ASSISTANT = {
   contextClearThreshold: 0.75,
 
   maxListEventsLimit: 25,
+  // Monitors a truncated list_events result will count individually to report
+  // the window's real per-monitor breakdown (refs #337). One request each, run
+  // in parallel, and only on the truncated path. Past this many the page tally
+  // is reported instead, qualified as such: a server with dozens of monitors
+  // would spend more requests on the breakdown than on the answer.
+  maxMonitorTotalQueries: 24,
   // How many distinct detected-object labels list_events names back when an
   // objectType filter matched nothing. Enough to cover a normal install's
   // vocabulary (person, car, dog, truck, ...) without pasting a long tail of

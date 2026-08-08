@@ -1195,6 +1195,102 @@ describe('list_events when resolution (refs #246)', () => {
     expect(parsed.countsByHour).toEqual({ '2026-07-15 08:00:00': 2, '2026-07-15 11:00:00': 1 });
   });
 
+  /**
+   * Observed live: a 9am-2pm window matched 4831 events on one server, 25 were
+   * listed, and the answer reported "HoopVivotek 11, HoopHouse 11" as the
+   * window's breakdown. The tool said "(listed rows)"; the model dropped the
+   * qualifier, as models do with hedges. A page tally is not a breakdown, so
+   * when the server has more pages the per-monitor counts are queried for
+   * real - one count per monitor over the same window - and detections, which
+   * cannot be totalled that way, are left out entirely.
+   */
+  describe('per-monitor totals when the result is one page of many', () => {
+    const TWO_MONITORS = {
+      monitors: [
+        { Monitor: { ...mockMonitor, Id: '1', Name: 'Front Door' } },
+        { Monitor: { ...mockMonitor, Id: '2', Name: 'Backyard' } },
+      ],
+    };
+    const page = {
+      events: [
+        { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-07-15 09:10:00', Length: '30', Notes: 'detected:person' } },
+        { Event: { Id: '2', MonitorId: '1', StartDateTime: '2026-07-15 09:40:00', Length: '30', Notes: 'detected:person' } },
+      ],
+      pagination: { page: 1, pageCount: 40, current: 1, count: 2, prevPage: false, nextPage: true, limit: 25, totalCount: 987 },
+    };
+    const countOnly = (total: number) => ({
+      events: [],
+      pagination: { page: 1, pageCount: 1, current: 1, count: 0, prevPage: false, nextPage: false, limit: 1, totalCount: total },
+    });
+
+    it('reports the real per-monitor counts for the window, not the page', async () => {
+      vi.mocked(getMonitors).mockResolvedValueOnce(TWO_MONITORS as never);
+      vi.mocked(getEvents)
+        .mockResolvedValueOnce(page as never)
+        .mockResolvedValueOnce(countOnly(300) as never)
+        .mockResolvedValueOnce(countOnly(687) as never);
+
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+      const parsed = JSON.parse(r.output);
+      expect(parsed.countsByMonitor).toEqual({ 'Front Door': 300, Backyard: 687 });
+      // The page held two Front Door rows and no Backyard row at all: a tally
+      // of what was listed would have said so.
+      expect(parsed.summary).toContain('Front Door 300');
+      expect(parsed.summary).not.toContain('(listed rows)');
+    });
+
+    it('leaves detections out, since a page cannot total them', async () => {
+      vi.mocked(getMonitors).mockResolvedValueOnce(TWO_MONITORS as never);
+      vi.mocked(getEvents)
+        .mockResolvedValueOnce(page as never)
+        .mockResolvedValueOnce(countOnly(300) as never)
+        .mockResolvedValueOnce(countOnly(687) as never);
+
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+      const parsed = JSON.parse(r.output);
+      expect(parsed.objectCounts).toBeUndefined();
+      expect(parsed.summary).not.toContain('Detected');
+    });
+
+    it('falls back to the listed rows, and says so, when a count query fails', async () => {
+      vi.mocked(getMonitors).mockResolvedValueOnce(TWO_MONITORS as never);
+      vi.mocked(getEvents)
+        .mockResolvedValueOnce(page as never)
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce(countOnly(687) as never);
+
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+      const parsed = JSON.parse(r.output);
+      expect(r.isError).toBeFalsy();
+      expect(parsed.countsByMonitor).toEqual({ 'Front Door': 2 });
+      expect(parsed.summary).toContain('(listed rows)');
+    });
+
+    // Nothing beyond this page means the rows ARE the matches, so the counts
+    // are the window's already and no extra request is worth making.
+    it('asks for no totals when the page holds every match', async () => {
+      vi.mocked(getMonitors).mockResolvedValueOnce(TWO_MONITORS as never);
+      vi.mocked(getEvents).mockResolvedValueOnce({
+        ...page,
+        pagination: { ...page.pagination, pageCount: 1, nextPage: false, totalCount: 2 },
+      } as never);
+
+      const tool = getToolByName('list_events')!;
+      const r = await tool.execute({ when: 'yesterday' }, { ...ctx(), timezone: 'America/New_York' });
+
+      expect(vi.mocked(getEvents)).toHaveBeenCalledTimes(1);
+      const parsed = JSON.parse(r.output);
+      expect(parsed.countsByMonitor).toEqual({ 'Front Door': 2 });
+      expect(parsed.objectCounts).toEqual({ person: 2 });
+    });
+  });
+
   // Same incident as the no-window case above: with 515 matches and 25 rows
   // shown, the "busiest hour" was the busiest hour OF THE NEWEST 25 EVENTS,
   // presented as fact. A ranking off a truncated page is not one, so the

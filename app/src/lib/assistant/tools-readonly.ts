@@ -230,6 +230,43 @@ function clampListEventsLimit(rawLimit: unknown): number {
   return Math.min(n, ASSISTANT.maxListEventsLimit);
 }
 
+/**
+ * Real per-monitor counts for the queried window, one count request per
+ * monitor (refs #337).
+ *
+ * The rows a `list_events` call returns are one page: tallying them answers
+ * "which monitor is busiest" with whichever monitors happen to appear in the
+ * newest 25 events. Observed live on a 4831-match window, where the answer
+ * named two monitors with 11 each and the real distribution was unknown. The
+ * page tally carried a "(listed rows)" qualifier, and the model dropped it,
+ * which is what models do with qualifiers.
+ *
+ * `limit: 1` because only `pagination.totalCount` is wanted - the same field
+ * `matchCount` already comes from. Returns undefined when the answer cannot be
+ * trusted or afforded (too many monitors, or a request failed), and the caller
+ * falls back to the page tally WITH its qualifier.
+ */
+async function fetchMonitorTotals(
+  client: ApiClient,
+  profileId: ProfileId,
+  filters: EventFilters,
+  monitors: MonitorData[],
+): Promise<Record<string, number> | undefined> {
+  if (monitors.length === 0 || monitors.length > ASSISTANT.maxMonitorTotalQueries) return undefined;
+  try {
+    const counted = await Promise.all(
+      monitors.map(async (m) => {
+        const res = await getEvents(client, profileId, { ...filters, monitorId: m.Monitor.Id, limit: 1 });
+        return [m.Monitor.Name, res.pagination.totalCount ?? 0] as const;
+      }),
+    );
+    return Object.fromEntries(counted.filter(([, count]) => count > 0));
+  } catch (e) {
+    log.assistant('Per-monitor totals failed; falling back to the listed rows', LogLevel.WARN, { error: e });
+    return undefined;
+  }
+}
+
 const listEventsTool: ToolDefinition = {
   name: 'list_events',
   description:
@@ -437,6 +474,15 @@ const listEventsTool: ToolDefinition = {
       };
       const res = await getEvents(getSession(ctx.profileId).client, ctx.profileId, filters);
 
+      // More pages exist, so the rows are a sample and any tally over them
+      // describes the sample, not the window (refs #337). Ask the server for
+      // the real per-monitor counts instead; undefined means it could not be
+      // done and the page tally is reported with its qualifier.
+      const monitorTotals = res.pagination.nextPage
+        ? await fetchMonitorTotals(getSession(ctx.profileId).client, ctx.profileId, filters, monitors)
+        : undefined;
+
+
       // A zero-row objectType query is ambiguous, and answering it as "nothing
       // happened" is the dangerous reading: the label may simply not be the one
       // this install's detector writes. The vocabulary is install-specific
@@ -520,12 +566,29 @@ const listEventsTool: ToolDefinition = {
         // was right and the split was invented. Tallying rows is arithmetic, and
         // a 3B model does arithmetic badly, so the tally is supplied as data.
         // Covers the rows SHOWN, which are the rows the model may describe.
-        const countsByMonitor = rowsToShow.reduce<Record<string, number>>((acc, row) => {
-          const name = String((row as { monitor?: unknown }).monitor ?? 'unknown');
-          acc[name] = (acc[name] ?? 0) + 1;
-          return acc;
-        }, {});
-        const objectCounts = countObjects(rowsToShow as { monitor?: unknown; objects?: unknown }[]);
+        // `rows`, not `rowsToShow`, whenever the page holds every match: the
+        // payload shrink below drops rows from the MESSAGE, not from the
+        // window, so tallying what survived would under-report a window the
+        // app has in hand. When the server has more pages, monitorTotals is
+        // the only honest source; without it the tally is the page's and the
+        // summary says so.
+        const pageIsWholeWindow = !res.pagination.nextPage;
+        const tallyRows = pageIsWholeWindow ? rows : rowsToShow;
+        const countsByMonitor =
+          monitorTotals ??
+          tallyRows.reduce<Record<string, number>>((acc, row) => {
+            const name = String((row as { monitor?: unknown }).monitor ?? 'unknown');
+            acc[name] = (acc[name] ?? 0) + 1;
+            return acc;
+          }, {});
+        // Detections cannot be totalled with a count query (that would need one
+        // request per label per monitor), so on a truncated window they are
+        // omitted rather than reported from a page. An objectType query does
+        // not lose anything: its matchCount already IS the count of matches.
+        const objectCounts = pageIsWholeWindow
+          ? countObjects(rows as { monitor?: unknown; objects?: unknown }[])
+          : undefined;
+        const countsScope: 'window' | 'listed' = pageIsWholeWindow || monitorTotals ? 'window' : 'listed';
         // "Busiest hour" is arithmetic over timestamps, which the model does
         // badly, so the tally is computed here and the winning hour handed
         // over as a finished clause (refs #264). Buckets are absolute hours
@@ -556,9 +619,10 @@ const listEventsTool: ToolDefinition = {
           window,
           matchCount: rowsToShow.length,
           countsByMonitor,
-          objectCounts,
+          objectCounts: objectCounts ?? {},
           partial: Boolean(truncated),
           totalMatches,
+          countsScope,
         });
         // busiestHour rides OUTSIDE the summary on purpose: answers quote the
         // summary verbatim, and an hour label inside it would make the
@@ -570,7 +634,7 @@ const listEventsTool: ToolDefinition = {
           // The TOTAL that matched, not the page: quoted directly in answers.
           matchCount: totalMatches,
           countsByMonitor,
-          objectCounts,
+          ...(objectCounts ? { objectCounts } : {}),
           ...(busiestHour ? { busiestHour } : {}),
           ...(countsByHour ? { countsByHour } : {}),
           events: rowsToShow,

@@ -113,7 +113,7 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
     // longer variant naming "listed rows" or comparisons cost llama3.2 its
     // per-monitor quoting (measured); the summary sentence already leads with
     // the true total, and answers quote the summary.
-    'matchCount is how many EVENTS matched. objectCounts is how many of each thing was detected. For "how many people/cars" questions, read objectCounts, not matchCount.',
+    'matchCount is how many EVENTS matched. objectCounts is how many of each thing was detected. For "how many people/cars" questions, read objectCounts, not matchCount. No objectCounts field means too many events matched to total the detections: say the window is too large and offer a narrower one.',
     'Be direct. Never show image links, URLs, or raw ids in the answer text. Offer a next step only when helpful. Ask a question only when tools cannot resolve ambiguity.',
     // The one machine-readable line in an otherwise prose answer. The app
     // strips it before display and uses it to pick which result cards render,

@@ -68,8 +68,13 @@ export function buildResultSummary(params: {
   objectCounts: Record<string, number>;
   partial: boolean;
   totalMatches?: number;
+  /** What `countsByMonitor` describes: the whole window ('window', the default
+   *  and what a truncated result now queries for) or only the rows listed
+   *  ('listed', the fallback when those counts could not be fetched). Decides
+   *  whether the sentence qualifies the tally (refs #337). */
+  countsScope?: 'window' | 'listed';
 }): string {
-  const { window, matchCount, countsByMonitor, objectCounts, partial, totalMatches } = params;
+  const { window, matchCount, countsByMonitor, objectCounts, partial, totalMatches, countsScope = 'window' } = params;
 
   // A string window means no time filter was applied. Saying so is the point:
   // told only a count, the model named a period it had never queried.
@@ -89,9 +94,11 @@ export function buildResultSummary(params: {
   const parts: string[] = [`${lead} ${lead === 1 ? 'event' : 'events'}${range}.`];
   if (knownTotal) parts.push(`The ${matchCount} most recent are listed.`);
 
-  // The tallies cover the listed rows only; say so whenever rows were capped,
-  // so the model cannot present a page tally as the window's.
-  const scope = knownTotal || partial ? ' (listed rows)' : '';
+  // Qualify the tally only when it really is one page's. A truncated result
+  // now carries the window's real per-monitor counts (list_events queries them
+  // per monitor), and qualifying THOSE would tell the model to distrust the
+  // one number that is exact.
+  const scope = countsScope === 'listed' ? ' (listed rows)' : '';
   const byMonitor = describeCounts(countsByMonitor);
   if (byMonitor) parts.push(`By monitor${scope}: ${byMonitor}.`);
 

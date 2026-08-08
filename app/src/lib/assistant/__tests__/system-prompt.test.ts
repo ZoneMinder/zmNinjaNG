@@ -119,6 +119,13 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('No busiestHour field');
   });
 
+  // Detections cannot be totalled over a truncated window (that would need a
+  // query per label per monitor), so list_events omits the field rather than
+  // reporting a page tally as the window's (refs #337).
+  it('says what an absent objectCounts means', () => {
+    expect(buildSystemPrompt(base)).toContain('No objectCounts field');
+  });
+
   it('never mentions a JSON tool-call contract or WebLLM-specific directives (model-agnostic prompt)', () => {
     const p = buildSystemPrompt(base);
     expect(p.toLowerCase()).not.toContain('"tool"');

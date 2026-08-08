@@ -54,9 +54,27 @@ describe('buildResultSummary', () => {
       countsByMonitor: { A: 25 },
       objectCounts: { person: 25 },
       partial: true,
+      countsScope: 'listed',
     });
     expect(summary).toContain('partial result');
     expect(summary).toContain('By monitor (listed rows)');
+  });
+
+  // The qualifier follows the counts, not the truncation: list_events queries
+  // a truncated window's real per-monitor totals, and calling those "(listed
+  // rows)" would tell the model to distrust the one exact number it has
+  // (refs #337).
+  it('does not qualify counts that cover the whole window', () => {
+    const summary = buildResultSummary({
+      window: WINDOW,
+      matchCount: 25,
+      countsByMonitor: { A: 300, B: 687 },
+      objectCounts: {},
+      partial: true,
+      totalMatches: 987,
+    });
+    expect(summary).toContain('By monitor: B 687, A 300.');
+    expect(summary).not.toContain('listed rows');
   });
 
   it('leads with the true total when rows were capped, so comparisons quote real counts', () => {
@@ -69,6 +87,7 @@ describe('buildResultSummary', () => {
       objectCounts: { person: 25 },
       partial: true,
       totalMatches: 142,
+      countsScope: 'listed',
     });
     expect(summary).toContain('142 events');
     expect(summary).toContain('The 25 most recent are listed.');
