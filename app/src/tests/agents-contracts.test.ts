@@ -278,6 +278,41 @@ describe('Sessions contract', () => {
   });
 });
 
+/**
+ * Native contract: ACCESS_LOCAL_NETWORK is declared with the targetSdk bump
+ * that makes it mandatory, never before it.
+ *
+ * Android grants local network access implicitly through INTERNET while an app
+ * targets API 36 or lower, and Google's guide is explicit that such an app must
+ * not declare the permission. Declaring it early forfeits the implicit grant on
+ * an Android 17 device: the toggle shows up default-denied, the app never asks
+ * for it, and every LAN server times out (#350).
+ */
+describe('Native contract: Android local network permission', () => {
+  it('declares ACCESS_LOCAL_NETWORK only once targetSdk requires it', () => {
+    const androidDir = path.join(repoRoot, 'app/android');
+    const target = Number(
+      /targetSdkVersion\s*=\s*(\d+)/.exec(read(path.join(androidDir, 'variables.gradle')))?.[1],
+    );
+    expect(target).toBeGreaterThanOrEqual(36);
+
+    const manifest = read(path.join(androidDir, 'app/src/main/AndroidManifest.xml'));
+    const declared = /<uses-permission[^>]*android\.permission\.ACCESS_LOCAL_NETWORK/.test(manifest);
+
+    if (target < 37) {
+      expect(declared, 'ACCESS_LOCAL_NETWORK must not be declared below targetSdk 37').toBe(false);
+      return;
+    }
+    // From 37 the permission is mandatory, and a declaration nobody requests at
+    // runtime leaves users with the same dead LAN.
+    expect(declared, 'targetSdk 37+ must declare ACCESS_LOCAL_NETWORK').toBe(true);
+    expect(
+      sourceText.includes('ACCESS_LOCAL_NETWORK'),
+      'targetSdk 37+ needs a runtime permission request in app code',
+    ).toBe(true);
+  });
+});
+
 describe('developer docs reference valid rule IDs', () => {
   it('every "rule <id>" reference resolves', () => {
     // Derived from AGENTS.md so adding or removing a rule cannot desync
