@@ -26,7 +26,7 @@ import { httpGet } from '../../lib/http';
 import { log, LogLevel } from '../../lib/logger';
 import { getEventZmsUrl, getZmsControlUrl } from '../../lib/zm/url-builder';
 import { ZMS_COMMANDS, zmsCommandName } from '../../lib/zm/zm-constants';
-import { API_REQUEST, EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES, ZMS_PLAYBACK_BADGE_MS } from '../../lib/zmninja-ng-constants';
+import { API_REQUEST, EVENT_SEEK_FLUSH_DELAY_MS, EVENT_PLAYBACK_RATES, ZMS_PLAYBACK_BADGE_MS, ZMS_STREAM_DEAD_POLLS, ZMS_STREAM_MAX_RESTARTS } from '../../lib/zmninja-ng-constants';
 import { sendDelayedCmdQuit, cancelPendingQuit } from '../../lib/zm/zms-quit';
 import { useZoomPan } from '../../hooks/useZoomPan';
 import { ZoomControls } from '../ui/zoom-controls';
@@ -131,6 +131,24 @@ export function ZmsEventPlayer({
     onRateChangeRef.current = onRateChange;
   }, [playbackSpeed, onEnded, onRateChange]);
 
+  // zms exits when it cannot serve a frame: a decode failure paints an error
+  // such as "Failed getting frame" into the MJPEG stream and quits. The <img>
+  // then holds that last frame forever, and before this the only way out was
+  // leaving the event and coming back. Once its process is gone, zms answers
+  // the status query without playback state, so a run of stateless answers is
+  // the signal to restart the stream on a fresh connkey. Restarts are capped:
+  // a server that fails the same frame every time would restart forever.
+  const missedStatusRef = useRef(0);
+  const restartCountRef = useRef(0);
+  const streamDeadRef = useRef(false);
+
+  // Frame the stream starts on. A restart resumes where playback died rather
+  // than at the top, or a deterministic failure ten seconds in would replay the
+  // same ten seconds until the cap.
+  const startFrameRef = useRef(1);
+  const currentFrameRef = useRef(1);
+  useEffect(() => { currentFrameRef.current = currentFrame; }, [currentFrame]);
+
   // New event: resume playing from the first frame and re-arm the end signal.
   // Without this, an event that ended leaves isPlaying=false, so continuous
   // playback would load the next event paused.
@@ -138,6 +156,10 @@ export function ZmsEventPlayer({
     setIsPlaying(true);
     setCurrentFrame(1);
     endedFiredRef.current = false;
+    missedStatusRef.current = 0;
+    restartCountRef.current = 0;
+    streamDeadRef.current = false;
+    startFrameRef.current = 1;
   }, [eventId]);
 
   // Duration in seconds as reported by the running ZMS stream. The DB event
@@ -158,13 +180,10 @@ export function ZmsEventPlayer({
   // cancel a still-pending flush (refs #196).
   const seekFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Unique connection key for this stream, stable for the component's lifetime.
-  // Speed changes are sent as CMD_VARPLAY over this same connkey instead of
-  // restarting the stream with a new one.
-  const connKey = useMemo(
-    () => Math.floor(Math.random() * 1000000).toString(),
-    []
-  );
+  // Unique connection key for this stream. Speed changes are sent as
+  // CMD_VARPLAY over the same connkey instead of restarting the stream; only a
+  // stream zms has dropped gets a new one.
+  const [connKey, setConnKey] = useState(() => Math.floor(Math.random() * 1000000).toString());
 
   // Calculate alarm frame positions for progress bar
   const alarmFramePositions = useMemo(() => {
@@ -199,7 +218,7 @@ export function ZmsEventPlayer({
     return getEventZmsUrl(portalUrl, eventId, {
       token,
       apiUrl,
-      frame: 1,
+      frame: startFrameRef.current,
       rate: playbackSpeedRef.current,
       maxfps: 30,
       replay: 'none',
@@ -287,6 +306,18 @@ export function ZmsEventPlayer({
   // against StrictMode's dev double-mount quitting the surviving mount's stream.
   const streamStartedRef = useRef(false);
 
+  // Start a new stream for this event on a fresh connkey, resuming from the
+  // frame playback reached. Clearing streamStartedRef means the replacement has
+  // to deliver a frame of its own before it can be judged dead in turn, so a
+  // stream that never starts cannot spin through the restart budget.
+  const restartStream = useCallback(() => {
+    startFrameRef.current = currentFrameRef.current;
+    missedStatusRef.current = 0;
+    streamDeadRef.current = false;
+    streamStartedRef.current = false;
+    setConnKey(Math.floor(Math.random() * 1000000).toString());
+  }, []);
+
   useEffect(() => {
     // A remount that reuses the connkey (StrictMode dev double-mount) cancels
     // the quit scheduled by the previous cleanup.
@@ -322,6 +353,36 @@ export function ZmsEventPlayer({
     const controller = new AbortController();
     const { signal } = controller;
 
+    // One poll that learned nothing about playback. Enough of them in a row and
+    // the stream is gone, so replace it; past the cap, stop and let the play
+    // button ask for a new one.
+    const noteMissedStatus = () => {
+      missedStatusRef.current += 1;
+      if (missedStatusRef.current < ZMS_STREAM_DEAD_POLLS || !streamStartedRef.current) return;
+
+      if (restartCountRef.current >= ZMS_STREAM_MAX_RESTARTS) {
+        streamDeadRef.current = true;
+        setIsPlaying(false);
+        log.zmsEventPlayer('Stream gone and restart limit reached', LogLevel.WARN, {
+          eventId,
+          monitorId,
+          connkey: connKey,
+          restarts: restartCountRef.current,
+        });
+        return;
+      }
+
+      restartCountRef.current += 1;
+      log.zmsEventPlayer('Stream gone, restarting on a fresh connkey', LogLevel.INFO, {
+        eventId,
+        monitorId,
+        connkey: connKey,
+        frame: currentFrameRef.current,
+        attempt: restartCountRef.current,
+      });
+      restartStream();
+    };
+
     const tick = async () => {
       if (signal.aborted) return;
       // Don't query or move the playhead mid-scrub: the drag owns the position.
@@ -339,8 +400,10 @@ export function ZmsEventPlayer({
             connkey: connKey,
             keys: resp.data && typeof resp.data === 'object' ? Object.keys(resp.data) : typeof resp.data,
           });
+          noteMissedStatus();
         }
         if (status && typeof status.progress === 'number' && typeof status.duration === 'number' && status.duration > 0) {
+          missedStatusRef.current = 0;
           setStreamDuration(status.duration);
           const fraction = status.progress / status.duration;
           const frame = Math.max(1, Math.round(fraction * totalFrames));
@@ -360,6 +423,7 @@ export function ZmsEventPlayer({
       } catch (err) {
         if (signal.aborted) return;
         log.zmsEventPlayer('Status query failed', LogLevel.DEBUG, { error: err });
+        noteMissedStatus();
       }
     };
 
@@ -372,7 +436,7 @@ export function ZmsEventPlayer({
         pollTimer.current = null;
       }
     };
-  }, [isPlaying, bandwidth.zmsStatusInterval, portalUrl, connKey, token, apiUrl, totalFrames, minStreamingPort, monitorId, sendCommand]);
+  }, [isPlaying, bandwidth.zmsStatusInterval, portalUrl, connKey, token, apiUrl, totalFrames, minStreamingPort, monitorId, sendCommand, restartStream, eventId]);
 
   // Calculate time offset from frame number. Uses the stream-reported duration
   // so the seek lands where the progress bar says it will (refs #196).
@@ -385,11 +449,20 @@ export function ZmsEventPlayer({
     if (isPlaying) {
       sendCommand(ZMS_COMMANDS.cmdPause);
       setIsPlaying(false);
-    } else {
-      sendCommand(ZMS_COMMANDS.cmdPlay);
-      setIsPlaying(true);
+      return;
     }
-  }, [isPlaying, sendCommand]);
+    // Playing a stream zms already abandoned would command a connkey with no
+    // process behind it. Start a fresh one instead, and give the user's own
+    // retry a full restart budget again.
+    if (streamDeadRef.current) {
+      restartCountRef.current = 0;
+      restartStream();
+      setIsPlaying(true);
+      return;
+    }
+    sendCommand(ZMS_COMMANDS.cmdPlay);
+    setIsPlaying(true);
+  }, [isPlaying, sendCommand, restartStream]);
 
   // Pause while suspended and resume on release, but only for a stream that was
   // running: a stream the user had paused stays paused. isPlaying and sendCommand

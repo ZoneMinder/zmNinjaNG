@@ -46,6 +46,12 @@ matching reality, fixing it is a protocol change like any rule edit.
   a new stream, on every path: unmount, profile switch, manual retry, and
   tab-visibility resume. Missing one path leaves stale ZMS processes on the
   server (ee8a7c9d, bef8c42d, e261e539).
+- `zms` exits mid-event when it cannot serve a frame, after painting the
+  reason ("Failed getting frame") into the MJPEG stream as its last frame.
+  The `<img>` shows no error for that: it keeps the frame forever. The only
+  client-side signal is the status query, which a connkey with no process
+  behind it answers without `progress`/`duration`. Monitors that store video
+  without JPEGs hit this most, since `zms` then has to decode the video.
 - Electron background/occlusion process switches do not fix MJPEG going
   blank on occluded windows; tried and reverted (69990402). The fix is
   stream-level reconnect on focus or visibility return (f7a8292e).

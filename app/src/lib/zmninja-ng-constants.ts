@@ -347,6 +347,22 @@ export const EVENT_SEEK_FLUSH_DELAY_MS = 400;
 export const ZMS_PLAYBACK_BADGE_MS = 5000;
 
 /**
+ * Consecutive status polls without playback state before an event stream is
+ * treated as gone. zms still answers a query for a connkey it no longer has a
+ * process for, so a run of stateless answers is the only signal that it exited -
+ * which it does after painting an error such as "Failed getting frame" into the
+ * stream. Two polls debounce one dropped or slow answer.
+ */
+export const ZMS_STREAM_DEAD_POLLS = 2;
+
+/**
+ * How many times the event player restarts a stream zms dropped. A server that
+ * fails on the same frame every time would otherwise restart forever; once the
+ * cap is reached the play button starts a fresh stream on demand.
+ */
+export const ZMS_STREAM_MAX_RESTARTS = 3;
+
+/**
  * Significant frames ZoneMinder can serve for an event (issue #272), in the
  * order the event frame carousel shows them: most informative first, so the
  * annotated detection image leads, then the frame that triggered the alarm,

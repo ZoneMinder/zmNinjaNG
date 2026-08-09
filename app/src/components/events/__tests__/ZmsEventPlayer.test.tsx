@@ -3,7 +3,12 @@ import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
 import { StrictMode } from 'react';
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
 import { asProfileId, type ProfileId } from '../../../api/types';
-import { ZM_INTEGRATION, EVENT_SEEK_FLUSH_DELAY_MS } from '../../../lib/zmninja-ng-constants';
+import {
+  ZM_INTEGRATION,
+  EVENT_SEEK_FLUSH_DELAY_MS,
+  ZMS_STREAM_DEAD_POLLS,
+  ZMS_STREAM_MAX_RESTARTS,
+} from '../../../lib/zmninja-ng-constants';
 
 const httpGetMock = vi.fn().mockResolvedValue({ data: {} });
 
@@ -424,6 +429,109 @@ describe('ZmsEventPlayer', () => {
     const quits = quitCalls();
     expect(quits).toHaveLength(1);
     expect(connkeyOf(quits[0][0] as string)).toBe(streamConnkey);
+  });
+});
+
+/**
+ * zms exits when it cannot serve a frame: a decode failure paints an error such
+ * as "Failed getting frame" into the MJPEG stream and quits. The <img> then
+ * holds that last frame forever, so the only way out was leaving the event and
+ * coming back. Once its process is gone, zms answers the status query without
+ * playback state, which is what these tests drive.
+ */
+describe('ZmsEventPlayer stream recovery', () => {
+  // Matches the zmsStatusInterval the bandwidth mock reports.
+  const POLL_MS = 600000;
+
+  const pollTimes = async (count: number) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(POLL_MS * count);
+    });
+  };
+
+  beforeEach(() => {
+    cleanup();
+    httpGetMock.mockClear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    httpGetMock.mockReset();
+    httpGetMock.mockResolvedValue({ data: {} });
+  });
+
+  it('restarts the stream on a fresh connkey after zms drops it', async () => {
+    // The default mock answers every query with no playback state.
+    renderPlayer();
+    const before = connkeyOf(getStreamImg().src);
+    fireEvent.load(getStreamImg());
+
+    await pollTimes(ZMS_STREAM_DEAD_POLLS);
+
+    expect(connkeyOf(getStreamImg().src)).not.toBe(before);
+  });
+
+  it('leaves a stream that reports playback alone', async () => {
+    httpGetMock.mockImplementation((url: string) =>
+      commandOf(url) === '99'
+        ? Promise.resolve({ data: { status: { progress: 1, duration: 20 } } })
+        : Promise.resolve({ data: {} })
+    );
+    renderPlayer();
+    const before = connkeyOf(getStreamImg().src);
+    fireEvent.load(getStreamImg());
+
+    await pollTimes(ZMS_STREAM_DEAD_POLLS + 2);
+
+    expect(connkeyOf(getStreamImg().src)).toBe(before);
+  });
+
+  it('resumes from the frame the stream died on, not the start', async () => {
+    // First poll puts the playhead halfway through a 100-frame event; every
+    // later poll reports nothing, so the stream is judged gone from frame 50.
+    let polls = 0;
+    httpGetMock.mockImplementation((url: string) => {
+      if (commandOf(url) !== '99') return Promise.resolve({ data: {} });
+      polls += 1;
+      return Promise.resolve(
+        polls === 1 ? { data: { status: { progress: 5, duration: 10 } } } : { data: {} }
+      );
+    });
+    renderPlayer();
+    expect(new URL(getStreamImg().src).searchParams.get('frame')).toBe('1');
+    fireEvent.load(getStreamImg());
+
+    // Settle the first poll on its own: batching several fake-timer ticks into
+    // one advance lets a later tick read the playhead before the earlier one's
+    // state has committed.
+    await pollTimes(1);
+    await pollTimes(ZMS_STREAM_DEAD_POLLS);
+
+    expect(new URL(getStreamImg().src).searchParams.get('frame')).toBe('50');
+  });
+
+  it('stops restarting at the cap, and starts a new stream when the user hits play', async () => {
+    renderPlayer();
+    const seen = new Set([connkeyOf(getStreamImg().src)]);
+
+    // Each restart needs its own load before the next death can be detected.
+    for (let i = 0; i < ZMS_STREAM_MAX_RESTARTS + 1; i += 1) {
+      fireEvent.load(getStreamImg());
+      await pollTimes(ZMS_STREAM_DEAD_POLLS);
+      seen.add(connkeyOf(getStreamImg().src));
+    }
+    expect(seen.size).toBe(ZMS_STREAM_MAX_RESTARTS + 1);
+
+    const stalled = connkeyOf(getStreamImg().src);
+    // Giving up stops the polling and shows the stream as stopped, so the
+    // button offers play rather than pause.
+    expect(screen.getByTestId('zms-play-pause').getAttribute('title')).toBe('event_detail.play');
+
+    fireEvent.click(screen.getByTestId('zms-play-pause'));
+
+    expect(connkeyOf(getStreamImg().src)).not.toBe(stalled);
   });
 });
 

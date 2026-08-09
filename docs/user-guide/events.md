@@ -72,6 +72,8 @@ ZMS playback renders frames one at a time from ZoneMinder's streaming server. Co
 - **Seek** - Jump to any point in the event
 - **Playback speed** - Adjust speed
 
+ZoneMinder's streaming server sometimes gives up part way through an event and leaves an error such as "Failed getting frame" on screen. The player notices the stream has stopped and starts a new one from the frame it stopped on, so playback continues without leaving the event. If the server fails at the same point every time, playback stops there after a few attempts; press Play to try again.
+
 #### Standard Controls
 
 For video-based playback (HLS or MP4), the player provides:
