@@ -299,7 +299,13 @@ collide on the server and never leak a zombie process when they go away.
    ``<img src={imageSrc} onLoad onError>``. The browser itself opens the
    multipart MJPEG connection through the ``<img>``; the connkey lives right in
    the ``src``. A good frame calls ``reportStreamLoad``, which zeroes the
-   reconnect backoff.
+   reconnect backoff and records which ``src`` produced it. That record is what
+   ``hasFrame`` compares against, and the player keeps the ``<img>``
+   ``visibility: hidden`` until it agrees, so the VideoOff placeholder covers the
+   tile instead of a stale frame or the browser's broken-image glyph. A minted
+   connkey is not a frame: nothing has been decoded yet, and after a mobile
+   suspend the element is still holding the dead connection's last picture (refs
+   #352).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts#L198>`__
    · → :doc:`05-component-architecture`
 

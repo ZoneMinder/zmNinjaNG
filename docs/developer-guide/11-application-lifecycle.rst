@@ -282,7 +282,13 @@ When the user re-opens the app:
 - **State**: App comes to Foreground.
 - **Streams**: ``useVisibilityResume`` fires and ``useMonitorStream`` mints a
   fresh ``connkey`` and rebinds. It debounces on ``minHiddenMs`` (1500ms by
-  default) so that a quick alt-tab does not trigger a reconnect storm.
+  default) so that a quick alt-tab does not trigger a reconnect storm. On native
+  the signal is Capacitor's ``appStateChange`` as well as ``visibilitychange``,
+  for the same reason notifications need both (refs #274): the WebView suspends
+  with the app and is not obliged to report an app state change as a visibility
+  change. The resume drops the recorded frame before it awaits anything, so tiles
+  show the VideoOff placeholder for the length of the reconnect rather than the
+  stale picture the suspended connection left behind (refs #352).
 - **Token**: ``useTokenRefresh`` re-checks expiry on ``visibilitychange``,
   because its 60-second interval was not running while suspended.
 - **WebSocket Liveness**: ``useNotificationAutoConnect`` calls

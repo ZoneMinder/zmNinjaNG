@@ -22,6 +22,7 @@ let mockMjpegReturn: {
   regenerateConnection: () => void;
   reportStreamError: () => void;
   reportStreamLoad: () => void;
+  hasFrame: boolean;
 };
 
 // Every request the player has made of the MJPEG hook, so a test can assert
@@ -116,6 +117,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
   });
 
@@ -224,6 +226,7 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
     go2rtc.state = 'connecting';
     go2rtc.optionsLog = [];
@@ -304,6 +307,7 @@ describe('LiveMonitorPlayer reduced stream tuning', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
     mockSettings = { streamMaxFps: 10, streamScale: 50 };
     streamCalls.length = 0;
@@ -351,6 +355,7 @@ describe('LiveMonitorPlayer paused tiles', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
     mockSettings = undefined;
     streamCalls.length = 0;
@@ -410,6 +415,7 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
     mockSettings = undefined;
     streamCalls.length = 0;
@@ -489,6 +495,7 @@ describe('LiveMonitorPlayer without streaming permission', () => {
       regenerateConnection: vi.fn(),
       reportStreamError: vi.fn(),
       reportStreamLoad: vi.fn(),
+      hasFrame: true,
     };
   });
 
@@ -530,5 +537,70 @@ describe('LiveMonitorPlayer without streaming permission', () => {
 
     expect(screen.queryByTestId('video-player-no-permission')).not.toBeInTheDocument();
     expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument();
+  });
+});
+
+// refs #352: on a mobile resume the element still holds whatever the dead
+// connection left on it - a partially written JPEG, or the browser's
+// broken-image glyph after WebKit re-fetches an evicted image against a dead
+// connkey. Neither fires an error the player can react to in time, so a mounted
+// <img> is only allowed to paint once the src it holds has produced a frame.
+describe('LiveMonitorPlayer MJPEG frame gating', () => {
+  beforeEach(() => {
+    mockSettings = undefined;
+    mockStreamPermission = undefined;
+    mockMjpegReturn = {
+      streamUrl: 'https://t/stream?connkey=1',
+      imageSrc: 'https://t/stream?connkey=1',
+      imgRef: { current: null },
+      regenerateConnection: vi.fn(),
+      reportStreamError: vi.fn(),
+      reportStreamLoad: vi.fn(),
+      hasFrame: false,
+    };
+  });
+
+  it('keeps a connected but frameless <img> unpaintable and shows the placeholder', () => {
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    // Mounted, because an unmounted element can never load.
+    const img = screen.getByTestId('video-player-mjpeg');
+    expect(img).toHaveAttribute('src', 'https://t/stream?connkey=1');
+    expect(img).not.toBeVisible();
+    expect(screen.getByTestId('video-player-loading')).toBeInTheDocument();
+  });
+
+  it('paints the <img> and drops the placeholder once a frame arrives', () => {
+    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
+    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.getByTestId('video-player-mjpeg')).toBeVisible();
+    expect(screen.queryByTestId('video-player-loading')).not.toBeInTheDocument();
+  });
+
+  it('hides the picture again when the stream loses its frame', () => {
+    mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
+    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    expect(screen.getByTestId('video-player-mjpeg')).toBeVisible();
+
+    // A resume withdraws the frame without any error event and before the new
+    // connkey lands, so imageSrc is still the old one here.
+    mockMjpegReturn = { ...mockMjpegReturn, hasFrame: false };
+    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.getByTestId('video-player-mjpeg')).not.toBeVisible();
+    expect(screen.getByTestId('video-player-loading')).toBeInTheDocument();
+  });
+
+  // A failing load with alt text makes WebKit draw its glyph next to the text.
+  // Nothing describes a live video feed in words anyway; the surrounding tile
+  // carries the monitor name.
+  it('gives the stream image no alt text to render on failure', () => {
+    mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
+    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+
+    expect(screen.getByTestId('video-player-mjpeg')).toHaveAttribute('alt', '');
   });
 });

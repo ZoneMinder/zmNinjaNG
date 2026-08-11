@@ -50,8 +50,11 @@ async function clickAnalysisToggle(page: import('@playwright/test').Page): Promi
   analysisRequestUrls = [];
   // The command only exists on an MJPEG stream; a go2rtc/WebRTC feed has no
   // command socket. Transport, not the control under test, so the toggle's own
-  // assertions below still run either way.
-  mjpegTransport = await page.getByTestId('video-player-mjpeg').isVisible().catch(() => false);
+  // assertions below still run either way. Attachment, not visibility: the
+  // element is mounted for the whole connection but only paints once a frame
+  // has arrived (refs #352), so a visibility probe would read "no MJPEG" purely
+  // because it ran during the connect.
+  mjpegTransport = (await page.getByTestId('video-player-mjpeg').count()) > 0;
   if (!mjpegTransport) {
     log.info('E2E: monitor is not served over MJPEG, skipping stream-command assertions', {
       component: 'e2e',

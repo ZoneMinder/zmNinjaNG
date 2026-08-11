@@ -55,6 +55,17 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Electron background/occlusion process switches do not fix MJPEG going
   blank on occluded windows; tried and reverted (69990402). The fix is
   stream-level reconnect on focus or visibility return (f7a8292e).
+- A minted connkey is not a frame. Gate an `<img>`'s visibility on a `load`
+  for the src it currently holds, never on the URL existing: the element
+  keeps a dead stream's last frame (which may be half written) with no error
+  event, and on a mobile resume WebKit re-fetches images it evicted while
+  backgrounded against connkeys that are now dead, painting its broken-image
+  glyph before any error event lands. Alt text on a stream image is what the
+  browser draws beside that glyph, so keep it empty (#352).
+- `visibilitychange` alone is not a reliable resume signal on native: the
+  WebView suspends with the app and is not obliged to report an app state
+  change as a visibility change. Pair it with Capacitor `appStateChange`.
+  Notifications learned this in #274 and streams re-learned it in #352.
 - Tauri snapshot thumbnails fetch as blob URLs, or WebKitGTK leaks sockets;
   same constraint as the MJPEG workaround, separate code path (7e121140).
 - iOS video.js fullscreen: CSS overrides cannot reliably intercept the

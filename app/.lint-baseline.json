@@ -6,7 +6,7 @@
   "react-hooks/exhaustive-deps": 32,
   "react-hooks/globals": 1,
   "react-hooks/preserve-manual-memoization": 10,
-  "react-hooks/refs": 22,
+  "react-hooks/refs": 21,
   "react-hooks/set-state-in-effect": 11,
   "react-hooks/static-components": 10,
   "react-refresh/only-export-components": 8,

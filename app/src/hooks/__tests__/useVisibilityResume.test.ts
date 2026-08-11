@@ -3,11 +3,29 @@ import { renderHook } from '@testing-library/react';
 import { useVisibilityResume } from '../useVisibilityResume';
 
 let mockIsElectron = false;
+let mockIsNative = false;
 vi.mock('../../lib/platform', () => ({
   Platform: {
     get isElectron() {
       return mockIsElectron;
     },
+    get isNative() {
+      return mockIsNative;
+    },
+  },
+}));
+
+// Stands in for the Capacitor App plugin: the test drives appStateChange
+// directly instead of loading a plugin that does not exist under vitest.
+let appStateHandler: ((state: { isActive: boolean }) => void) | null = null;
+vi.mock('../useCapacitorListener', () => ({
+  useCapacitorListener: (
+    _getPlugin: unknown,
+    eventName: string,
+    handler: (state: { isActive: boolean }) => void,
+    opts?: { enabled?: boolean },
+  ) => {
+    if (eventName === 'appStateChange' && opts?.enabled !== false) appStateHandler = handler;
   },
 }));
 
@@ -23,6 +41,8 @@ describe('useVisibilityResume', () => {
     vi.useFakeTimers();
     visibilityState = 'visible';
     mockIsElectron = false;
+    mockIsNative = false;
+    appStateHandler = null;
     Object.defineProperty(document, 'visibilityState', {
       configurable: true,
       get: () => visibilityState,
@@ -191,6 +211,62 @@ describe('useVisibilityResume', () => {
     // Restore: both focus and visibilitychange(visible) fire.
     window.dispatchEvent(new Event('focus'));
     setVisibility('visible');
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+});
+
+// refs #352: on native the WebView suspends with the app and its timers freeze,
+// and visibilitychange is not something a WebView is obliged to fire on an app
+// state change. Notifications already learned this in #274; streams recover
+// through this hook, so it needs the same signal.
+describe('useVisibilityResume on native', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    visibilityState = 'visible';
+    mockIsElectron = false;
+    mockIsNative = true;
+    appStateHandler = null;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires when the app comes back to the foreground', () => {
+    const cb = vi.fn();
+    renderHook(() => useVisibilityResume(cb, { minHiddenMs: 1000 }));
+
+    expect(appStateHandler).not.toBeNull();
+    appStateHandler!({ isActive: false });
+    vi.advanceTimersByTime(2000);
+    appStateHandler!({ isActive: true });
+
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores an app-switch flick', () => {
+    const cb = vi.fn();
+    renderHook(() => useVisibilityResume(cb, { minHiddenMs: 1500 }));
+
+    appStateHandler!({ isActive: false });
+    vi.advanceTimersByTime(200);
+    appStateHandler!({ isActive: true });
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  // Both signals can fire for one background/foreground round trip. The away
+  // marker is shared, so the return resumes once, not once per signal.
+  it('resumes once when both signals report the same round trip', () => {
+    const cb = vi.fn();
+    renderHook(() => useVisibilityResume(cb, { minHiddenMs: 1000 }));
+
+    appStateHandler!({ isActive: false });
+    setVisibility('hidden');
+    vi.advanceTimersByTime(2000);
+    setVisibility('visible');
+    appStateHandler!({ isActive: true });
 
     expect(cb).toHaveBeenCalledTimes(1);
   });

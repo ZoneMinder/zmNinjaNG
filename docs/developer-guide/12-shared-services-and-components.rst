@@ -1209,6 +1209,16 @@ monitor id (refs #201).
 mode is on), and ``reportStreamLoad`` (wired to ``<img onLoad>``) resets the
 backoff after a good frame.
 
+The hook also answers whether there is a picture to show at all. ``hasFrame``
+means "the ``src`` the element currently holds has fired ``load``", tracked by
+recording that ``src`` in ``reportStreamLoad`` and comparing it with the current
+one, and cleared by ``reportStreamError`` and by the visibility resume. It is a
+comparison rather than a boolean flag on purpose: a flag reset from an effect
+would clear one paint too late, because effects run after the browser has already
+painted the new ``src`` with the old picture still on the element. Snapshot mode
+is the exception the comparison has to carve out, since a refresh tick changes
+the ``src`` on a still frame that remains perfectly good (refs #352).
+
 Profile switch cannot rely on unmount
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
