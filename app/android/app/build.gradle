@@ -37,7 +37,13 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // The -optimize variant, because the plain proguard-android.txt sets
+            // -dontoptimize: R8 then only shrinks and obfuscates, leaving the
+            // inlining, dead-branch removal, and class merging off. Play Console
+            // flags that as a missed optimization ("Improve your app's memory and
+            // performance with R8 optimization"). R8 full mode is already on by
+            // default under AGP 8.
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             ndk {
                 debugSymbolLevel 'FULL'
             }
