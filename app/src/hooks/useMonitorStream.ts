@@ -71,6 +71,14 @@ interface UseMonitorStreamReturn {
    * the give-up cap still applies to a permanently dead feed.
    */
   reportStreamLoad: () => void;
+  /**
+   * Whether the `<img>` has produced a frame for the src it currently holds.
+   * Not "a stream URL exists": a minted connkey proves nothing has been
+   * decoded yet, and an element showing a stale or half-written frame is
+   * indistinguishable from a live one until this says so. The consumer keeps
+   * the element unpaintable while this is false. refs #352
+   */
+  hasFrame: boolean;
 }
 
 /**
@@ -116,6 +124,12 @@ export function useMonitorStream({
   const insomniaRef = useRef(settings.insomnia);
   insomniaRef.current = settings.insomnia;
   const [imageSrc, setImageSrc] = useState<string>('');
+  // The src that last fired `load`. Compared against the current one rather
+  // than kept as a boolean flag, so a src swap withdraws the frame during the
+  // same render that introduces it. A flag reset from an effect would not: an
+  // effect runs after paint, which is one painted frame of the old picture
+  // under the new connection. refs #352
+  const [loadedSrc, setLoadedSrc] = useState<string>('');
 
   // Stream lifecycle: connKey generation, CMD_QUIT on regen/unmount, media abort
   const { connKey, forceRegenerate, releaseConnection } = useStreamLifecycle({
@@ -213,6 +227,9 @@ export function useMonitorStream({
   // server process from a dropped-but-alive one); on give-up the final connkey
   // is released too, instead of being orphaned until unmount.
   const scheduleReconnect = () => {
+    // Whatever the element is holding, it is not a frame off a working
+    // connection any more.
+    setLoadedSrc('');
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -244,6 +261,7 @@ export function useMonitorStream({
   // when a remembered analysis setting can be applied to it.
   const reportStreamLoad = () => {
     analysisFrames.applyOnStreamLoad();
+    setLoadedSrc(imageSrc);
     reconnectAttemptRef.current = 0;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -287,6 +305,12 @@ export function useMonitorStream({
         reconnectAttempts: reconnectAttemptRef.current,
       }),
     );
+    // Before anything async. A stream that died while the app was suspended
+    // fires no `error` on the `<img>` - it keeps its last frame, which may be
+    // half written - so the resume is the only moment that knows the picture is
+    // stale, and the consumer must be told now rather than after the token
+    // round trip below. refs #352
+    setLoadedSrc('');
     reconnectAttemptRef.current = 0;
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
@@ -303,6 +327,16 @@ export function useMonitorStream({
     });
   }, { enabled: enabled && effectiveViewMode === 'streaming' });
 
+  // Snapshot mode swaps the src on every refresh tick (a fresh cacheBuster) and
+  // the still frame already on screen stays good until the next one decodes, so
+  // matching the src there would blink the tile once per interval. A snapshot
+  // that starts failing does fire `error`, which clears loadedSrc, so it still
+  // falls back to the placeholder.
+  const hasFrame =
+    imageSrc !== '' &&
+    loadedSrc !== '' &&
+    (effectiveViewMode === 'snapshot' || loadedSrc === imageSrc);
+
   return {
     streamUrl,
     imageSrc,
@@ -310,5 +344,6 @@ export function useMonitorStream({
     regenerateConnection,
     reportStreamError: scheduleReconnect,
     reportStreamLoad,
+    hasFrame,
   };
 }

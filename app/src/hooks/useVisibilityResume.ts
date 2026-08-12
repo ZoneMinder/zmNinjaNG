@@ -1,20 +1,24 @@
 /**
  * Fires a callback when the window returns to the foreground after being away.
  *
- * Two signals feed this. `visibilitychange` covers tab switches and window
+ * Three signals feed this. `visibilitychange` covers tab switches and window
  * minimize. On Electron desktop, covering the window with another app does not
  * fire visibilitychange (only minimize does), but it does fire window
- * blur/focus, so those are also used there. In both cases the stream's
- * connection can drop while the window is in the background, and recovery has
- * to happen on return. refs #150
+ * blur/focus, so those are also used there. On native, Capacitor's
+ * `appStateChange` covers the app being backgrounded: the WebView suspends with
+ * the app and freezes its timers, and a WebView is not obliged to fire
+ * visibilitychange for that (notifications hit the same wall in #274). In every
+ * case the stream's connection can drop while the app or window is in the
+ * background, and recovery has to happen on return. refs #150, refs #352
  *
  * Debounces a rapid away→back flicker (e.g., quick alt-tab) so a brief blur
  * does not trigger a reconnect storm. The minimum time away before a return is
  * considered worth acting on is `minHiddenMs` (default 1500ms).
  */
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Platform } from '../lib/platform';
+import { useCapacitorListener } from './useCapacitorListener';
 
 export interface UseVisibilityResumeOptions {
   enabled?: boolean;
@@ -34,22 +38,36 @@ export function useVisibilityResume(
   const onResumeRef = useRef(onResume);
   onResumeRef.current = onResume;
 
+  // Record when the window left the foreground. The first signal wins so a
+  // following pair (blur plus visibilitychange, or appStateChange plus
+  // visibilitychange) does not reset the away timer. Shared by every signal, so
+  // one background/foreground round trip resumes once however many of them fire.
+  const markAway = useCallback(() => {
+    if (hiddenAtRef.current === null) hiddenAtRef.current = Date.now();
+  }, []);
+
+  const tryResume = useCallback(() => {
+    const awayAt = hiddenAtRef.current;
+    hiddenAtRef.current = null;
+    if (awayAt === null) return;
+    if (Date.now() - awayAt < minHiddenMs) return;
+    onResumeRef.current();
+  }, [minHiddenMs]);
+
+  // Native: the app being backgrounded and foregrounded. Inert on web and
+  // desktop, where the two signals below cover it.
+  useCapacitorListener<{ isActive: boolean }>(
+    () => import('@capacitor/app').then((m) => m.App),
+    'appStateChange',
+    ({ isActive }) => {
+      if (isActive) tryResume();
+      else markAway();
+    },
+    { enabled: enabled && Platform.isNative },
+  );
+
   useEffect(() => {
     if (!enabled || typeof document === 'undefined') return;
-
-    // Record when the window left the foreground. The first signal wins so a
-    // following blur/visibilitychange pair does not reset the away timer.
-    const markAway = () => {
-      if (hiddenAtRef.current === null) hiddenAtRef.current = Date.now();
-    };
-
-    const tryResume = () => {
-      const awayAt = hiddenAtRef.current;
-      hiddenAtRef.current = null;
-      if (awayAt === null) return;
-      if (Date.now() - awayAt < minHiddenMs) return;
-      onResumeRef.current();
-    };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
@@ -82,5 +100,5 @@ export function useVisibilityResume(
       // brief flick would resume as if the page had been gone for hours.
       hiddenAtRef.current = null;
     };
-  }, [enabled, minHiddenMs]);
+  }, [enabled, minHiddenMs, markAway, tryResume]);
 }

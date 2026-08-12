@@ -538,12 +538,13 @@ export function LiveMonitorPlayer({
 
   // Undoes the inline hide handleMjpegError applies below. React never clears
   // an imperatively set style key on its own (it only diffs the keys its own
-  // style prop carried), so every path that can put a usable frame back on
-  // this element clears it explicitly. That matters most when the element is
-  // never unmounted in between: a multipart stream can fire error and then
-  // load in the same task, and React batches both, so the load handler runs on
-  // the still-mounted, still-hidden element and its setMjpegError(false) keeps
-  // it mounted. Without this the tile would go permanently blank.
+  // style prop carried), and the visibility prop on the <img> can hold the same
+  // value either side of a hide, so the load handler clears it explicitly. That
+  // matters when the element is never unmounted in between: a multipart stream
+  // can fire error and then load in the same task, and React batches both, so
+  // the load handler runs on the still-mounted, still-hidden element and its
+  // setMjpegError(false) keeps it mounted. Without this the tile would go
+  // permanently blank.
   //
   // Depends on mjpegStream.imgRef, not mjpegStream: useMonitorStream returns a
   // bare object literal, so the hook result is a new reference every render.
@@ -559,12 +560,13 @@ export function LiveMonitorPlayer({
     if (img) img.style.visibility = '';
   }, [imgRef]);
 
+  // A fresh connkey unlatches the error, so the tile recovers instead of
+  // sitting on the placeholder until a full remount. refs #150
   useEffect(() => {
     if (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) {
-      showMjpegImg();
       setMjpegError(false);
     }
-  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id, mjpegStream.imageSrc, showMjpegImg]);
+  }, [effectiveStreamingMethod, showMjpegPlaceholder, monitor.Id, mjpegStream.imageSrc]);
 
   const handleMjpegLoad = useCallback(() => {
     showMjpegImg();
@@ -655,9 +657,20 @@ export function LiveMonitorPlayer({
   }, [isWebRTC, status.state, hasVideoFrames, onLoad]);
 
   // The MJPEG <img> is rendered both when MJPEG is the real stream and as the
-  // MJPEG-first placeholder while MSE connects. It has a frame to show whenever
-  // the stream is configured and not errored.
-  const hasMjpegFrame = !!mjpegStream.streamUrl && !!mjpegStream.imageSrc && !mjpegError;
+  // MJPEG-first placeholder while MSE connects. It stays mounted whenever a
+  // stream URL exists and no error is latched - an unmounted element can never
+  // load - but only paints once that src has actually produced a frame.
+  const showMjpegElement =
+    (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) &&
+    !!mjpegStream.imageSrc &&
+    !mjpegError;
+
+  // Whether the element has a picture worth showing. A minted connkey is not a
+  // frame: on a mobile resume the element still holds the dead connection's
+  // last frame, which may be half written, and WebKit re-fetching an evicted
+  // image against a dead connkey paints its broken-image glyph before any error
+  // event lands. Both used to count as "has a frame" here. refs #352
+  const hasMjpegFrame = showMjpegElement && mjpegStream.hasFrame;
 
   // Single named content state feeding the render branches below. See the
   // PlayerViewState doc comment for the state machine and what drives each
@@ -700,18 +713,30 @@ export function LiveMonitorPlayer({
         />
       )}
 
-      {(viewState === 'mjpeg-placeholder' || viewState === 'mjpeg') && (
+      {showMjpegElement && (
         <img
           ref={mjpegStream.imgRef}
           className={`w-full h-full ${className}`}
+          // visibility, not conditional mounting: the element has to be in the
+          // tree to load at all, and it must not paint until it has a frame.
+          // Always passing the key keeps React's diff in charge of it.
           style={
             showMjpegPlaceholder
-              ? { objectFit, position: 'absolute', inset: 0, zIndex: 1 }
-              : { objectFit }
+              ? {
+                objectFit,
+                position: 'absolute',
+                inset: 0,
+                zIndex: 1,
+                visibility: hasMjpegFrame ? 'visible' : 'hidden',
+              }
+              : { objectFit, visibility: hasMjpegFrame ? 'visible' : 'hidden' }
           }
           data-testid="video-player-mjpeg"
           src={mjpegStream.imageSrc}
-          alt={monitor.Name}
+          // Empty: a failing load with alt text makes WebKit draw its glyph
+          // beside the text, and nothing describes a live feed in words. The
+          // surrounding tile carries the monitor name.
+          alt=""
           // Disable the browser's native image drag so a mouse drag pans the
           // zoomed view instead of dragging a ghost of the picture (issue #191).
           draggable={false}

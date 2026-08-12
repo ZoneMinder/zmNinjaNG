@@ -7,7 +7,7 @@
  * which sends CMD_QUIT to tear down the extra stream on the ZM server.
  */
 
-import { useRef, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { getStreamUrl } from '../../api/monitors';
 import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
 import { useProfileById } from '../../hooks/useCurrentProfile';
@@ -67,6 +67,10 @@ function MonitorLivePreview({ monitor, profileId }: { monitor: Monitor; profileI
   const { profile: currentProfile, settings } = useProfileById(profileId);
   const { token: accessToken, isFresh: isAccessTokenFresh } = useFreshAccessToken(profileId);
   const imgRef = useRef<HTMLImageElement>(null);
+  // Same rule as the player: nothing paints until this src has produced a
+  // frame, so a stream that fails or never arrives shows the no-video
+  // placeholder rather than the browser's broken-image glyph. refs #352
+  const [hasFrame, setHasFrame] = useState(false);
   const effectiveMinStreamingPort = resolveMinStreamingPort(
     currentProfile?.minStreamingPort,
     settings.forceDisableMultiPort,
@@ -85,12 +89,17 @@ function MonitorLivePreview({ monitor, profileId }: { monitor: Monitor; profileI
     profileId: currentProfile?.id,
   });
 
+  const noVideoPlaceholder = (
+    <div
+      className="absolute inset-0 flex items-center justify-center bg-muted/30"
+      data-testid="monitor-hover-preview-novideo"
+    >
+      <VideoOff className="h-8 w-8 text-muted-foreground/40" />
+    </div>
+  );
+
   if (!currentProfile || connKey === 0 || !isAccessTokenFresh) {
-    return (
-      <div className="w-full h-full flex items-center justify-center bg-muted/30">
-        <VideoOff className="h-8 w-8 text-muted-foreground/40" />
-      </div>
-    );
+    return <div className="relative w-full h-full">{noVideoPlaceholder}</div>;
   }
 
   const streamUrl = getStreamUrl(currentProfile.cgiUrl, monitor.Id, {
@@ -101,11 +110,20 @@ function MonitorLivePreview({ monitor, profileId }: { monitor: Monitor; profileI
   });
 
   return (
-    <img
-      ref={imgRef}
-      src={streamUrl}
-      alt={monitor.Name}
-      className="w-full h-full object-contain bg-black"
-    />
+    <div className="relative w-full h-full">
+      {!hasFrame && noVideoPlaceholder}
+      <img
+        ref={imgRef}
+        src={streamUrl}
+        // Empty on purpose: alt text is what the browser draws beside its
+        // broken-image glyph, and the card behind this popover names the monitor.
+        alt=""
+        data-testid="monitor-hover-preview-img"
+        className="w-full h-full object-contain bg-black"
+        style={{ visibility: hasFrame ? 'visible' : 'hidden' }}
+        onLoad={() => setHasFrame(true)}
+        onError={() => setHasFrame(false)}
+      />
+    </div>
   );
 }

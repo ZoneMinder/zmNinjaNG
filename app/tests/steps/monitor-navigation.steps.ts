@@ -53,7 +53,9 @@ function urlMonitorId(page: import('@playwright/test').Page): string | null {
 
 async function mjpegMonitorId(page: import('@playwright/test').Page): Promise<string | null> {
   const img = page.getByTestId('video-player-mjpeg');
-  if (!(await img.isVisible().catch(() => false))) return null;
+  // Attached, not visible: the element stays hidden until its first frame
+  // decodes (refs #352), and the src it carries is what this reads.
+  if ((await img.count()) === 0) return null;
   const src = await img.getAttribute('src').catch(() => null);
   const m = src?.match(/[?&]monitor=(\d+)/);
   return m ? m[1] : null;
