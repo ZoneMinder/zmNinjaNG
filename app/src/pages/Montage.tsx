@@ -278,6 +278,14 @@ export default function Montage() {
     settings,
     isEditMode,
     groupKey,
+    // In fullscreen the tile header is an absolute overlay and takes no flow
+    // space; in normal mode it is in flow at the height the display mode
+    // actually renders (refs #359).
+    tileHeaderPx: isFullscreen
+      ? 0
+      : settings.displayMode === 'compact'
+        ? MONTAGE_GRID.cardHeaderHeightCompactPx
+        : MONTAGE_GRID.cardHeaderHeightPx,
   });
 
   // Tile render resolvers passed to MontageGridSections: the owning profile

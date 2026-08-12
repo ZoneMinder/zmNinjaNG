@@ -1042,6 +1042,11 @@ export const MONTAGE_GRID = {
   // h-8 header bar height with monitor name + buttons (px)
   cardHeaderHeightPx: 32,
 
+  // The same header under compact display mode, which shrinks h-8 rows to
+  // 1.75rem (index.css .compact-mode .h-8). Layout math must use the value
+  // that actually renders or the difference letterboxes the video (refs #359).
+  cardHeaderHeightCompactPx: 28,
+
   // All-mode only cap on total tiles (== streams) rendered across every
   // profile's monitors combined. Single mode has no cap (unchanged,
   // unlimited) - this only guards the aggregate view, where N profiles each
