@@ -293,6 +293,49 @@ describe('tile heights for rotated monitors', () => {
   });
 });
 
+describe('tile header allowance (#359)', () => {
+  const profileId = 'header-profile';
+
+  const setup = (tileHeaderPx: number) => {
+    useSettingsStore.setState({ profileSettings: {} });
+    useSettingsStore.getState().updateMontageGroupLayout(profileId, 'A', {
+      gridCols: 2,
+      workingLayout: [],
+    });
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+    const monitors = [makeMonitor('1', 'ROTATE_0')];
+
+    type HookProps = Parameters<typeof useMontageGrid>[0];
+    return renderHook(
+      (props: HookProps) => useMontageGrid(props),
+      { initialProps: { monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A', tileHeaderPx } }
+    );
+  };
+
+  // gridWidth 1200 over 2 display columns: 600px of video width.
+  // ROTATE_0: 600 * (1080/1920) = 337.5; +32 header -> ceil 370, no header -> 338.
+
+  it('excludes the header from tile height when tileHeaderPx is 0 (fullscreen overlay header)', () => {
+    const { result } = setup(0);
+    act(() => { result.current.handleWidthChange(1200); });
+    expect(result.current.layout[0].h).toBe(338);
+  });
+
+  it('recalculates heights when tileHeaderPx changes (fullscreen toggle)', () => {
+    const { result, rerender } = setup(32);
+    act(() => { result.current.handleWidthChange(1200); });
+    expect(result.current.layout[0].h).toBe(370);
+
+    const settings = useSettingsStore.getState().getProfileSettings(profileId);
+    const monitors = [makeMonitor('1', 'ROTATE_0')];
+    rerender({ monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A', tileHeaderPx: 0 });
+    expect(result.current.layout[0].h).toBe(338);
+
+    rerender({ monitors, profileId: asProfileId(profileId), settings, isEditMode: false, groupKey: 'A', tileHeaderPx: 28 });
+    expect(result.current.layout[0].h).toBe(366);
+  });
+});
+
 describe('group-switch re-init', () => {
   const profileId = 'test-profile';
   const monitors = [makeMonitor('10'), makeMonitor('20')];
