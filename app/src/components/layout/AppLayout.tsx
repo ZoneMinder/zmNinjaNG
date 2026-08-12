@@ -285,7 +285,15 @@ export default function AppLayout() {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden relative w-full pt-[calc(3rem+var(--sai-top,env(safe-area-inset-top)))] md:pt-[var(--sai-top,env(safe-area-inset-top))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))]" data-tv-region="main">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden relative w-full pt-[calc(3rem+var(--sai-top,env(safe-area-inset-top)))] md:pt-0 pb-[var(--sai-bottom,env(safe-area-inset-bottom))]" data-tv-region="main">
+        {/* md+ has no fixed header, so the safe-area inset is this sticky
+            strip instead of padding: padding scrolls with the content and
+            lets it slide behind the status bar icons (refs #357). Sticky
+            keeps the strip pinned while content passes beneath; height is 0
+            wherever the inset is 0. z-30 clears in-content overlays such as
+            the monitor card protocol/recording badges (z-10/z-20) while
+            staying under fullscreen chrome and DeleteBatchBar (z-50). */}
+        <div className="hidden md:block sticky top-0 h-[var(--sai-top,env(safe-area-inset-top))] bg-background z-30" aria-hidden="true" />
         {/* Background gradient blob for visual interest */}
         <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-primary/5 to-transparent -z-10 pointer-events-none" />
 
