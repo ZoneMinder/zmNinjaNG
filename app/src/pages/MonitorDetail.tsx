@@ -289,7 +289,7 @@ export default function MonitorDetail() {
     )}>
       {/* Header - Hidden in fullscreen */}
       {!isFullscreen && (
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
