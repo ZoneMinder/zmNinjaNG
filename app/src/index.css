@@ -27,6 +27,15 @@
   margin-right: var(--sai-right, env(safe-area-inset-right)) !important;
 }
 
+/* Height of the thin fullscreen toolbars (montage, monitor detail). One
+   source for both the toolbar row (h-[var(...)]) and the content padding
+   that clears the fixed bar (calc(var(...) + safe-area inset)): a hardcoded
+   2rem clearance drifts from the row when compact mode shrinks heights
+   (refs #358). Compact override lives next to the .h-8 rule it tracks. */
+:root {
+  --fullscreen-toolbar-h: 2rem;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -500,6 +509,8 @@
 }
 .compact-mode .h-7 { height: 1.5rem; }
 .compact-mode .h-8 { height: 1.75rem; }
+/* Fullscreen toolbar rows track .h-8; see the :root default (refs #358). */
+.compact-mode { --fullscreen-toolbar-h: 1.75rem; }
 .compact-mode .h-9 { height: 1.875rem; }
 .compact-mode .h-10 { height: 2rem; }
 .compact-mode .h-11 { height: 2rem; }

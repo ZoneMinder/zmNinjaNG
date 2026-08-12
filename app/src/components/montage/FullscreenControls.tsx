@@ -37,7 +37,7 @@ export function FullscreenControls({
       className="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-sm pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))] pt-[var(--sai-top,env(safe-area-inset-top))]"
       data-testid="montage-fullscreen-toolbar"
     >
-      <div className="h-8 flex items-center justify-between px-3">
+      <div className="h-[var(--fullscreen-toolbar-h)] flex items-center justify-between px-3">
         <span className="text-white/70 font-medium text-xs">{t('montage.title')}</span>
         <div className="flex items-center gap-1">
           <Button

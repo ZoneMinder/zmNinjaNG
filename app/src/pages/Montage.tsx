@@ -681,7 +681,7 @@ export default function Montage() {
         className={cn(
           'flex-1 overflow-auto bg-muted/10',
           isFullscreen
-            ? 'pt-[calc(2rem+var(--sai-top,env(safe-area-inset-top)))] overscroll-contain'
+            ? 'pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] overscroll-contain'
             : 'touch-pan-y'
         )}
       >
