@@ -27,6 +27,27 @@
   margin-right: var(--sai-right, env(safe-area-inset-right)) !important;
 }
 
+/* Safe-area inset source of truth for all --sai-* consumers.
+   - iOS: safe-area-bootstrap.ts overrides these with inline styles on
+     documentElement from UIView.safeAreaInsets (inline wins over this
+     stylesheet rule). refs #147.
+   - Android: Capacitor 8's core SystemBars plugin (insetsHandling: 'css',
+     the default) injects --safe-area-inset-* as inline styles on
+     documentElement with the real system-bar/cutout values. Chromium's own
+     env(safe-area-inset-*) only reports system bars on WebView >= 140 with
+     viewport-fit=cover, and is 0 on older WebViews, so the injected
+     variables must be preferred and env() kept only as a fallback.
+   - Web/desktop: neither source is set, env() resolves to 0px.
+   Without this rule, --sai-* is undefined on Android, every usage falls
+   back to env(), and app chrome renders under the status bar on devices
+   where env() reports 0 (e.g. Android 15/16 enforced edge-to-edge). */
+:root {
+  --sai-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --sai-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --sai-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --sai-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

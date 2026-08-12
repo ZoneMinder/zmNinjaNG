@@ -9,9 +9,13 @@
  * (UIKit's source of truth) and emits an event on every change. Here we
  * apply those values to --sai-top/right/bottom/left on the document root.
  *
- * CSS usages should reference these via var(--sai-top, env(safe-area-inset-top))
- * so the browser-native env() value is used as the fallback on web/Android,
- * where this plugin is a no-op.
+ * CSS usages reference var(--sai-top, ...). On iOS the inline values set here
+ * win. On Android this plugin is a no-op: env(safe-area-inset-*) is NOT
+ * reliable there (0 on WebView < 140, and observed 0 even on Android 16 with
+ * enforced edge-to-edge). Capacitor 8's core SystemBars plugin instead injects
+ * --safe-area-inset-* inline on documentElement; the :root rule in index.css
+ * chains --sai-* -> --safe-area-inset-* -> env() so every consumer picks up
+ * whichever source is live on the current platform.
  */
 
 import { Capacitor } from '@capacitor/core';
