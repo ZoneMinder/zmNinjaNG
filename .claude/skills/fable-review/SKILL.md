@@ -201,7 +201,8 @@ Sections, in order:
      neither label alone describes the work it will spawn. Confirm both
      labels exist first (`gh label list`).
    - Close with the identification line the project rules require:
-     `Posted by Claude (Fable 5), assisting @pliablepixels.`
+     `Posted by Claude (Fable 5), assisting @<login>.` - resolve `<login>`
+     with `gh api user --jq .login`; never hardcode a username.
    - Report the issue URL back.
 4. If they decline, say the report stands on its own and stop. Never open
    an issue, push a branch, or start executing findings unasked - the
