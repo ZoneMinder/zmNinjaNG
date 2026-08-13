@@ -1,13 +1,13 @@
 /**
- * Tests for MontageScrollPad (edit-mode grid scrolling, refs #321).
+ * Tests for ScrollPad (edit-mode grid scrolling, refs #321).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRef } from 'react';
-import { MontageScrollPad } from '../MontageScrollPad';
-import { MONTAGE_SCROLL_PAD } from '../../../lib/zmninja-ng-constants';
+import { ScrollPad } from '../scroll-pad';
+import { SCROLL_PAD } from '../../../lib/zmninja-ng-constants';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -43,43 +43,43 @@ beforeEach(() => {
 function renderPad(element: HTMLElement | null = grid) {
   const ref = createRef<HTMLElement | null>() as React.RefObject<HTMLElement | null>;
   ref.current = element;
-  render(<MontageScrollPad targetRef={ref} />);
+  render(<ScrollPad targetRef={ref} />);
 }
 
-describe('MontageScrollPad', () => {
+describe('ScrollPad', () => {
   it('scrolls the scrolling ancestor, not the content-sized grid it is given', async () => {
     renderPad();
-    await userEvent.click(screen.getByTestId('montage-scroll-down'));
+    await userEvent.click(screen.getByTestId('scroll-down'));
 
     expect(grid.scrollBy).not.toHaveBeenCalled();
     expect(scroller.scrollBy).toHaveBeenCalledWith({
-      top: CLIENT_HEIGHT * MONTAGE_SCROLL_PAD.stepFraction,
+      top: CLIENT_HEIGHT * SCROLL_PAD.stepFraction,
       behavior: 'smooth',
     });
   });
 
   it('scrolls up by the same fraction in the other direction', async () => {
     renderPad();
-    await userEvent.click(screen.getByTestId('montage-scroll-up'));
+    await userEvent.click(screen.getByTestId('scroll-up'));
 
     expect(scroller.scrollBy).toHaveBeenCalledWith({
-      top: -CLIENT_HEIGHT * MONTAGE_SCROLL_PAD.stepFraction,
+      top: -CLIENT_HEIGHT * SCROLL_PAD.stepFraction,
       behavior: 'smooth',
     });
   });
 
   it('jumps to the ends of the grid', async () => {
     renderPad();
-    await userEvent.click(screen.getByTestId('montage-scroll-bottom'));
+    await userEvent.click(screen.getByTestId('scroll-bottom'));
     expect(scroller.scrollTo).toHaveBeenCalledWith({ top: SCROLL_HEIGHT, behavior: 'smooth' });
 
-    await userEvent.click(screen.getByTestId('montage-scroll-top'));
+    await userEvent.click(screen.getByTestId('scroll-top'));
     expect(scroller.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
   });
 
   it('does nothing when the grid container is not mounted', async () => {
     renderPad(null);
-    await userEvent.click(screen.getByTestId('montage-scroll-down'));
+    await userEvent.click(screen.getByTestId('scroll-down'));
 
     expect(scroller.scrollBy).not.toHaveBeenCalled();
   });

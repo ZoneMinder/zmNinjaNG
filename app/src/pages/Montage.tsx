@@ -46,7 +46,6 @@ import {
   GridLayoutControls,
   FullscreenControls,
   MontageKebabMenu,
-  MontageScrollPad,
   MontageErrorStrips,
   MontageGridSections,
   useMontageGrid,
@@ -55,6 +54,7 @@ import {
   type MontageTileItem,
   type MontageGroupedSections,
 } from '../components/montage';
+import { ScrollPad } from '../components/ui/scroll-pad';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
 
@@ -743,7 +743,7 @@ export default function Montage() {
         </div>
       </div>
 
-      {isEditMode && !isFullscreen && <MontageScrollPad targetRef={scrollContainerRef} />}
+      {isEditMode && !isFullscreen && <ScrollPad targetRef={scrollContainerRef} />}
     </div>
   );
 }

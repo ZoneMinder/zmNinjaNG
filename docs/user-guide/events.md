@@ -91,6 +91,14 @@ Details about the event:
 - Number of alarm and total frames
 - Monitor name and ID
 
+### Scroll Pad
+
+On a touch screen the player can fill the display, and the video is a zoom and
+pan surface, so a swipe over it does not scroll the page. When that happens and
+there is more page below, four buttons appear on the right edge: jump to the top,
+up one screen, down one screen, and jump to the bottom. On a computer they never
+appear, since the wheel and the scrollbar already scroll from anywhere.
+
 ### Navigation
 
 - **Previous/Next** buttons to move between events without going back to the list
