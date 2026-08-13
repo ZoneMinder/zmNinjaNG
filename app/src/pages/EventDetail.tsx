@@ -299,17 +299,17 @@ export default function EventDetail() {
   }, [id, monitorData]);
 
   // Pinch-to-zoom and pan for event video/image
-  // Tap-to-scroll affordance for touch screens where the player fills the
-  // viewport and leaves no free surface to swipe (refs #365).
+  // Page element for the tap-to-scroll affordance, shown when the player covers
+  // the viewport and leaves no free surface to swipe (refs #365).
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
   const setPageNode = useCallback((el: HTMLDivElement | null) => {
     pageRef.current = el;
     setPageEl(el);
   }, []);
-  const needsScrollPad = useScrollAffordance(pageEl);
 
   const zoomPan = useZoomPan({ maxScale: 4 });
+  const needsScrollPad = useScrollAffordance(pageEl, zoomPan.containerEl);
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.

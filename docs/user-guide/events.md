@@ -93,11 +93,11 @@ Details about the event:
 
 ### Scroll Pad
 
-On a touch screen the player can fill the display, and the video is a zoom and
-pan surface, so a swipe over it does not scroll the page. When that happens and
-there is more page below, four buttons appear on the right edge: jump to the top,
-up one screen, down one screen, and jump to the bottom. On a computer they never
-appear, since the wheel and the scrollbar already scroll from anywhere.
+The player is a zoom and pan surface, so a swipe over it zooms or pans rather
+than scrolling the page. When it covers the display, as it does on a tablet in
+landscape, four buttons appear on the right edge: jump to the top, up one screen,
+down one screen, and jump to the bottom. Wherever the page leaves room to drag,
+and on a computer, they stay away.
 
 ### Navigation
 

@@ -46,12 +46,16 @@ For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode*
 
 #### Scroll Pad
 
-On a touch screen the live view and its controls can fill the display, and the
-video itself is a zoom and pan surface, so a swipe over it does not scroll the
-page. When that happens and there is more page below, four buttons appear on the
-right edge: jump to the top, up one screen, down one screen, and jump to the
-bottom. They are the same buttons the montage edit mode uses. On a computer, where
-the wheel and the scrollbar already scroll from anywhere, they never appear.
+The live view is a zoom and pan surface, so a swipe over it zooms or pans rather
+than scrolling the page. On a tablet in landscape it covers everything below the
+header, which leaves nowhere to start a scroll while the status, zones, and recent
+events sit below the fold. When that happens, four buttons appear on the right
+edge: jump to the top, up one screen, down one screen, and jump to the bottom.
+They are the same buttons montage edit mode uses.
+
+In portrait, or wherever the page leaves room to drag, the buttons stay away, as
+they do on a computer where the wheel and the scrollbar already scroll from
+anywhere.
 
 #### Digital Zoom and Pan
 

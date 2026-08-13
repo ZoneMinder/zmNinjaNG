@@ -150,6 +150,10 @@ export const SCROLL_PAD = {
   // Overflow below this is a rounding difference or a sliver of padding, not
   // content the user is missing, so the pad stays away (refs #365).
   minOverflowPx: 24,
+  // Visible page outside the zoom/pan surface, below which there is no
+  // comfortable place to start a swipe and the pad earns its keep. Two rows of
+  // touch target: a header strip alone does not count as somewhere to drag.
+  minGrabPx: 96,
 } as const;
 
 /**

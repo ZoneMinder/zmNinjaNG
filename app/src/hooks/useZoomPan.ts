@@ -333,6 +333,9 @@ export function useZoomPan({
   return {
     ref: setContainer,
     innerRef,
+    // The element itself, for callers that have to measure it rather than only
+    // bind gestures to it (useScrollAffordance, refs #365).
+    containerEl,
     scale: displayScale,
     isZoomed,
     reset,
