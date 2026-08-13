@@ -38,6 +38,8 @@ import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/moni
 import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
+import { useScrollAffordance } from '../hooks/useScrollAffordance';
+import { ScrollPad } from '../components/ui/scroll-pad';
 import { useServerUrls } from '../hooks/useServerUrls';
 
 // Extracted hooks and components
@@ -142,6 +144,19 @@ export default function MonitorDetail() {
   });
 
   // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
+  // Tap-to-scroll affordance: on a tablet the video and its controls fill the
+  // viewport and every surface below is a gesture target, so there is nothing
+  // left to swipe (refs #365). Tracked as state as well as a ref because the
+  // measurement has to re-run when the element appears, while the pad only
+  // reads it on a tap - the same split useZoomPan makes.
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const setPageNode = useCallback((el: HTMLDivElement | null) => {
+    pageRef.current = el;
+    setPageEl(el);
+  }, []);
+  const needsScrollPad = useScrollAffordance(pageEl);
+
   const zoomPan = useZoomPan({
     minScale: 0.5,
     maxScale: 4,
@@ -283,10 +298,12 @@ export default function MonitorDetail() {
   }
 
   return (
-    <div className={cn(
-      'flex flex-col h-full',
-      isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background'
-    )}>
+    <div
+      ref={setPageNode}
+      className={cn(
+        'flex flex-col h-full',
+        isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background'
+      )}>
       {/* Header - Hidden in fullscreen */}
       {!isFullscreen && (
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
@@ -592,6 +609,8 @@ export default function MonitorDetail() {
         orientedResolution={orientedResolution}
         profileId={ownerProfile.id}
       />
+
+      {needsScrollPad && !isFullscreen && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }

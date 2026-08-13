@@ -48,6 +48,8 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
+import { useScrollAffordance } from '../hooks/useScrollAffordance';
+import { ScrollPad } from '../components/ui/scroll-pad';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { useEventNavigation } from '../hooks/useEventNavigation';
@@ -297,6 +299,16 @@ export default function EventDetail() {
   }, [id, monitorData]);
 
   // Pinch-to-zoom and pan for event video/image
+  // Tap-to-scroll affordance for touch screens where the player fills the
+  // viewport and leaves no free surface to swipe (refs #365).
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const setPageNode = useCallback((el: HTMLDivElement | null) => {
+    pageRef.current = el;
+    setPageEl(el);
+  }, []);
+  const needsScrollPad = useScrollAffordance(pageEl);
+
   const zoomPan = useZoomPan({ maxScale: 4 });
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
@@ -447,7 +459,7 @@ export default function EventDetail() {
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div ref={setPageNode} className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -804,6 +816,8 @@ export default function EventDetail() {
           )}
         </div>
       </div>
+
+      {needsScrollPad && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }
