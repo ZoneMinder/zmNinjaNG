@@ -143,20 +143,17 @@ export default function MonitorDetail() {
     profileId: routeProfileId,
   });
 
-  // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
-  // Tap-to-scroll affordance: on a tablet the video and its controls fill the
-  // viewport and every surface below is a gesture target, so there is nothing
-  // left to swipe (refs #365). Tracked as state as well as a ref because the
-  // measurement has to re-run when the element appears, while the pad only
-  // reads it on a tap - the same split useZoomPan makes.
+  // Page element for the tap-to-scroll affordance below. Tracked as state as
+  // well as a ref because the measurement re-runs when the element appears,
+  // while the pad only reads it on a tap - the same split useZoomPan makes.
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
   const setPageNode = useCallback((el: HTMLDivElement | null) => {
     pageRef.current = el;
     setPageEl(el);
   }, []);
-  const needsScrollPad = useScrollAffordance(pageEl);
 
+  // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
   const zoomPan = useZoomPan({
     minScale: 0.5,
     maxScale: 4,
@@ -164,6 +161,10 @@ export default function MonitorDetail() {
     onSwipeLeft,
     onSwipeRight,
   });
+
+  // The live view leaves nowhere to swipe once it covers the viewport, which is
+  // what happens on a tablet in landscape (refs #365).
+  const needsScrollPad = useScrollAffordance(pageEl, zoomPan.containerEl);
 
   const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
