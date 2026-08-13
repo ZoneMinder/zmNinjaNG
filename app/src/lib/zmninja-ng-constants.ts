@@ -143,10 +143,13 @@ export const GRID_LAYOUT = {
  * The edit-mode pad that scrolls the grid when every tile is a drag surface
  * (refs #321).
  */
-export const MONTAGE_SCROLL_PAD = {
+export const SCROLL_PAD = {
   // Fraction of the visible height one up/down tap moves. Short of a full page
   // so a row stays on screen as a reference point.
   stepFraction: 0.8,
+  // Overflow below this is a rounding difference or a sliver of padding, not
+  // content the user is missing, so the pad stays away (refs #365).
+  minOverflowPx: 24,
 } as const;
 
 /**

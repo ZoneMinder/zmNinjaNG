@@ -1,26 +1,28 @@
 /**
- * Montage Scroll Pad
+ * Scroll Pad
  *
- * In edit mode every tile is a drag surface, so on a touch screen there is
- * nothing left to swipe: a drag anywhere on the grid reorders monitors instead
- * of scrolling it. With enough tiles to fill the viewport the rest of the grid
- * becomes unreachable. This pad moves the viewport without touching the
- * layout. Shown only while editing, and only when the user turns it on from
- * the toolbar (refs #321).
+ * Moves a scroll container by tapping instead of swiping, for the screens
+ * where every surface is already a gesture target and no swipe is left over:
+ * montage edit mode, where a drag reorders monitors rather than scrolling
+ * (refs #321), and monitor/event detail on a tablet, where video and controls
+ * fill the viewport and the rest of the page is unreachable (refs #365).
+ *
+ * Montage shows it on request from the toolbar; the detail pages show it when
+ * useScrollAffordance says the page needs it.
  */
 
 import type { RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronUp, ChevronsDown, ChevronsUp } from 'lucide-react';
-import { Button } from '../ui/button';
-import { MONTAGE_SCROLL_PAD } from '../../lib/zmninja-ng-constants';
+import { Button } from './button';
+import { SCROLL_PAD } from '../../lib/zmninja-ng-constants';
 
 /** Top to bottom, as they sit in the pad. `jump` goes to the end, not a step. */
 const BUTTONS = [
-  { icon: ChevronsUp, labelKey: 'montage.scroll_top', testId: 'montage-scroll-top', jump: true, direction: -1 },
-  { icon: ChevronUp, labelKey: 'montage.scroll_up', testId: 'montage-scroll-up', jump: false, direction: -1 },
-  { icon: ChevronDown, labelKey: 'montage.scroll_down', testId: 'montage-scroll-down', jump: false, direction: 1 },
-  { icon: ChevronsDown, labelKey: 'montage.scroll_bottom', testId: 'montage-scroll-bottom', jump: true, direction: 1 },
+  { icon: ChevronsUp, labelKey: 'common.scroll_top', testId: 'scroll-top', jump: true, direction: -1 },
+  { icon: ChevronUp, labelKey: 'common.scroll_up', testId: 'scroll-up', jump: false, direction: -1 },
+  { icon: ChevronDown, labelKey: 'common.scroll_down', testId: 'scroll-down', jump: false, direction: 1 },
+  { icon: ChevronsDown, labelKey: 'common.scroll_bottom', testId: 'scroll-bottom', jump: true, direction: 1 },
 ] as const;
 
 /**
@@ -39,7 +41,7 @@ function findScrollParent(from: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-interface MontageScrollPadProps {
+interface ScrollPadProps {
   /**
    * The grid container. The pad scrolls it or the nearest scrolling ancestor.
    * A ref rather than the element itself: the element is only read on a tap, so
@@ -48,14 +50,14 @@ interface MontageScrollPadProps {
   targetRef: RefObject<HTMLElement | null>;
 }
 
-export function MontageScrollPad({ targetRef }: MontageScrollPadProps) {
+export function ScrollPad({ targetRef }: ScrollPadProps) {
   const { t } = useTranslation();
 
   const scrollBy = (direction: 1 | -1) => {
     const target = findScrollParent(targetRef.current);
     if (!target) return;
     target.scrollBy({
-      top: direction * target.clientHeight * MONTAGE_SCROLL_PAD.stepFraction,
+      top: direction * target.clientHeight * SCROLL_PAD.stepFraction,
       behavior: 'smooth',
     });
   };
@@ -72,7 +74,7 @@ export function MontageScrollPad({ targetRef }: MontageScrollPadProps) {
   return (
     <div
       className="fixed right-3 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-1 rounded-full bg-background/85 p-1 shadow-lg backdrop-blur-sm border"
-      data-testid="montage-scroll-pad"
+      data-testid="scroll-pad"
     >
       {BUTTONS.map(({ icon: Icon, labelKey, testId, jump, direction }) => {
         const label = t(labelKey);

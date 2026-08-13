@@ -3,7 +3,7 @@ import { expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { getMonitorCount, getMonitorEventCountSince } from '../helpers/zm-api';
-import { MONTAGE_SCROLL_PAD } from '../../src/lib/zmninja-ng-constants';
+import { SCROLL_PAD } from '../../src/lib/zmninja-ng-constants';
 
 const { When, Then } = createBdd();
 
@@ -291,18 +291,18 @@ When('I leave montage edit mode', async ({ page }) => {
 });
 
 Then('the montage scroll pad should be visible', async ({ page }) => {
-  await expect(page.getByTestId('montage-scroll-pad')).toBeVisible({
+  await expect(page.getByTestId('scroll-pad')).toBeVisible({
     timeout: testConfig.timeouts.element,
   });
 });
 
 Then('the montage scroll pad should be hidden', async ({ page }) => {
-  await expect(page.getByTestId('montage-scroll-pad')).toHaveCount(0);
+  await expect(page.getByTestId('scroll-pad')).toHaveCount(0);
 });
 
 When('I record the montage grid scroll position and tile order', async ({ page }) => {
   const { top, overflow, visible } = await readGridScroll(page);
-  scrollPadStep = visible * MONTAGE_SCROLL_PAD.stepFraction;
+  scrollPadStep = visible * SCROLL_PAD.stepFraction;
   // One column of tiles has to be taller than the viewport for scrolling to
   // mean anything. That is a property of the grid under test, so assert it
   // rather than skipping on it.
@@ -313,11 +313,11 @@ When('I record the montage grid scroll position and tile order', async ({ page }
 });
 
 When('I tap the montage scroll pad down button', async ({ page }) => {
-  await page.getByTestId('montage-scroll-down').click();
+  await page.getByTestId('scroll-down').click();
 });
 
 When('I tap the montage scroll pad top button', async ({ page }) => {
-  await page.getByTestId('montage-scroll-top').click();
+  await page.getByTestId('scroll-top').click();
 });
 
 Then('the montage grid should have scrolled down', async ({ page }) => {

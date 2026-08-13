@@ -49,7 +49,11 @@
     "press_back_again_to_exit": "Appuyez encore pour quitter",
     "expand": "Développer",
     "collapse": "Réduire",
-    "remove": "Retirer"
+    "remove": "Retirer",
+    "scroll_top": "Aller en haut",
+    "scroll_up": "Monter",
+    "scroll_down": "Descendre",
+    "scroll_bottom": "Aller en bas"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -839,10 +843,6 @@
     "edit_layout": "Éditer",
     "done_editing": "Fini",
     "fill_width": "Remplir",
-    "scroll_top": "Aller en haut",
-    "scroll_up": "Monter",
-    "scroll_down": "Descendre",
-    "scroll_bottom": "Aller en bas",
     "pin_monitor": "Épingler — verrouiller",
     "unpin_monitor": "Détacher — déplacer",
     "insomnia_enabled": "L'écran restera actif",
