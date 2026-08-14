@@ -99,6 +99,15 @@ Feature: Montage Live Grid
     Then the montage scroll pad should be hidden
 
   @web
+  Scenario: The kebab menu shows and hides the scroll pad outside edit mode
+    Then I should see at least 1 monitor in montage grid
+    And the montage scroll pad should be hidden
+    When I toggle the montage scroll pad from the menu
+    Then the montage scroll pad should be visible
+    When I toggle the montage scroll pad from the menu
+    Then the montage scroll pad should be hidden
+
+  @web
   Scenario: Montage tile shows the new-events badge and opens filtered events
     Then I should see at least 1 monitor in montage grid
     When I seed old watermarks for montage monitors with events

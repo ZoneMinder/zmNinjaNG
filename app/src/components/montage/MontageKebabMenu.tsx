@@ -29,12 +29,17 @@ interface MontageKebabMenuProps {
   items: MontageVisibilityItem[];
   hiddenMonitorIds: string[];
   onToggleVisibility: (id: string) => void;
+  /** Whether the scroll pad is currently on screen. */
+  scrollPadOn: boolean;
+  onToggleScrollPad: () => void;
 }
 
 export function MontageKebabMenu({
   items,
   hiddenMonitorIds,
   onToggleVisibility,
+  scrollPadOn,
+  onToggleScrollPad,
 }: MontageKebabMenuProps) {
   const { t } = useTranslation();
 
@@ -55,6 +60,19 @@ export function MontageKebabMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {/* Edit mode turns the pad on by itself, since a drag there reorders
+            tiles rather than scrolling. This entry covers the rest: a grid
+            taller than the screen on a touch device, where the tiles are the
+            only surface a finger can land on (refs #365). */}
+        {/* Closes on select, unlike the visibility entries below: this is one
+            switch, not a list you tick through. */}
+        <DropdownMenuCheckboxItem
+          checked={scrollPadOn}
+          onSelect={onToggleScrollPad}
+          data-testid="montage-kebab-scroll-pad"
+        >
+          {t('common.scroll_buttons')}
+        </DropdownMenuCheckboxItem>
         {items.length > 0 && (
           <DropdownMenuSub>
             <DropdownMenuSubTrigger data-testid="montage-kebab-visibility">

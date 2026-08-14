@@ -300,6 +300,23 @@ Then('the montage scroll pad should be hidden', async ({ page }) => {
   await expect(page.getByTestId('scroll-pad')).toHaveCount(0);
 });
 
+When('I toggle the montage scroll pad from the menu', async ({ page }) => {
+  const trigger = page.getByTestId('montage-kebab-menu');
+  // Radix keeps pointer events off the page while the menu animates shut, so
+  // a click landing in that window is swallowed and the menu never reopens.
+  // Wait for both signals rather than pausing a fixed time.
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  // Keyboard rather than click: Radix leaves a dismissable layer over the page
+  // for a beat after the menu closes, and a click landing on it never reaches
+  // the trigger, so the menu would not reopen for the second toggle.
+  await trigger.focus();
+  await trigger.press('Enter');
+
+  const item = page.getByTestId('montage-kebab-scroll-pad');
+  await expect(item).toBeVisible({ timeout: testConfig.timeouts.element });
+  await item.click();
+});
+
 When('I record the montage grid scroll position and tile order', async ({ page }) => {
   const { top, overflow, visible } = await readGridScroll(page);
   scrollPadStep = visible * SCROLL_PAD.stepFraction;
