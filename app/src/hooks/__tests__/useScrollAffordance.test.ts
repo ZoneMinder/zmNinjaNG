@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useScrollAffordance } from '../useScrollAffordance';
+import { useScrollAffordance, useScrollPadToggle } from '../useScrollAffordance';
 
 /** Captures the ResizeObserver callbacks so a test can fire them by hand. */
 const observers: Array<() => void> = [];
@@ -145,5 +145,44 @@ describe('useScrollAffordance', () => {
     setRect(video, 56, 1200);
     act(() => observers.forEach((fire) => fire()));
     expect(result.current.needsPad).toBe(true);
+  });
+});
+
+describe('useScrollPadToggle', () => {
+  it('follows the automatic decision until the user touches the toggle', () => {
+    const { result, rerender } = renderHook(({ needs }) => useScrollPadToggle(needs), {
+      initialProps: { needs: false },
+    });
+    expect(result.current[0]).toBe(false);
+
+    rerender({ needs: true });
+    expect(result.current[0]).toBe(true);
+  });
+
+  it('hides the pad when switched off, even while the page still qualifies', () => {
+    const { result } = renderHook(() => useScrollPadToggle(true));
+    expect(result.current[0]).toBe(true);
+
+    act(() => result.current[1]());
+    expect(result.current[0]).toBe(false);
+  });
+
+  it('shows the pad when switched on where it would not appear by itself', () => {
+    const { result } = renderHook(() => useScrollPadToggle(false));
+
+    act(() => result.current[1]());
+    expect(result.current[0]).toBe(true);
+  });
+
+  it('keeps the user choice across a re-measure', () => {
+    const { result, rerender } = renderHook(({ needs }) => useScrollPadToggle(needs), {
+      initialProps: { needs: true },
+    });
+    act(() => result.current[1]());
+    expect(result.current[0]).toBe(false);
+
+    // A rotation re-runs the measurement; the explicit "off" still wins.
+    rerender({ needs: true });
+    expect(result.current[0]).toBe(false);
   });
 });

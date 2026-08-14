@@ -48,7 +48,7 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { useScrollAffordance } from '../hooks/useScrollAffordance';
+import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
@@ -312,7 +312,7 @@ export default function EventDetail() {
   const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
   // Shown automatically when the player leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
-  const [showScrollPad, setShowScrollPad] = useState(false);
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.
@@ -531,7 +531,7 @@ export default function EventDetail() {
               aria-label={t('common.scroll_buttons')}
               aria-pressed={showScrollPad}
               className="h-8 w-8 sm:h-9 sm:w-9"
-              onClick={() => setShowScrollPad((on) => !on)}
+              onClick={toggleScrollPad}
               data-testid="scroll-pad-toggle"
             >
               <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -834,7 +834,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {(needsPad || showScrollPad) && <ScrollPad targetRef={pageRef} />}
+      {showScrollPad && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }
