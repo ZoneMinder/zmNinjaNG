@@ -53,7 +53,8 @@
     "scroll_top": "Ir al principio",
     "scroll_up": "Subir",
     "scroll_down": "Bajar",
-    "scroll_bottom": "Ir al final"
+    "scroll_bottom": "Ir al final",
+    "scroll_buttons": "Botones de desplazamiento"
   },
   "app": {
     "name": "zmNinjaNg",

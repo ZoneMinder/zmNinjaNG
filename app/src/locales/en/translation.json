@@ -53,7 +53,8 @@
     "scroll_top": "Scroll to top",
     "scroll_up": "Scroll up",
     "scroll_down": "Scroll down",
-    "scroll_bottom": "Scroll to bottom"
+    "scroll_bottom": "Scroll to bottom",
+    "scroll_buttons": "Scroll buttons"
   },
   "app": {
     "name": "zmNinjaNg",
