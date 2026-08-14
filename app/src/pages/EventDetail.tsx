@@ -33,7 +33,7 @@ import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { EventFrameCarousel } from '../components/events/EventFrameCarousel';
 import { TagChip } from '../components/events/TagChip';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, ArchiveRestore, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
@@ -576,7 +576,7 @@ export default function EventDetail() {
             <span className="hidden sm:inline">{t('event_detail.continuous_play')}</span>
           </Button>
           <Button
-            variant={isArchived ? "default" : "outline"}
+            variant="outline"
             aria-pressed={isArchived}
             size="icon"
             className="h-8 w-8 sm:h-9 sm:w-9"
@@ -585,7 +585,14 @@ export default function EventDetail() {
             aria-label={isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}
             data-testid="event-detail-archive"
           >
-            <Archive className={isArchived ? "h-4 w-4 fill-current" : "h-4 w-4"} />
+            {/* Same idiom as the event card: the icon says archived, the button
+                does not fill. A filled control here read as a white slab in the
+                dark themes, where primary is near-white. */}
+            {isArchived ? (
+              <ArchiveRestore className="h-4 w-4 stroke-primary" data-testid="event-detail-archive-icon-on" />
+            ) : (
+              <Archive className="h-4 w-4" data-testid="event-detail-archive-icon-off" />
+            )}
           </Button>
           {hasVideo && (
             <Button

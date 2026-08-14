@@ -444,4 +444,16 @@ describe('EventCard when ZoneMinder refuses the archive', () => {
     await waitFor(() => expect(invalidateQueries).toHaveBeenCalled());
     expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
   });
+
+  it('shows the restore icon on an archived event, and the plain one otherwise', () => {
+    // Shape rather than fill: a solid archive box loses its lid and reads as a
+    // blob, and colour alone leaves nothing for a colourblind reader.
+    const { unmount } = renderEventCard({ Archived: '1' }, { profileId: asProfileId('p1') });
+    expect(screen.getByTestId('event-archive-icon-on')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-archive-icon-off')).not.toBeInTheDocument();
+    unmount();
+
+    renderEventCard({ Archived: '0' }, { profileId: asProfileId('p1') });
+    expect(screen.getByTestId('event-archive-icon-off')).toBeInTheDocument();
+  });
 });

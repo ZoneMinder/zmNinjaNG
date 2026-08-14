@@ -16,7 +16,7 @@ import { Badge } from '../ui/badge';
 import { EventThumbnail } from './EventThumbnail';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
 import { EventDeleteButton } from './EventDeleteButton';
-import { Video, Calendar, Clock, Star, Archive, Hourglass } from 'lucide-react';
+import { Video, Calendar, Clock, Star, Archive, ArchiveRestore, Hourglass } from 'lucide-react';
 import { getEventCauseIcon } from '../../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../../lib/event/object-class-icons';
 import type { EventCardProps } from '../../api/types';
@@ -266,14 +266,22 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
                   aria-label={isArchived ? t('events.unarchive') : t('events.archive')}
                   data-testid="event-archive-button"
                 >
-                  <Archive
-                    className={cn(
-                      "h-4 w-4 sm:h-5 sm:w-5 transition-colors",
-                      isArchived
-                        ? "fill-primary stroke-primary"
-                        : "stroke-muted-foreground hover:stroke-primary"
-                    )}
-                  />
+                  {/* Shape carries the state, not fill: a solid archive box
+                      loses its lid and reads as a blob at this size, and colour
+                      alone says nothing to a colourblind reader. The restore
+                      arrow doubles as a hint at what the tap does, which is
+                      what the label already says. */}
+                  {isArchived ? (
+                    <ArchiveRestore
+                      className="h-4 w-4 sm:h-5 sm:w-5 transition-colors stroke-primary"
+                      data-testid="event-archive-icon-on"
+                    />
+                  ) : (
+                    <Archive
+                      className="h-4 w-4 sm:h-5 sm:w-5 transition-colors stroke-muted-foreground hover:stroke-primary"
+                      data-testid="event-archive-icon-off"
+                    />
+                  )}
                 </HintButton>
                 <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} />
                 {(() => {
