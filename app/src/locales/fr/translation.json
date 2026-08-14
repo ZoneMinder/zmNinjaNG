@@ -53,7 +53,8 @@
     "scroll_top": "Aller en haut",
     "scroll_up": "Monter",
     "scroll_down": "Descendre",
-    "scroll_bottom": "Aller en bas"
+    "scroll_bottom": "Aller en bas",
+    "scroll_buttons": "Boutons de défilement"
   },
   "app": {
     "name": "zmNinjaNg",

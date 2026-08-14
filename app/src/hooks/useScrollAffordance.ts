@@ -49,14 +49,25 @@ function surfaceCoverage(scroller: HTMLElement, gestureSurface: HTMLElement): nu
  * only strips at the screen edges and the page below the fold is stranded,
  * from the same page in portrait, where there is plenty of room to swipe.
  */
+export interface ScrollAffordance {
+  /**
+   * The page scrolls and the pointer is coarse, so the pad would do something
+   * if it were shown. Gates the toggle that offers it by hand.
+   */
+  offerPad: boolean;
+  /** The video covers enough that the pad should appear without being asked. */
+  needsPad: boolean;
+}
+
 export function useScrollAffordance(
   content: HTMLElement | null,
   gestureSurface: HTMLElement | null,
-): boolean {
+): ScrollAffordance {
   // Read through useSyncExternalStore rather than measuring into state from an
-  // effect: the snapshot is a plain boolean, so React re-reads it whenever the
-  // observer fires and there is no render-then-correct pass. Same shape as
-  // useIsMobile.
+  // effect: each snapshot is a plain boolean, so React re-reads them whenever
+  // the observer fires and there is no render-then-correct pass. Same shape as
+  // useIsMobile. Two stores rather than one returning an object, which would
+  // mint a new identity on every read and loop.
   const subscribe = useCallback(
     (onChange: () => void) => {
       if (!content) return () => {};
@@ -72,14 +83,24 @@ export function useScrollAffordance(
 
   // Resolves the scroll parent on every read: entering or leaving fullscreen
   // swaps which ancestor scrolls without remounting the page.
-  const getSnapshot = useCallback(() => {
-    if (!content || !gestureSurface) return false;
-    if (!(window.matchMedia?.('(pointer: coarse)').matches ?? false)) return false;
+  const scrollParent = useCallback(() => {
+    if (!content || !gestureSurface) return null;
+    if (!(window.matchMedia?.('(pointer: coarse)').matches ?? false)) return null;
     const parent = findScrollParent(content);
-    if (!parent) return false;
-    if (parent.scrollHeight - parent.clientHeight <= SCROLL_PAD.minOverflowPx) return false;
-    return surfaceCoverage(parent, gestureSurface) > SCROLL_PAD.maxSurfaceCoverage;
+    if (!parent) return null;
+    return parent.scrollHeight - parent.clientHeight > SCROLL_PAD.minOverflowPx ? parent : null;
   }, [content, gestureSurface]);
 
-  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+  const getOfferPad = useCallback(() => scrollParent() !== null, [scrollParent]);
+
+  const getNeedsPad = useCallback(() => {
+    const parent = scrollParent();
+    if (!parent || !gestureSurface) return false;
+    return surfaceCoverage(parent, gestureSurface) > SCROLL_PAD.maxSurfaceCoverage;
+  }, [scrollParent, gestureSurface]);
+
+  const offerPad = useSyncExternalStore(subscribe, getOfferPad, () => false);
+  const needsPad = useSyncExternalStore(subscribe, getNeedsPad, () => false);
+
+  return { offerPad, needsPad };
 }

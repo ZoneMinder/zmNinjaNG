@@ -55,7 +55,8 @@ They are the same buttons montage edit mode uses.
 
 In portrait, or wherever the page leaves room to drag, the buttons stay away, as
 they do on a computer where the wheel and the scrollbar already scroll from
-anywhere.
+anywhere. To call them up at any time on a touch screen, tap the up/down arrows
+in the header; tapping again puts them away.
 
 #### Digital Zoom and Pan
 

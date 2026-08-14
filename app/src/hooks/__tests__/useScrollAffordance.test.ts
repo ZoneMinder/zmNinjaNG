@@ -75,53 +75,75 @@ describe('useScrollAffordance', () => {
     setPointer(true);
     const { content, video } = mountPage(noRoomToSwipe);
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(true);
+    expect(result.current.needsPad).toBe(true);
   });
 
   it('is true when the capped player still dominates the screen', () => {
     setPointer(true);
     const { content, video } = mountPage(cappedPlayer);
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(true);
+    expect(result.current.needsPad).toBe(true);
   });
 
   it('is false when the page has free surface to drag, even though it scrolls', () => {
     setPointer(true);
     const { content, video } = mountPage(roomToSwipe);
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(false);
+    expect(result.current.needsPad).toBe(false);
   });
 
   it('is false on a fine pointer, where the wheel and scrollbar already work', () => {
     setPointer(false);
     const { content, video } = mountPage(noRoomToSwipe);
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(false);
+    expect(result.current.needsPad).toBe(false);
   });
 
   it('is false when the page does not overflow at all', () => {
     setPointer(true);
     const { content, video } = mountPage({ ...noRoomToSwipe, scrollHeight: 800 });
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(false);
+    expect(result.current.needsPad).toBe(false);
   });
 
   it('is false before the gesture surface has mounted', () => {
     setPointer(true);
     const { content } = mountPage(noRoomToSwipe);
     const { result } = renderHook(() => useScrollAffordance(content, null));
-    expect(result.current).toBe(false);
+    expect(result.current.needsPad).toBe(false);
+  });
+
+  it('offers the pad by hand whenever a touch page scrolls, even with room to swipe', () => {
+    setPointer(true);
+    const { content, video } = mountPage(roomToSwipe);
+    const { result } = renderHook(() => useScrollAffordance(content, video));
+    expect(result.current.needsPad).toBe(false);
+    expect(result.current.offerPad).toBe(true);
+  });
+
+  it('does not offer the pad on a page that does not scroll', () => {
+    setPointer(true);
+    const { content, video } = mountPage({ ...roomToSwipe, scrollHeight: 1200 });
+    const { result } = renderHook(() => useScrollAffordance(content, video));
+    expect(result.current.offerPad).toBe(false);
+  });
+
+  it('does not offer the pad on a fine pointer', () => {
+    setPointer(false);
+    const { content, video } = mountPage(cappedPlayer);
+    const { result } = renderHook(() => useScrollAffordance(content, video));
+    expect(result.current.offerPad).toBe(false);
   });
 
   it('re-measures when the layout changes, such as a rotation', () => {
     setPointer(true);
     const { content, video } = mountPage(roomToSwipe);
     const { result } = renderHook(() => useScrollAffordance(content, video));
-    expect(result.current).toBe(false);
+    expect(result.current.needsPad).toBe(false);
 
     // Rotate to landscape: the video now covers everything below the header.
     setRect(video, 56, 1200);
     act(() => observers.forEach((fire) => fire()));
-    expect(result.current).toBe(true);
+    expect(result.current.needsPad).toBe(true);
   });
 });

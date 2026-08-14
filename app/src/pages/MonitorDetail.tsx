@@ -21,7 +21,7 @@ import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Video, Eye, Disc } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers, Video, Eye, Disc } from 'lucide-react';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -164,7 +164,10 @@ export default function MonitorDetail() {
 
   // The live view leaves nowhere to swipe once it covers the viewport, which is
   // what happens on a tablet in landscape (refs #365).
-  const needsScrollPad = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  // Shown automatically when the video leaves nowhere to swipe, and on request
+  // from the header toggle anywhere the page scrolls at all (refs #365).
+  const [showScrollPad, setShowScrollPad] = useState(false);
 
   const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
@@ -382,6 +385,20 @@ export default function MonitorDetail() {
             </SelectContent>
           </Select>
           <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" alwaysStreaming />
+          {offerPad && (
+            <Button
+              variant={showScrollPad ? 'secondary' : 'ghost'}
+              size="icon"
+              title={t('common.scroll_buttons')}
+              aria-label={t('common.scroll_buttons')}
+              aria-pressed={showScrollPad}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+              onClick={() => setShowScrollPad((on) => !on)}
+              data-testid="scroll-pad-toggle"
+            >
+              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -611,7 +628,7 @@ export default function MonitorDetail() {
         profileId={ownerProfile.id}
       />
 
-      {needsScrollPad && !isFullscreen && <ScrollPad targetRef={pageRef} />}
+      {(needsPad || showScrollPad) && !isFullscreen && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }

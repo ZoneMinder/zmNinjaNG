@@ -32,7 +32,7 @@ import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { EventFrameCarousel } from '../components/events/EventFrameCarousel';
 import { TagChip } from '../components/events/TagChip';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2, ListVideo } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
@@ -309,7 +309,10 @@ export default function EventDetail() {
   }, []);
 
   const zoomPan = useZoomPan({ maxScale: 4 });
-  const needsScrollPad = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  // Shown automatically when the player leaves nowhere to swipe, and on request
+  // from the header toggle anywhere the page scrolls at all (refs #365).
+  const [showScrollPad, setShowScrollPad] = useState(false);
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.
@@ -520,6 +523,20 @@ export default function EventDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          {offerPad && (
+            <Button
+              variant={showScrollPad ? 'secondary' : 'ghost'}
+              size="icon"
+              title={t('common.scroll_buttons')}
+              aria-label={t('common.scroll_buttons')}
+              aria-pressed={showScrollPad}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+              onClick={() => setShowScrollPad((on) => !on)}
+              data-testid="scroll-pad-toggle"
+            >
+              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
           <Button
             variant={isFav ? "default" : "outline"}
             size="sm"
@@ -817,7 +834,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {needsScrollPad && <ScrollPad targetRef={pageRef} />}
+      {(needsPad || showScrollPad) && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }
