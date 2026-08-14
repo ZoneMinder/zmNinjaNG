@@ -38,7 +38,7 @@ import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/moni
 import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { useScrollAffordance } from '../hooks/useScrollAffordance';
+import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { useServerUrls } from '../hooks/useServerUrls';
 
@@ -167,7 +167,7 @@ export default function MonitorDetail() {
   const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
   // Shown automatically when the video leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
-  const [showScrollPad, setShowScrollPad] = useState(false);
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
@@ -393,7 +393,7 @@ export default function MonitorDetail() {
               aria-label={t('common.scroll_buttons')}
               aria-pressed={showScrollPad}
               className="h-8 w-8 sm:h-9 sm:w-9"
-              onClick={() => setShowScrollPad((on) => !on)}
+              onClick={toggleScrollPad}
               data-testid="scroll-pad-toggle"
             >
               <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -628,7 +628,7 @@ export default function MonitorDetail() {
         profileId={ownerProfile.id}
       />
 
-      {(needsPad || showScrollPad) && !isFullscreen && <ScrollPad targetRef={pageRef} />}
+      {showScrollPad && !isFullscreen && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }

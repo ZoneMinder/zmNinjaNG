@@ -9,7 +9,7 @@
  * has that problem, since the wheel and the scrollbar scroll from anywhere.
  */
 
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import { SCROLL_PAD } from '../lib/zmninja-ng-constants';
 
 /**
@@ -103,4 +103,20 @@ export function useScrollAffordance(
   const needsPad = useSyncExternalStore(subscribe, getNeedsPad, () => false);
 
   return { offerPad, needsPad };
+}
+
+/**
+ * Visibility of the pad, combining the automatic decision with the header
+ * toggle. The user's choice overrides the measurement rather than adding to
+ * it: OR-ing the two meant switching the toggle off did nothing wherever the
+ * page qualified on its own, which is most of the time it is visible.
+ *
+ * The choice lasts for the page visit. Leaving and coming back starts from the
+ * automatic decision again, which is the one that suits most pages.
+ */
+export function useScrollPadToggle(needsPad: boolean): [boolean, () => void] {
+  const [choice, setChoice] = useState<boolean | null>(null);
+  const visible = choice ?? needsPad;
+  const toggle = useCallback(() => setChoice(!visible), [visible]);
+  return [visible, toggle];
 }
