@@ -83,6 +83,12 @@ Path: `ErrorBanner` (`app/src/components/ui/query-state.tsx`) with `resolveQuery
 Never: ad-hoc error markup or raw error strings.
 Gate: `app/src/tests/agents-contracts.test.ts`; review.
 
+### Controls
+Owns: pressable control state.
+Path: pressed is `default` over `outline`, with `aria-pressed`; icon-only buttons need `title`/`aria-label`.
+Never: `secondary`/`ghost` pressed pairs; colour-only state.
+Gate: `app/src/tests/control-consistency.test.ts`.
+
 ### Date and time
 Owns: user-facing date and time rendering.
 Path: `useDateTimeFormat` (`app/src/hooks/useDateTimeFormat.ts`) or `formatAppDate` helpers (`app/src/lib/format-date-time.ts`).

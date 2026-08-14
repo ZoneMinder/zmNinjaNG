@@ -744,6 +744,7 @@ export function ZmsEventPlayer({
               <Button
                 key={preset.value}
                 variant={playbackSpeed === preset.value ? 'default' : 'outline'}
+                aria-pressed={playbackSpeed === preset.value}
                 size="sm"
                 onClick={() => changeSpeed(preset.value)}
                 data-testid={`zms-speed-${preset.value}`}

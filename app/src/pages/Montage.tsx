@@ -612,7 +612,7 @@ export default function Montage() {
                 onDeleteLayout={handleDeleteLayout}
               />
               <Select value={settings.montageFeedFit} onValueChange={handleFeedFitChange}>
-                <SelectTrigger className="h-8 sm:h-9 w-[80px]" data-testid="montage-fit-select">
+                <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="montage-fit-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -627,6 +627,7 @@ export default function Montage() {
               <Button
                 onClick={handleEditModeToggle}
                 variant={isEditMode ? 'default' : 'outline'}
+                aria-pressed={isEditMode}
                 size="sm"
                 className="h-8 sm:h-9"
                 title={isEditMode ? t('montage.done_editing') : t('montage.edit_layout')}
@@ -641,26 +642,26 @@ export default function Montage() {
                 <Button
                   onClick={handleFillWidth}
                   variant="outline"
-                  size="sm"
-                  className="h-8 sm:h-9"
+                  size="icon"
+                  className="h-8 w-8 sm:h-9 sm:w-9"
                   title={t('montage.fill_width', 'Fill Width')}
+                  aria-label={t('montage.fill_width', 'Fill Width')}
                   data-testid="montage-fill-width"
                 >
-                  <ArrowLeftRight className="h-4 w-4 sm:mr-2" />
-                  <span className="hidden sm:inline">{t('montage.fill_width', 'Fill')}</span>
+                  <ArrowLeftRight className="h-4 w-4" />
                 </Button>
               )}
               <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
               <Button
                 onClick={() => handleToggleFullscreen(true)}
                 variant="outline"
-                size="sm"
-                className="h-8 sm:h-9"
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9"
                 title={t('montage.fullscreen')}
+                aria-label={t('montage.fullscreen')}
                 data-testid="montage-fullscreen-button"
               >
-                <Maximize className="h-4 w-4 sm:mr-2" />
-                <span className="hidden sm:inline">{t('montage.fullscreen')}</span>
+                <Maximize className="h-4 w-4" />
               </Button>
               <RefreshButton size="sm" className="h-8 sm:h-9" data-testid="montage-refresh-button" />
               <MontageKebabMenu

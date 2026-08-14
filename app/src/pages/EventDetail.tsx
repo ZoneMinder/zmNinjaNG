@@ -309,7 +309,7 @@ export default function EventDetail() {
   }, []);
 
   const zoomPan = useZoomPan({ maxScale: 4 });
-  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const needsPad = useScrollAffordance(pageEl, zoomPan.containerEl);
   // Shown automatically when the player leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
   const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
@@ -523,30 +523,29 @@ export default function EventDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          {offerPad && (
-            <Button
-              variant={showScrollPad ? 'secondary' : 'ghost'}
-              size="icon"
-              title={t('common.scroll_buttons')}
-              aria-label={t('common.scroll_buttons')}
-              aria-pressed={showScrollPad}
-              className="h-8 w-8 sm:h-9 sm:w-9"
-              onClick={toggleScrollPad}
-              data-testid="scroll-pad-toggle"
-            >
-              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          )}
+          <Button
+            variant={showScrollPad ? 'default' : 'outline'}
+            size="icon"
+            title={t('common.scroll_buttons')}
+            aria-label={t('common.scroll_buttons')}
+            aria-pressed={showScrollPad}
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            onClick={toggleScrollPad}
+            data-testid="scroll-pad-toggle"
+          >
+            <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
           <Button
             variant={isFav ? "default" : "outline"}
-            size="sm"
-            className="gap-2 h-8 sm:h-9"
+            aria-pressed={isFav}
+            size="icon"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             onClick={handleFavoriteToggle}
             title={isFav ? t('events.unfavorite') : t('events.favorite')}
+            aria-label={isFav ? t('events.unfavorite') : t('events.favorite')}
             data-testid="event-detail-favorite-button"
           >
             <Star className={isFav ? "h-4 w-4 fill-current" : "h-4 w-4"} />
-            <span className="hidden sm:inline">{isFav ? t('events.favorited') : t('events.favorite')}</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(routeProfileId ? `/all/monitors/${routeProfileId}/${event.Event.MonitorId}` : `/monitors/${event.Event.MonitorId}`)} title={t('event_detail.view_camera')} data-testid="event-detail-view-camera">
             <Video className="h-4 w-4" />
@@ -570,19 +569,21 @@ export default function EventDetail() {
           </Button>
           <Button
             variant={isArchived ? "default" : "outline"}
-            size="sm"
+            aria-pressed={isArchived}
+            size="icon"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             {...archiveProps}
             disabled={isArchiving}
+            aria-label={isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}
             data-testid="event-detail-archive"
           >
             <Archive className={isArchived ? "h-4 w-4 fill-current" : "h-4 w-4"} />
-            <span className="hidden sm:inline">{isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}</span>
           </Button>
           {hasVideo && (
             <Button
               variant="outline"
-              size="sm"
-              className="gap-2 h-8 sm:h-9"
+              size="icon"
+              className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => {
                 if (hasVideo && ownerProfile) {
                   downloadEventVideo(
@@ -597,10 +598,10 @@ export default function EventDetail() {
                 }
               }}
               title={t('event_detail.download_video')}
+              aria-label={t('event_detail.download_video')}
               data-testid="download-video-button"
             >
               <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('event_detail.download_video')}</span>
             </Button>
           )}
         </div>

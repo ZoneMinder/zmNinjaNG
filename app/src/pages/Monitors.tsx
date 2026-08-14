@@ -381,7 +381,7 @@ export default function Monitors() {
             />
           )}
           <Select value={settings.monitorsFeedFit} onValueChange={handleFeedFitChange}>
-            <SelectTrigger className="h-8 sm:h-9 w-auto" data-testid="monitors-fit-select">
+            <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="monitors-fit-select">
               <SelectValue placeholder={t('monitors.feed_fit')} />
             </SelectTrigger>
             <SelectContent>

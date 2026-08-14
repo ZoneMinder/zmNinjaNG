@@ -69,7 +69,7 @@ export default function Timeline() {
     canvasAreaRef.current = el;
     setCanvasAreaEl(el);
   }, []);
-  const { offerPad, needsPad } = useScrollAffordance(canvasAreaEl, canvasAreaEl);
+  const needsPad = useScrollAffordance(canvasAreaEl, canvasAreaEl);
   const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   // Live mode: subscribe to notification store for new events, fall back to polling
@@ -493,7 +493,6 @@ export default function Timeline() {
           ) : (
             <div className="p-4" data-testid="timeline-content">
               <TimelineToolbar
-                offerScrollPad={offerPad}
                 scrollPadOn={showScrollPad}
                 onToggleScrollPad={toggleScrollPad}
                 brushMode={brushMode}

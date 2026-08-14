@@ -97,8 +97,8 @@ The player is a zoom and pan surface, so a swipe over it zooms or pans rather
 than scrolling the page. When it covers the display, as it does on a tablet in
 landscape, four buttons appear on the right edge: jump to the top, up one screen,
 down one screen, and jump to the bottom. Wherever the page leaves room to drag,
-and on a computer, they stay away. To call them up at any time on a touch screen,
-tap the up/down arrows in the header; tapping again puts them away.
+they stay away by themselves. The up/down arrows in the header show and hide them
+at any time, whichever way the page decided.
 
 ### Navigation
 

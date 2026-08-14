@@ -164,7 +164,7 @@ export default function MonitorDetail() {
 
   // The live view leaves nowhere to swipe once it covers the viewport, which is
   // what happens on a tablet in landscape (refs #365).
-  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const needsPad = useScrollAffordance(pageEl, zoomPan.containerEl);
   // Shown automatically when the video leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
   const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
@@ -385,20 +385,18 @@ export default function MonitorDetail() {
             </SelectContent>
           </Select>
           <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" alwaysStreaming />
-          {offerPad && (
-            <Button
-              variant={showScrollPad ? 'secondary' : 'ghost'}
-              size="icon"
-              title={t('common.scroll_buttons')}
-              aria-label={t('common.scroll_buttons')}
-              aria-pressed={showScrollPad}
-              className="h-8 w-8 sm:h-9 sm:w-9"
-              onClick={toggleScrollPad}
-              data-testid="scroll-pad-toggle"
-            >
-              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          )}
+          <Button
+            variant={showScrollPad ? 'default' : 'outline'}
+            size="icon"
+            title={t('common.scroll_buttons')}
+            aria-label={t('common.scroll_buttons')}
+            aria-pressed={showScrollPad}
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            onClick={toggleScrollPad}
+            data-testid="scroll-pad-toggle"
+          >
+            <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -534,7 +532,8 @@ export default function MonitorDetail() {
               <Download className="h-4 w-4" />
             </Button>
             <Button
-              variant={showZones ? 'secondary' : 'ghost'}
+              variant={showZones ? 'default' : 'outline'}
+              aria-pressed={showZones}
               size="icon"
               className="h-8 w-8"
               onClick={() => setShowZones(!showZones)}
