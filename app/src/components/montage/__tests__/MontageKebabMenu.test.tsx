@@ -35,6 +35,8 @@ describe('MontageKebabMenu', () => {
         items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     expect(screen.getByTestId('montage-kebab-menu')).toBeInTheDocument();
@@ -47,6 +49,8 @@ describe('MontageKebabMenu', () => {
         items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -60,6 +64,8 @@ describe('MontageKebabMenu', () => {
         items={items}
         hiddenMonitorIds={['2']}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -81,6 +87,8 @@ describe('MontageKebabMenu', () => {
         items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -99,6 +107,8 @@ describe('MontageKebabMenu', () => {
         items={[]}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -116,6 +126,8 @@ describe('MontageKebabMenu', () => {
         ]}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -135,6 +147,8 @@ describe('MontageKebabMenu', () => {
         items={allModeItems}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -151,6 +165,8 @@ describe('MontageKebabMenu', () => {
         items={allModeItems}
         hiddenMonitorIds={['profile-1:1']}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -173,6 +189,8 @@ describe('MontageKebabMenu', () => {
         items={allModeItems}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -189,11 +207,51 @@ describe('MontageKebabMenu', () => {
         items={items}
         hiddenMonitorIds={[]}
         onToggleVisibility={onToggleVisibility}
+      scrollPadOn={false}
+      onToggleScrollPad={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
     await user.hover(screen.getByTestId('montage-kebab-visibility'));
     await screen.findByTestId('montage-visibility-1');
     expect(screen.queryAllByTestId(/^montage-visibility-chip-/)).toHaveLength(0);
+  });
+
+  it('shows the scroll pad state and toggles it', async () => {
+    const onToggleScrollPad = vi.fn();
+    render(
+      <MontageKebabMenu
+        items={items}
+        hiddenMonitorIds={[]}
+        onToggleVisibility={onToggleVisibility}
+        scrollPadOn={false}
+        onToggleScrollPad={onToggleScrollPad}
+      />
+    );
+
+    await userEvent.click(screen.getByTestId('montage-kebab-menu'));
+    const item = await screen.findByTestId('montage-kebab-scroll-pad');
+    expect(item).toHaveAttribute('aria-checked', 'false');
+
+    await userEvent.click(item);
+    expect(onToggleScrollPad).toHaveBeenCalledTimes(1);
+  });
+
+  it('reflects the scroll pad being on', async () => {
+    render(
+      <MontageKebabMenu
+        items={items}
+        hiddenMonitorIds={[]}
+        onToggleVisibility={onToggleVisibility}
+        scrollPadOn
+        onToggleScrollPad={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByTestId('montage-kebab-menu'));
+    expect(await screen.findByTestId('montage-kebab-scroll-pad')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
   });
 });

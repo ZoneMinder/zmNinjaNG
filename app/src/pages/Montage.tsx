@@ -55,6 +55,7 @@ import {
   type MontageGroupedSections,
 } from '../components/montage';
 import { ScrollPad } from '../components/ui/scroll-pad';
+import { useScrollPadToggle } from '../hooks/useScrollAffordance';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
 
@@ -237,6 +238,9 @@ export default function Montage() {
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
+  // Edit mode turns the pad on by itself - a drag there reorders tiles instead
+  // of scrolling - and the kebab entry overrides that either way (refs #365).
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(isEditMode);
 
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
@@ -663,6 +667,8 @@ export default function Montage() {
                 items={visibilityItems}
                 hiddenMonitorIds={bucket.hiddenMonitorIds}
                 onToggleVisibility={handleToggleMonitorVisibility}
+                scrollPadOn={showScrollPad}
+                onToggleScrollPad={toggleScrollPad}
               />
               <NotificationBadge />
             </div>
@@ -743,7 +749,7 @@ export default function Montage() {
         </div>
       </div>
 
-      {isEditMode && !isFullscreen && <ScrollPad targetRef={scrollContainerRef} />}
+      {showScrollPad && !isFullscreen && <ScrollPad targetRef={scrollContainerRef} />}
     </div>
   );
 }

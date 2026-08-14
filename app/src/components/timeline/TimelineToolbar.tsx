@@ -8,7 +8,7 @@
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Crosshair, ZoomIn, ZoomOut, SkipForward, RectangleHorizontal, Info, Move, HandMetal, Radio } from 'lucide-react';
+import { Crosshair, ZoomIn, ZoomOut, SkipForward, RectangleHorizontal, Info, Move, HandMetal, Radio, ChevronsUpDown } from 'lucide-react';
 
 interface TimelineToolbarProps {
   brushMode: boolean;
@@ -19,6 +19,10 @@ interface TimelineToolbarProps {
   onZoomOut: () => void;
   onCenter: () => void;
   onGoToNow: () => void;
+  /** The canvas swallows touches, so the page may need buttons to scroll it. */
+  offerScrollPad: boolean;
+  scrollPadOn: boolean;
+  onToggleScrollPad: () => void;
 }
 
 export function TimelineToolbar({
@@ -30,12 +34,29 @@ export function TimelineToolbar({
   onZoomOut,
   onCenter,
   onGoToNow,
+  offerScrollPad,
+  scrollPadOn,
+  onToggleScrollPad,
 }: TimelineToolbarProps) {
   const { t } = useTranslation();
 
   return (
     <div className="mb-2 flex items-center justify-between">
       <div className="flex items-center gap-1">
+        {offerScrollPad && (
+          <Button
+            variant={scrollPadOn ? 'secondary' : 'ghost'}
+            size="icon"
+            className="h-6 w-6 text-muted-foreground"
+            onClick={onToggleScrollPad}
+            title={t('common.scroll_buttons')}
+            aria-label={t('common.scroll_buttons')}
+            aria-pressed={scrollPadOn}
+            data-testid="timeline-scroll-pad-toggle"
+          >
+            <ChevronsUpDown className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon"

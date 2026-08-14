@@ -49,6 +49,10 @@ sits on the right edge for as long as you are editing, with four buttons: jump
 to the top, up one screen, down one screen, and jump to the bottom. It goes
 away when you tap **Done**.
 
+Outside edit mode you can call it up yourself: **Scroll buttons** in the ⋮ menu
+shows and hides it. That is worth doing on a tablet where the tiles fill the
+screen, since a swipe there lands on a tile rather than the page.
+
 Tap **Done** to leave edit mode.
 
 ## Fullscreen Mode
