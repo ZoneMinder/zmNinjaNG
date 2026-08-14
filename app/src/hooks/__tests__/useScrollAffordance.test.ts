@@ -47,6 +47,12 @@ function mountPage(opts: {
 const noRoomToSwipe = { scrollHeight: 2400, clientHeight: 800, videoTop: 56, videoBottom: 800 };
 /** Portrait: the video takes the top third, the rest is free to drag. */
 const roomToSwipe = { scrollHeight: 2400, clientHeight: 1200, videoTop: 56, videoBottom: 460 };
+/**
+ * Monitor detail in landscape, where the player is capped at 100svh-7rem: 112px
+ * of page always remains, which is a strip at the screen edges rather than
+ * somewhere to swipe. This is the layout #365 reported.
+ */
+const cappedPlayer = { scrollHeight: 2400, clientHeight: 800, videoTop: 56, videoBottom: 744 };
 
 describe('useScrollAffordance', () => {
   beforeEach(() => {
@@ -68,6 +74,13 @@ describe('useScrollAffordance', () => {
   it('is true when the gesture surface leaves nothing to swipe', () => {
     setPointer(true);
     const { content, video } = mountPage(noRoomToSwipe);
+    const { result } = renderHook(() => useScrollAffordance(content, video));
+    expect(result.current).toBe(true);
+  });
+
+  it('is true when the capped player still dominates the screen', () => {
+    setPointer(true);
+    const { content, video } = mountPage(cappedPlayer);
     const { result } = renderHook(() => useScrollAffordance(content, video));
     expect(result.current).toBe(true);
   });

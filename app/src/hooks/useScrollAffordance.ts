@@ -28,14 +28,14 @@ function findScrollParent(from: HTMLElement | null): HTMLElement | null {
 }
 
 /**
- * Height of visible page that is not the gesture surface, which is what a
- * finger has to land on to scroll by swiping.
+ * Share of the visible scrollport the gesture surface covers. What is left is
+ * the page a finger can land on to scroll by swiping.
  */
-function freeSurfaceHeight(scroller: HTMLElement, gestureSurface: HTMLElement): number {
+function surfaceCoverage(scroller: HTMLElement, gestureSurface: HTMLElement): number {
   const view = scroller.getBoundingClientRect();
   const surface = gestureSurface.getBoundingClientRect();
   const covered = Math.max(0, Math.min(view.bottom, surface.bottom) - Math.max(view.top, surface.top));
-  return scroller.clientHeight - covered;
+  return scroller.clientHeight > 0 ? covered / scroller.clientHeight : 0;
 }
 
 /**
@@ -46,8 +46,8 @@ function freeSurfaceHeight(scroller: HTMLElement, gestureSurface: HTMLElement): 
  * `gestureSurface` is the part of the page that consumes touches instead of
  * scrolling: the zoom and pan container around the video. How much of the
  * viewport it covers is what separates a tablet in landscape, where it leaves
- * only a header strip and the page below the fold is stranded, from the same
- * page in portrait, where there is plenty of room to swipe.
+ * only strips at the screen edges and the page below the fold is stranded,
+ * from the same page in portrait, where there is plenty of room to swipe.
  */
 export function useScrollAffordance(
   content: HTMLElement | null,
@@ -78,7 +78,7 @@ export function useScrollAffordance(
     const parent = findScrollParent(content);
     if (!parent) return false;
     if (parent.scrollHeight - parent.clientHeight <= SCROLL_PAD.minOverflowPx) return false;
-    return freeSurfaceHeight(parent, gestureSurface) < SCROLL_PAD.minGrabPx;
+    return surfaceCoverage(parent, gestureSurface) > SCROLL_PAD.maxSurfaceCoverage;
   }, [content, gestureSurface]);
 
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
