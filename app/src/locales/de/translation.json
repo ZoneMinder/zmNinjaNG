@@ -262,7 +262,8 @@
     "failed_to_load": "Ereignisse konnten nicht geladen werden: {{error}}",
     "delete_permission_denied": "Zum Löschen von Ereignissen wird Events: Edit benötigt.",
     "archive_permission_denied": "Zum Archivieren von Ereignissen wird Events: Edit benötigt.",
-    "no_event_permission": "Dieses Konto hat keine Ereignis-Berechtigungen."
+    "no_event_permission": "Dieses Konto hat keine Ereignis-Berechtigungen.",
+    "event_gone": "Dieses Ereignis existiert auf dem Server nicht mehr"
   },
   "event_detail": {
     "event_id": "Ereignis ID",

@@ -31,6 +31,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { canEditEvents } from '../../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../../hooks/useDeniedControl';
 import { isPermissionDenied } from '../../lib/permissions/permission-error';
+import { isNotFound } from '../../lib/http/types';
 import { markPermissionDenied, useIsPermissionDenied } from '../../stores/permissions';
 import { getSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
@@ -130,7 +131,13 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
       // control ungated, so the refusal is the only thing that can explain
       // itself. Spend it once: say what happened, and grey the control so the
       // next press is not the same discovery (refs #344).
-      if (isPermissionDenied(err) && ownerProfileId) {
+      if (isNotFound(err) && ownerProfileId) {
+        // A server that prunes deletes events under an open list, so the card
+        // outlives the row. Refresh the list rather than leaving a ghost that
+        // fails the same way on every press.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) });
+        toast.error(t('events.event_gone'));
+      } else if (isPermissionDenied(err) && ownerProfileId) {
         markPermissionDenied(ownerProfileId, 'events-edit');
         toast.error(t('events.archive_permission_denied'));
       } else {

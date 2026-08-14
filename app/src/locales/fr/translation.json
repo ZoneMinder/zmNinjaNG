@@ -262,7 +262,8 @@
     "failed_to_load": "Impossible de charger les événements : {{error}}",
     "delete_permission_denied": "Supprimer des événements exige la permission Events: Edit.",
     "archive_permission_denied": "Archiver des événements exige la permission Events: Edit.",
-    "no_event_permission": "Ce compte n'a aucune permission sur les événements."
+    "no_event_permission": "Ce compte n'a aucune permission sur les événements.",
+    "event_gone": "Cet évènement n'existe plus sur le serveur"
   },
   "event_detail": {
     "event_id": "ID Événement",

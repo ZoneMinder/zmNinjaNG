@@ -262,7 +262,8 @@
     "failed_to_load": "No se pudieron cargar los eventos: {{error}}",
     "delete_permission_denied": "Eliminar eventos requiere el permiso Events: Edit.",
     "archive_permission_denied": "Archivar eventos requiere el permiso Events: Edit.",
-    "no_event_permission": "Esta cuenta no tiene permisos de eventos."
+    "no_event_permission": "Esta cuenta no tiene permisos de eventos.",
+    "event_gone": "Este evento ya no existe en el servidor"
   },
   "event_detail": {
     "event_id": "ID de Evento",

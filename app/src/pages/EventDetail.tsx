@@ -13,6 +13,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { canEditEvents } from '../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../hooks/useDeniedControl';
 import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { isNotFound } from '../lib/http/types';
 import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
@@ -241,7 +242,14 @@ export default function EventDetail() {
       log.eventDetail('Archive toggle failed', LogLevel.ERROR, { eventId: event.Event.Id, next, error: err });
       // The account may be too restricted to have been gated in advance, in
       // which case this refusal is the only explanation anyone gets (refs #344).
-      if (isPermissionDenied(err) && ownerProfileId) {
+      if (isNotFound(err) && ownerProfileId) {
+        // The event was deleted while this page was open, which a pruning
+        // server does routinely. Refreshing lets the page say so through its
+        // own error state instead of insisting the archive failed.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfileId, event.Event.Id) });
+        toast.error(t('events.event_gone'));
+      } else if (isPermissionDenied(err) && ownerProfileId) {
         markPermissionDenied(ownerProfileId, 'events-edit');
         toast.error(t('events.archive_permission_denied'));
       } else {
