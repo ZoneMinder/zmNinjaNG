@@ -44,6 +44,20 @@ The protocol label (enabled in {doc}`settings`) shows which streaming protocol i
 
 For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode* setting does apply, see {doc}`settings` for details.
 
+#### Scroll Pad
+
+The live view is a zoom and pan surface, so a swipe over it zooms or pans rather
+than scrolling the page. On a tablet in landscape it covers most of the screen,
+leaving only thin strips at the top and bottom while the status, zones, and recent
+events sit below the fold. When that happens, four buttons appear on the right
+edge: jump to the top, up one screen, down one screen, and jump to the bottom.
+They are the same buttons montage edit mode uses.
+
+In portrait, or wherever the page leaves room to drag, the buttons stay away, as
+they do on a computer where the wheel and the scrollbar already scroll from
+anywhere. To call them up at any time on a touch screen, tap the up/down arrows
+in the header; tapping again puts them away.
+
 #### Digital Zoom and Pan
 
 The zoom controls in the corner of the live view zoom into the streamed image (this is digital zoom in the app, not camera PTZ). You can also zoom with the mouse:

@@ -117,6 +117,10 @@ vi.mock('@capacitor/core', () => ({
   registerPlugin: () => new Proxy({}, {
     get: () => vi.fn().mockResolvedValue(undefined),
   }),
+  SystemBars: {
+    setStyle: vi.fn().mockResolvedValue(undefined),
+  },
+  SystemBarsStyle: { Dark: 'DARK', Light: 'LIGHT', Default: 'DEFAULT' },
 }));
 
 // Mock Capacitor Haptics

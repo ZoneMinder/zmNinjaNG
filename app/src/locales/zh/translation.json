@@ -49,7 +49,12 @@
     "press_back_again_to_exit": "再次返回以退出",
     "expand": "展开",
     "collapse": "收起",
-    "remove": "移除"
+    "remove": "移除",
+    "scroll_top": "回到顶部",
+    "scroll_up": "向上滚动",
+    "scroll_down": "向下滚动",
+    "scroll_bottom": "回到底部",
+    "scroll_buttons": "滚动按钮"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -839,10 +844,6 @@
     "edit_layout": "编辑",
     "done_editing": "完成",
     "fill_width": "填充",
-    "scroll_top": "回到顶部",
-    "scroll_up": "向上滚动",
-    "scroll_down": "向下滚动",
-    "scroll_bottom": "回到底部",
     "pin_monitor": "固定 — 锁定位置",
     "unpin_monitor": "取消固定 — 允许移动",
     "insomnia_enabled": "屏幕将保持唤醒",

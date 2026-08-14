@@ -149,7 +149,6 @@ vi.mock('../../components/montage', async (importOriginal) => {
       </div>
     ),
     MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-    MontageScrollPad: () => null,
     useMontageGrid: (options: unknown) => useMontageGridMock(options),
     useContainerResize: () => ({ containerRef: vi.fn() }),
   };

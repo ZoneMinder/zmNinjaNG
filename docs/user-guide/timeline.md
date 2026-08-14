@@ -10,6 +10,14 @@ Events are drawn as colored bars on a horizontal time axis. Each monitor gets it
 - **Pan** left and right to move through time
 - **Tap an event bar** to jump to that event's detail view
 
+The canvas owns touch gestures for panning and zooming, so a swipe over it moves
+through time rather than scrolling the page. It also grows one row per monitor,
+which on a tablet can leave nothing to swipe when the filters and event list sit
+below the fold. When that happens, the up/down arrows in the toolbar show a
+column of scroll buttons on the right edge: jump to the top, up one screen, down
+one screen, and jump to the bottom. Tapping the arrows again puts them away. On a
+computer they never appear, since the wheel already scrolls from anywhere.
+
 ## Filtering
 
 Open the **Filters** panel at the top of the page to narrow what the timeline shows. Filter selections are saved per profile.

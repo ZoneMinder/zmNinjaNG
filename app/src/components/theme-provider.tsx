@@ -9,7 +9,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react"
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, type ThemePreference } from '../stores/settings';
-import { syncNativeWindowBackground } from '../lib/native-window-theme';
+import { syncNativeWindowBackground, syncNativeSystemBarsStyle } from '../lib/native-window-theme';
 
 type Theme = ThemePreference
 
@@ -70,15 +70,22 @@ export function ThemeProvider({
                 : "light"
 
             root.classList.add(systemTheme)
-            return
-        }
-
-        if (theme === "slate" || theme === "amber") {
+        } else if (theme === "slate" || theme === "amber") {
             root.classList.add("dark", theme)
         } else {
             root.classList.add(theme)
         }
 
+        // Both syncs must also run for the "system" branch: a previously set
+        // explicit bar style or window background does not revert when the
+        // user switches back to "system" (refs #356).
+        //
+        // Order matters. SystemBars.setStyle ends by repainting the decor view
+        // with the Android theme's windowBackground, which follows the OS night
+        // mode, not the app theme. Running it after the background sync would
+        // discard the colour WindowTheme just applied and show, for example, a
+        // white decor behind a dark app during rotation or overscroll.
+        syncNativeSystemBarsStyle()
         syncNativeWindowBackground()
     }, [theme])
 

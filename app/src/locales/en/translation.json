@@ -49,7 +49,12 @@
     "press_back_again_to_exit": "Press back again to exit",
     "expand": "Expand",
     "collapse": "Collapse",
-    "remove": "Remove"
+    "remove": "Remove",
+    "scroll_top": "Scroll to top",
+    "scroll_up": "Scroll up",
+    "scroll_down": "Scroll down",
+    "scroll_bottom": "Scroll to bottom",
+    "scroll_buttons": "Scroll buttons"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -840,10 +845,6 @@
     "edit_layout": "Edit",
     "done_editing": "Done",
     "fill_width": "Fill",
-    "scroll_top": "Scroll to top",
-    "scroll_up": "Scroll up",
-    "scroll_down": "Scroll down",
-    "scroll_bottom": "Scroll to bottom",
     "pin_monitor": "Pin — lock position",
     "unpin_monitor": "Unpin — allow movement",
     "insomnia_enabled": "Screen will stay awake",

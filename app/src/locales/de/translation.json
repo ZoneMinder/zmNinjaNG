@@ -49,7 +49,12 @@
     "press_back_again_to_exit": "Zum Beenden erneut zurück",
     "expand": "Aufklappen",
     "collapse": "Zuklappen",
-    "remove": "Entfernen"
+    "remove": "Entfernen",
+    "scroll_top": "Ganz nach oben",
+    "scroll_up": "Nach oben",
+    "scroll_down": "Nach unten",
+    "scroll_bottom": "Ganz nach unten",
+    "scroll_buttons": "Scroll-Tasten"
   },
   "app": {
     "name": "zmNinjaNg",
@@ -839,10 +844,6 @@
     "edit_layout": "Bearb.",
     "done_editing": "Fertig",
     "fill_width": "Füllen",
-    "scroll_top": "Ganz nach oben",
-    "scroll_up": "Nach oben",
-    "scroll_down": "Nach unten",
-    "scroll_bottom": "Ganz nach unten",
     "pin_monitor": "Anheften — sperren",
     "unpin_monitor": "Lösen — bewegen",
     "insomnia_enabled": "Bildschirm bleibt wach",

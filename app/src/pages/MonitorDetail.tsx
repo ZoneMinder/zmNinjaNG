@@ -21,7 +21,7 @@ import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Layers, Video, Eye, Disc } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers, Video, Eye, Disc } from 'lucide-react';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -38,6 +38,8 @@ import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/moni
 import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
+import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { ScrollPad } from '../components/ui/scroll-pad';
 import { useServerUrls } from '../hooks/useServerUrls';
 
 // Extracted hooks and components
@@ -141,6 +143,16 @@ export default function MonitorDetail() {
     profileId: routeProfileId,
   });
 
+  // Page element for the tap-to-scroll affordance below. Tracked as state as
+  // well as a ref because the measurement re-runs when the element appears,
+  // while the pad only reads it on a tap - the same split useZoomPan makes.
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const setPageNode = useCallback((el: HTMLDivElement | null) => {
+    pageRef.current = el;
+    setPageEl(el);
+  }, []);
+
   // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
   const zoomPan = useZoomPan({
     minScale: 0.5,
@@ -149,6 +161,13 @@ export default function MonitorDetail() {
     onSwipeLeft,
     onSwipeRight,
   });
+
+  // The live view leaves nowhere to swipe once it covers the viewport, which is
+  // what happens on a tablet in landscape (refs #365).
+  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  // Shown automatically when the video leaves nowhere to swipe, and on request
+  // from the header toggle anywhere the page scrolls at all (refs #365).
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
@@ -283,13 +302,15 @@ export default function MonitorDetail() {
   }
 
   return (
-    <div className={cn(
-      'flex flex-col h-full',
-      isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background'
-    )}>
+    <div
+      ref={setPageNode}
+      className={cn(
+        'flex flex-col h-full',
+        isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background'
+      )}>
       {/* Header - Hidden in fullscreen */}
       {!isFullscreen && (
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
@@ -364,6 +385,20 @@ export default function MonitorDetail() {
             </SelectContent>
           </Select>
           <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" alwaysStreaming />
+          {offerPad && (
+            <Button
+              variant={showScrollPad ? 'secondary' : 'ghost'}
+              size="icon"
+              title={t('common.scroll_buttons')}
+              aria-label={t('common.scroll_buttons')}
+              aria-pressed={showScrollPad}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+              onClick={toggleScrollPad}
+              data-testid="scroll-pad-toggle"
+            >
+              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -385,7 +420,7 @@ export default function MonitorDetail() {
           className="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-sm pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))] pt-[var(--sai-top,env(safe-area-inset-top))]"
           data-testid="monitor-detail-fullscreen-toolbar"
         >
-          <div className="h-8 flex items-center justify-between px-3">
+          <div className="h-[var(--fullscreen-toolbar-h)] flex items-center justify-between px-3">
             <span className="text-white/70 font-medium text-xs truncate min-w-0" title={monitor.Monitor.Name}>
               {monitor.Monitor.Name}
             </span>
@@ -408,7 +443,7 @@ export default function MonitorDetail() {
       <div className={cn(
         'flex-1 flex flex-col items-center justify-center',
         isFullscreen
-          ? 'pt-[calc(2rem+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
+          ? 'pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
           : 'p-2 sm:p-3 md:p-4 bg-muted/10'
       )}>
         <Card
@@ -592,6 +627,8 @@ export default function MonitorDetail() {
         orientedResolution={orientedResolution}
         profileId={ownerProfile.id}
       />
+
+      {showScrollPad && !isFullscreen && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }

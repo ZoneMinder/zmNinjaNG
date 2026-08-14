@@ -31,13 +31,27 @@ public class MainActivity extends BridgeActivity {
             wrapWebViewWithCursor();
         }
 
-        applyStatusBarVisibility(getResources().getConfiguration().orientation);
+        // Post rather than call directly: Capacitor 8's core SystemBars plugin
+        // queues setHidden(config.hidden=false) -> controller.show(bars) to the
+        // main looper during plugin load (inside super.onCreate above). A direct
+        // hide() here runs BEFORE that queued show() and is overridden, leaving
+        // the status bar visible over the app's top chrome on a cold start in
+        // landscape. Posting queues our visibility call after SystemBars' one.
+        getWindow().getDecorView().post(() ->
+            applyStatusBarVisibility(getResources().getConfiguration().orientation)
+        );
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         applyStatusBarVisibility(newConfig.orientation);
+        // Posted so it lands after SystemBars' own configuration-change
+        // handler, which re-applies its tracked style and repaints the decor
+        // view with the Android theme's windowBackground. Without this the
+        // window flashes the OS night mode's colour - white behind a dark app
+        // under a light system theme - while the WebView resizes (refs #356).
+        getWindow().getDecorView().post(() -> WindowThemePlugin.reapply(getWindow()));
     }
 
     private void applyStatusBarVisibility(int orientation) {

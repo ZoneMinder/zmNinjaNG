@@ -46,7 +46,6 @@ import {
   GridLayoutControls,
   FullscreenControls,
   MontageKebabMenu,
-  MontageScrollPad,
   MontageErrorStrips,
   MontageGridSections,
   useMontageGrid,
@@ -55,6 +54,8 @@ import {
   type MontageTileItem,
   type MontageGroupedSections,
 } from '../components/montage';
+import { ScrollPad } from '../components/ui/scroll-pad';
+import { useScrollPadToggle } from '../hooks/useScrollAffordance';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
 
@@ -237,6 +238,9 @@ export default function Montage() {
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
+  // Edit mode turns the pad on by itself - a drag there reorders tiles instead
+  // of scrolling - and the kebab entry overrides that either way (refs #365).
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(isEditMode);
 
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;
@@ -278,6 +282,14 @@ export default function Montage() {
     settings,
     isEditMode,
     groupKey,
+    // In fullscreen the tile header is an absolute overlay and takes no flow
+    // space; in normal mode it is in flow at the height the display mode
+    // actually renders (refs #359).
+    tileHeaderPx: isFullscreen
+      ? 0
+      : settings.displayMode === 'compact'
+        ? MONTAGE_GRID.cardHeaderHeightCompactPx
+        : MONTAGE_GRID.cardHeaderHeightPx,
   });
 
   // Tile render resolvers passed to MontageGridSections: the owning profile
@@ -655,6 +667,8 @@ export default function Montage() {
                 items={visibilityItems}
                 hiddenMonitorIds={bucket.hiddenMonitorIds}
                 onToggleVisibility={handleToggleMonitorVisibility}
+                scrollPadOn={showScrollPad}
+                onToggleScrollPad={toggleScrollPad}
               />
               <NotificationBadge />
             </div>
@@ -681,7 +695,7 @@ export default function Montage() {
         className={cn(
           'flex-1 overflow-auto bg-muted/10',
           isFullscreen
-            ? 'pt-[calc(2rem+var(--sai-top,env(safe-area-inset-top)))] overscroll-contain'
+            ? 'pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] overscroll-contain'
             : 'touch-pan-y'
         )}
       >
@@ -735,7 +749,7 @@ export default function Montage() {
         </div>
       </div>
 
-      {isEditMode && !isFullscreen && <MontageScrollPad targetRef={scrollContainerRef} />}
+      {showScrollPad && !isFullscreen && <ScrollPad targetRef={scrollContainerRef} />}
     </div>
   );
 }

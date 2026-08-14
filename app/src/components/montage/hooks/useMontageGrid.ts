@@ -67,7 +67,8 @@ const calculateHeightUnits = (
   widthUnits: number,
   gridWidth: number,
   margin: number,
-  internalCols: number
+  internalCols: number,
+  headerPx: number
 ): number => {
   const monitor = monitorMap.get(monitorId);
   if (!monitor) return 200;
@@ -76,7 +77,7 @@ const calculateHeightUnits = (
   const columnWidth = (gridWidth - margin * (internalCols - 1)) / internalCols;
   const itemWidth = columnWidth * widthUnits + margin * (widthUnits - 1);
   const videoPx = itemWidth * aspectRatio;
-  const heightPx = videoPx + MONTAGE_GRID.cardHeaderHeightPx;
+  const heightPx = videoPx + headerPx;
   const unit = (heightPx + margin) / (GRID_LAYOUT.montageRowHeight + margin);
 
   return Math.max(2, Math.ceil(unit));
@@ -124,6 +125,12 @@ interface UseMontageGridOptions {
   settings: ProfileSettings;
   isEditMode: boolean;
   groupKey: string;
+  /** In-flow height of the tile header the layout must allow for. 0 in
+   *  fullscreen, where the header is an absolute overlay over the video;
+   *  the compact-mode value when compact rendering shrinks h-8 rows. A
+   *  mismatch letterboxes every video vertically inside its tile because
+   *  object-fit: contain centers the difference (refs #359). */
+  tileHeaderPx?: number;
 }
 
 interface UseMontageGridReturn {
@@ -147,6 +154,7 @@ export function useMontageGrid({
   settings,
   isEditMode,
   groupKey,
+  tileHeaderPx = MONTAGE_GRID.cardHeaderHeightPx,
 }: UseMontageGridOptions): UseMontageGridReturn {
   const { t } = useTranslation();
   const updateMontageGroupLayout = useSettingsStore(
@@ -184,6 +192,8 @@ export function useMontageGrid({
   const groupKeyRef = useRef(groupKey);
   useEffect(() => { groupKeyRef.current = groupKey; }, [groupKey]);
 
+  const tileHeaderPxRef = useRef(tileHeaderPx);
+
   const monitorMap = useMemo(() => {
     return new Map(monitors.map((item) => [tileIdFor(item), item.Monitor]));
   }, [monitors]);
@@ -200,7 +210,7 @@ export function useMontageGrid({
       const map = monitorMapRef.current;
       return monitorList.map((item, index) => {
         const id = tileIdFor(item);
-        const h = calculateHeightUnits(map, id, w, gridWidth, 0, internalCols);
+        const h = calculateHeightUnits(map, id, w, gridWidth, 0, internalCols, tileHeaderPxRef.current);
         return {
           i: id,
           x: (index % perRow) * w,
@@ -223,11 +233,21 @@ export function useMontageGrid({
         ...item,
         w: Math.min(item.w, internalCols),
         x: Math.min(item.x, internalCols - item.w),
-        h: calculateHeightUnits(map, item.i, item.w, gridWidth, 0, internalCols),
+        h: calculateHeightUnits(map, item.i, item.w, gridWidth, 0, internalCols, tileHeaderPxRef.current),
       }));
     },
     [] // Uses ref, stable identity
   );
+
+  // Recalculate heights when the in-flow header allowance changes (fullscreen
+  // toggle), same as a width change: the ref updates first so every later
+  // recalc path uses the new value.
+  useEffect(() => {
+    if (tileHeaderPxRef.current === tileHeaderPx) return;
+    tileHeaderPxRef.current = tileHeaderPx;
+    if (currentWidthRef.current === 0) return;
+    setLayout((prev) => recalcHeights(prev, currentWidthRef.current, displayColsRef.current));
+  }, [tileHeaderPx, recalcHeights]);
 
   // Update displayCols when profile changes (external change only)
   useEffect(() => {
@@ -389,7 +409,8 @@ export function useMontageGrid({
         newItem.w,
         currentWidthRef.current,
         0,
-        internalColsForCols(displayColsRef.current)
+        internalColsForCols(displayColsRef.current),
+        tileHeaderPxRef.current
       );
 
       setLayout((prev) => {

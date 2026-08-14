@@ -32,7 +32,7 @@ import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { EventFrameCarousel } from '../components/events/EventFrameCarousel';
 import { TagChip } from '../components/events/TagChip';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, Loader2, ListVideo } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
@@ -48,6 +48,8 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
+import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { ScrollPad } from '../components/ui/scroll-pad';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
 import { useEventNavigation } from '../hooks/useEventNavigation';
@@ -297,7 +299,20 @@ export default function EventDetail() {
   }, [id, monitorData]);
 
   // Pinch-to-zoom and pan for event video/image
+  // Page element for the tap-to-scroll affordance, shown when the player covers
+  // the viewport and leaves no free surface to swipe (refs #365).
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
+  const setPageNode = useCallback((el: HTMLDivElement | null) => {
+    pageRef.current = el;
+    setPageEl(el);
+  }, []);
+
   const zoomPan = useZoomPan({ maxScale: 4 });
+  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  // Shown automatically when the player leaves nowhere to swipe, and on request
+  // from the header toggle anywhere the page scrolls at all (refs #365).
+  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.
@@ -447,9 +462,9 @@ export default function EventDetail() {
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div ref={setPageNode} className="flex flex-col h-full bg-background">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
             variant="ghost"
@@ -508,6 +523,20 @@ export default function EventDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+          {offerPad && (
+            <Button
+              variant={showScrollPad ? 'secondary' : 'ghost'}
+              size="icon"
+              title={t('common.scroll_buttons')}
+              aria-label={t('common.scroll_buttons')}
+              aria-pressed={showScrollPad}
+              className="h-8 w-8 sm:h-9 sm:w-9"
+              onClick={toggleScrollPad}
+              data-testid="scroll-pad-toggle"
+            >
+              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+          )}
           <Button
             variant={isFav ? "default" : "outline"}
             size="sm"
@@ -804,6 +833,8 @@ export default function EventDetail() {
           )}
         </div>
       </div>
+
+      {showScrollPad && <ScrollPad targetRef={pageRef} />}
     </div>
   );
 }
