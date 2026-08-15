@@ -55,6 +55,8 @@ export interface HoverPreviewSettings {
   notifications: boolean;
   /** Event cards in an assistant answer (refs #270). */
   assistant: boolean;
+  /** Alarm tiles on Live Activity. */
+  liveActivity: boolean;
 }
 
 export const DEFAULT_HOVER_PREVIEW: HoverPreviewSettings = {
@@ -66,6 +68,10 @@ export const DEFAULT_HOVER_PREVIEW: HoverPreviewSettings = {
   timeline: true,
   notifications: true,
   assistant: true,
+  // Off by default: a Live Activity tile is already streaming this camera at
+  // size, so a hover preview opens a second connection for a bigger copy of
+  // what is on screen. Worth having on a wall of small tiles, not by default.
+  liveActivity: false,
 };
 
 /** ZMS rate parameter (percentage). 100 = 1x real time. */

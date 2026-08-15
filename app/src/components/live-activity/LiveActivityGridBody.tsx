@@ -36,6 +36,8 @@ interface LiveActivityGridBodyProps {
   resolveOwnerProfile: (profileId: ProfileId | undefined) => Profile | null;
   accessToken: string | null;
   navigate: NavigateFunction;
+  /** Whether a tile's video opens the enlarged preview on hover. */
+  hoverPreview: boolean;
   now: number;
   onDismiss: (monitorId: string) => void;
   /** Tiles beyond liveActivityMaxTiles, collapsed into a count. */
@@ -60,6 +62,7 @@ export function LiveActivityGridBody({
   resolveOwnerProfile,
   accessToken,
   navigate,
+  hoverPreview,
   now,
   onDismiss,
   overflowCount,
@@ -132,6 +135,7 @@ export function LiveActivityGridBody({
                 profileChip={monitorData.profileChip}
                 accessToken={accessToken}
                 navigate={navigate}
+                hoverPreview={hoverPreview}
                 now={now}
                 // Recomputed per render, but it only ever changes with the
                 // grid width, the column count or the camera's own shape, so

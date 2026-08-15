@@ -13,6 +13,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { LiveActivityTile } from '../LiveActivityTile';
 import type { ActiveMonitorEntry } from '../../../lib/monitor/live-activity';
 import type { Monitor, Profile } from '../../../api/types';
+import type { ProfileId } from '../../../api/types';
 
 const propCalls = vi.hoisted(() => [] as Record<string, unknown>[]);
 
@@ -63,6 +64,7 @@ function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
       now={now}
       rowSpan={ROW_SPAN}
       onDismiss={onDismiss}
+      hoverPreview={false}
     />
   );
 }
@@ -113,6 +115,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START + 5_000}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
 
@@ -149,6 +152,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START}
         rowSpan={undefined}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
     expect(screen.getByTestId('live-activity-tile').style.gridRowEnd).toBe('');
@@ -187,6 +191,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
     const [w, h] = String(propCalls[0].mediaAspectRatio).split('/').map(Number);
@@ -235,9 +240,67 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START + 1_000}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
 
     expect(Object.is(propCalls[0].titleIcon, propCalls[1].titleIcon)).toBe(false);
+  });
+
+  it('opens the monitor when its media is activated', () => {
+    renderTile(EPISODE_START);
+
+    // Montage navigates from a wrapper around the whole tile; this page has no
+    // such wrapper, so the media area carries it.
+    const props = propCalls.at(-1)!;
+    (props.onMediaActivate as () => void)();
+
+    expect(navigate).toHaveBeenCalledWith('/monitors/3', { state: { from: '/live-activity' } });
+  });
+
+  it('opens the owning server monitor while aggregating', () => {
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={MONITOR}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        rowSpan={ROW_SPAN}
+        onDismiss={onDismiss}
+        hoverPreview={false}
+        profileId={'p2' as ProfileId}
+      />
+    );
+
+    const props = propCalls.at(-1)!;
+    (props.onMediaActivate as () => void)();
+
+    expect(navigate).toHaveBeenCalledWith('/all/monitors/p2/3', {
+      state: { from: '/live-activity' },
+    });
+  });
+
+  it('passes the hover-preview setting through to the monitor', () => {
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={MONITOR}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        rowSpan={ROW_SPAN}
+        onDismiss={onDismiss}
+        hoverPreview
+      />
+    );
+
+    // A four-link prop chain from the page's settings to the player is where
+    // a wire quietly comes loose.
+    expect(propCalls.at(-1)!.hoverPreview).toBe(true);
   });
 });

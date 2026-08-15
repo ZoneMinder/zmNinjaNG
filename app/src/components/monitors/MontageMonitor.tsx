@@ -25,6 +25,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ProfileChip } from '../ui/profile-chip';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
+import { MonitorHoverPreview } from './MonitorHoverPreview';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { downloadSnapshotFromElement } from '../../services/download';
@@ -104,6 +105,20 @@ interface MontageMonitorProps {
    */
   fromRoute?: string;
   /**
+   * Opens this monitor. Montage puts the same navigation on its grid wrapper,
+   * which gives one tab stop per tile; Live Activity has no such wrapper, so
+   * the media area itself becomes the target. It holds only the player and
+   * pointer-events-none labels, so nothing interactive ends up nested inside
+   * a button - unlike the whole-tile version, which wraps the header's own
+   * buttons.
+   */
+  onMediaActivate?: () => void;
+  /**
+   * Wraps the player in the enlarged hover preview, as the monitor cards do.
+   * The caller decides, because the setting that gates it is per surface.
+   */
+  hoverPreview?: boolean;
+  /**
    * Ask ZM for a cheaper stream for this tile (All-mode "reduced" stream
    * tuning, refs #337). Decided by the page - Montage sets it while
    * aggregating, Live Activity does not - and forwarded untouched to the
@@ -143,6 +158,8 @@ function MontageMonitorComponent({
   titleIcon,
   mediaAspectRatio,
   fromRoute = '/montage',
+  onMediaActivate,
+  hoverPreview = false,
   reduceStream = false,
   paused = false,
   forceViewMode,
@@ -362,9 +379,10 @@ function MontageMonitorComponent({
         </div>
       </div>
 
-      {/* Video Content. Click/keyboard navigation to monitor detail lives on
-          the tile wrapper in Montage.tsx (one tab stop per tile, not two);
-          this div just needs the pointer cursor hint. refs #217. */}
+      {/* Video Content. In Montage the click and keyboard navigation live on
+          the tile wrapper (one tab stop per tile, not two) and this div only
+          needs the pointer cursor hint; where there is no such wrapper, the
+          caller passes onMediaActivate and this becomes the target. refs #217 */}
       <div
         className={cn(
           "relative overflow-hidden",
@@ -374,24 +392,54 @@ function MontageMonitorComponent({
           // own. Without one nothing changes for Montage.
           mediaAspectRatio ? "w-full shrink-0" : "flex-1",
           isFullscreen ? "bg-black" : "bg-black/90",
-          !isFullscreen && "cursor-pointer"
+          !isFullscreen && "cursor-pointer",
+          // Hover and focus both say "this opens", since a wall of tiles gives
+          // no other clue that one is a link.
+          onMediaActivate &&
+            "ring-inset hover:ring-2 hover:ring-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         )}
         style={mediaAspectRatio ? { aspectRatio: mediaAspectRatio } : undefined}
+        role={onMediaActivate ? 'button' : undefined}
+        tabIndex={onMediaActivate ? 0 : undefined}
+        aria-label={onMediaActivate ? monitor.Name : undefined}
+        onClick={onMediaActivate}
+        onKeyDown={
+          onMediaActivate
+            ? (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onMediaActivate();
+              }
+            : undefined
+        }
         data-testid="montage-monitor-media"
       >
-        <LiveMonitorPlayer
-          monitor={monitor}
-          profile={currentProfile}
-          profileId={profileId}
-          externalMediaRef={mediaRef}
-          objectFit={resolvedFit}
-          muted={isMuted}
-          className="w-full h-full"
-          onProtocolChange={setProtocol}
-          reduceStream={reduceStream}
-          paused={paused}
-          forceViewMode={forceViewMode}
-        />
+        {(() => {
+          const player = (
+            <LiveMonitorPlayer
+              monitor={monitor}
+              profile={currentProfile}
+              profileId={profileId}
+              externalMediaRef={mediaRef}
+              objectFit={resolvedFit}
+              muted={isMuted}
+              className="w-full h-full"
+              onProtocolChange={setProtocol}
+              reduceStream={reduceStream}
+              paused={paused}
+              forceViewMode={forceViewMode}
+            />
+          );
+          // Same wrapper the monitor cards use, so the preview behaves the
+          // same everywhere: desktop only, its own connkey, torn down on close.
+          return hoverPreview ? (
+            <MonitorHoverPreview monitor={monitor} profileId={profileId}>
+              {player}
+            </MonitorHoverPreview>
+          ) : (
+            player
+          );
+        })()}
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
             {protocol}

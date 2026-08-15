@@ -284,6 +284,7 @@ function HoverPreviewEditor({ value, onChange, playbackRate, onPlaybackRateChang
     { key: 'timeline', labelKey: 'settings.appearance.hover_preview.timeline' },
     { key: 'notifications', labelKey: 'settings.appearance.hover_preview.notifications' },
     { key: 'assistant', labelKey: 'settings.appearance.hover_preview.assistant' },
+    { key: 'liveActivity', labelKey: 'settings.appearance.hover_preview.live_activity' },
   ];
 
   return (

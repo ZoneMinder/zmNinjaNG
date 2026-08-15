@@ -355,6 +355,7 @@ export default function LiveActivity() {
   // treatments below so fullscreen cannot drift from the normal page.
   const body = (
     <LiveActivityGridBody
+        hoverPreview={settings.hoverPreview.liveActivity}
       error={error}
       showSkeleton={showSkeleton}
       showEmptyState={showEmptyState}
