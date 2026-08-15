@@ -278,3 +278,26 @@ Then('the Apple Intelligence backend should be selected', async ({ page }) => {
   });
 });
 
+When('I turn on the assistant toolbar button', async ({ page }) => {
+  await page.getByTestId('nav-item-settings').first().click();
+  await page.waitForURL(/#\/settings$/, { timeout: testConfig.timeouts.transition });
+
+  const toggle = page.getByTestId('assistant-in-toolbar-toggle');
+  await toggle.scrollIntoViewIfNeeded();
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
+  if ((await toggle.getAttribute('aria-checked')) !== 'true') {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute('aria-checked', 'true', {
+    timeout: testConfig.timeouts.transition,
+  });
+});
+
+Then('the Ninjii toolbar button should be absent', async ({ page }) => {
+  await expect(page.getByTestId('ninjii-toolbar-button')).toHaveCount(0);
+});
+
+When('I tap the Ninjii toolbar button', async ({ page }) => {
+  await page.getByTestId('ninjii-toolbar-button').first().click();
+});
+

@@ -295,6 +295,19 @@ export function AssistantSection({
 
         {settings.assistantEnabled && (
           <>
+            <SettingsRow>
+              <RowLabel
+                label={t('settings.assistant.in_toolbar')}
+                desc={t('settings.assistant.in_toolbar_desc')}
+              />
+              <Switch
+                id="assistant-in-toolbar"
+                checked={settings.assistantInToolbar}
+                onCheckedChange={(checked) => update('assistantInToolbar', checked)}
+                data-testid="assistant-in-toolbar-toggle"
+              />
+            </SettingsRow>
+
             {/* On-device WebGPU was removed on a phone or tablet: the picker
                 would offer one dead-end option. The native (llama.cpp
                 bridge) backend takes its place there once the device passes

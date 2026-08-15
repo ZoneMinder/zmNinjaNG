@@ -53,6 +53,7 @@ import {
   type MontageGroupedSections,
 } from '../components/montage';
 import { ScrollPad } from '../components/ui/scroll-pad';
+import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
 import { useScrollPadToggle } from '../hooks/useScrollAffordance';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
@@ -647,6 +648,7 @@ export default function Montage() {
               >
                 <Maximize className="h-4 w-4" />
               </Button>
+              <NinjiiToolbarButton />
               <RefreshButton size="sm" className="h-8 sm:h-9" data-testid="montage-refresh-button" />
               <MontageKebabMenu
                 items={visibilityItems}

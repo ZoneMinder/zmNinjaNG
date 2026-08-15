@@ -431,7 +431,9 @@
       "history_turns_hint": "模型能看到多少条此前的问答。",
       "advanced_note": "实测温度为 0 时读取摄像机数据最准确。数值越高，助手越可能说出结果中并不存在的数量、时间或摄像机名称。若服务器响应缓慢，请调高超时。记住更多轮对话有助于追问，但会让每次回答变慢。",
       "backend_gemini_nano": "设备端（AICore）",
-      "gemini_nano_not_ready": "Gemini Nano 在本设备上可用，但尚未下载。"
+      "gemini_nano_not_ready": "Gemini Nano 在本设备上可用，但尚未下载。",
+      "in_toolbar": "在工具栏中显示",
+      "in_toolbar_desc": "将忍者放在每个页面的菜单旁边，一键提问"
     },
     "language": "语言",
     "select_language": "选择语言",
@@ -1525,6 +1527,7 @@
     "timeframe_unclear": "我无法确定你指的时间段。请说明时间段，例如“今天”或“7月21日”。",
     "gemini_background_blocked": "Gemini Nano 仅在 zmNinja 位于前台时运行。请重新打开应用后再试。",
     "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。",
-    "gemini_rate_limited": "Gemini Nano 当前繁忙。请稍候再试。"
+    "gemini_rate_limited": "Gemini Nano 当前繁忙。请稍候再试。",
+    "ask_ninjii": "询问忍者"
   }
 }
