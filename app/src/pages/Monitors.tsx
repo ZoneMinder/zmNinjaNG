@@ -379,6 +379,10 @@ export default function Monitors() {
               onCustomGridSubmit={handleMonitorCustomGridSubmit}
             />
           )}
+          <RefreshButton
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            data-testid="monitors-refresh-button"
+          />
           <ViewOptionsMenu testId="monitors">
             <FeedFitItems
               value={settings.monitorsFeedFit}
@@ -388,10 +392,6 @@ export default function Monitors() {
             <ViewOptionsSeparator />
             <AnalysisFramesItem />
           </ViewOptionsMenu>
-          <RefreshButton
-            className="h-8 w-8 sm:h-9 sm:w-9"
-            data-testid="monitors-refresh-button"
-          />
         </div>
       </div>
 

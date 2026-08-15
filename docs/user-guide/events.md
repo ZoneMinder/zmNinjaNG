@@ -43,6 +43,9 @@ Filter events using the controls at the top:
 - **Tags** - Show only events carrying the tags you pick (if your server supports tags). Select several tags to see events with any of them, or "All" for events with any tag. Like favorites, this covers tagged events older than the first page. In a {doc}`profiles` group the list offers each tag name once, however many servers in it define it, and picking one matches that name on every server. A server that has no tag by that name contributes no events, so filtering by a tag only one of your servers uses shows you only that server's events.
 - **Archived only** - Restrict the list to archived events. To archive an event, open it in the event detail screen and use the archive action.
 
+The crop button in the toolbar switches event thumbnails between showing the
+whole image and filling their tile.
+
 ## Event Playback
 
 Tap an event to open the event detail view, which includes:

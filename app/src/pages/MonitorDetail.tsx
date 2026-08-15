@@ -370,17 +370,6 @@ export default function MonitorDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <ViewOptionsMenu testId="monitor-detail">
-            <FeedFitItems
-              value={settings.monitorDetailFeedFit}
-              onChange={handleFeedFitChange}
-              testIdPrefix="monitor-detail"
-            />
-            <ViewOptionsSeparator />
-            {/* This page streams whatever the profile's Streaming Mode says,
-                so the control stays usable under snapshot. */}
-            <AnalysisFramesItem alwaysStreaming />
-          </ViewOptionsMenu>
           <Button
             variant={showScrollPad ? 'default' : 'outline'}
             size="icon"
@@ -404,6 +393,17 @@ export default function MonitorDetail() {
           >
             <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
+          <ViewOptionsMenu testId="monitor-detail">
+            <FeedFitItems
+              value={settings.monitorDetailFeedFit}
+              onChange={handleFeedFitChange}
+              testIdPrefix="monitor-detail"
+            />
+            <ViewOptionsSeparator />
+            {/* This page streams whatever the profile's Streaming Mode says,
+                so the control stays usable under snapshot. */}
+            <AnalysisFramesItem alwaysStreaming />
+          </ViewOptionsMenu>
         </div>
       </div>
       )}

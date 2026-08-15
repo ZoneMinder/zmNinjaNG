@@ -6,9 +6,9 @@
  * actually reaches for. They live in a ⋮ menu now, and these are the pieces
  * each screen drops into its own.
  *
- * The analysis item shares its state with AnalysisFramesToggle through
- * useAnalysisFramesSetting, so the button in the views that keep one and the
- * item in the menus can never disagree about what the setting is.
+ * The analysis item reads useAnalysisFramesSetting, which is where that
+ * setting's read and write live now that every screen offers it from a menu
+ * rather than a toolbar button.
  */
 
 import { useTranslation } from 'react-i18next';
