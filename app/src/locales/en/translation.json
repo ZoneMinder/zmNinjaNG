@@ -1075,7 +1075,7 @@
     "delete_group_success": "Virtual profile group deleted",
     "delete_group_error": "Failed to delete virtual profile group",
     "group_no_active_members": "No enabled servers in this group",
-    "server_details": "Server details"
+    "details": "Details"
   },
   "profile_picker": {
     "label": "Profile"

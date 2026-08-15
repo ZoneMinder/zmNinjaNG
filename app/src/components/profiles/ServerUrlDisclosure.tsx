@@ -48,7 +48,7 @@ export function ServerUrlDisclosure({ rows, testId }: ServerUrlDisclosureProps) 
         data-testid={`${testId}-toggle`}
       >
         <Chevron className="h-3 w-3" />
-        {t('profiles.server_details')}
+        {t('profiles.details')}
       </button>
 
       {open && (
