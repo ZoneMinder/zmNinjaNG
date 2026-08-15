@@ -1075,7 +1075,8 @@
     "delete_group_success": "Virtuelle Profilgruppe gelöscht",
     "delete_group_error": "Virtuelle Profilgruppe konnte nicht gelöscht werden",
     "group_no_active_members": "Keine aktiven Server in dieser Gruppe",
-    "details": "Details"
+    "details": "Details",
+    "more_actions": "Weitere Aktionen"
   },
   "profile_picker": {
     "label": "Profil"

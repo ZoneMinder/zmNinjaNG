@@ -1075,7 +1075,8 @@
     "delete_group_success": "Groupe virtuel de profils supprimé",
     "delete_group_error": "Échec de la suppression du groupe virtuel de profils",
     "group_no_active_members": "Aucun serveur actif dans ce groupe",
-    "details": "Détails"
+    "details": "Détails",
+    "more_actions": "Plus d'actions"
   },
   "profile_picker": {
     "label": "Profil"

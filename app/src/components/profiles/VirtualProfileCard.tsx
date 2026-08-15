@@ -12,10 +12,11 @@
  */
 
 import { useTranslation } from 'react-i18next';
-import { Check, Edit, Layers, Loader2, Trash2 } from 'lucide-react';
+import { Check, Layers, Loader2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { VirtualProfile } from '../../api/types';
 import { ServerUrlDisclosure, type ServerUrlRow } from './ServerUrlDisclosure';
+import { ProfileActionsMenu } from './ProfileActionsMenu';
 
 interface VirtualProfileCardProps {
   group: VirtualProfile;
@@ -101,27 +102,7 @@ export function VirtualProfileCard({
             )}
           </Button>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onEdit}
-          title={t('common.edit')}
-          aria-label={t('common.edit')}
-          data-testid={`profile-virtual-edit-${group.id}`}
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onDelete}
-          className="text-destructive hover:text-destructive"
-          title={t('common.delete')}
-          aria-label={t('common.delete')}
-          data-testid={`profile-virtual-delete-${group.id}`}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        <ProfileActionsMenu targetId={`virtual-${group.id}`} onEdit={onEdit} onDelete={onDelete} />
       </div>
     </div>
   );

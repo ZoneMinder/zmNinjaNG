@@ -2,6 +2,7 @@ import { createBdd } from 'playwright-bdd';
 import { expect, type Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { MONTAGE_GRID } from '../../src/lib/zmninja-ng-constants';
+import { openProfileRowMenu } from './profiles.steps';
 
 const { When, Then } = createBdd();
 
@@ -120,13 +121,15 @@ Then('I record the single-profile monitor card count', async ({ page }) => {
 // clicking it again on an already-disabled profile re-enables it.
 When('I disable the {string} profile', async ({ page }, name: string) => {
   const card = page.locator('[data-testid="profile-card"]').filter({ hasText: name });
-  await card.locator('[data-testid^="profile-disable-toggle-"]').click();
+  await openProfileRowMenu(card);
+  await page.locator('[data-testid^="profile-disable-toggle-"]').click();
   await expect(card.getByTestId('profile-disabled-badge')).toBeVisible({ timeout: testConfig.timeouts.element });
 });
 
 When('I enable the {string} profile', async ({ page }, name: string) => {
   const card = page.locator('[data-testid="profile-card"]').filter({ hasText: name });
-  await card.locator('[data-testid^="profile-disable-toggle-"]').click();
+  await openProfileRowMenu(card);
+  await page.locator('[data-testid^="profile-disable-toggle-"]').click();
   await expect(card.getByTestId('profile-disabled-badge')).toHaveCount(0, { timeout: testConfig.timeouts.element });
 });
 

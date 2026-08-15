@@ -47,6 +47,10 @@ function renderCard(
   );
 }
 
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
+}
+
 describe('VirtualProfileCard', () => {
   beforeEach(() => {
     onSwitch.mockClear();
@@ -54,23 +58,24 @@ describe('VirtualProfileCard', () => {
     onDelete.mockClear();
   });
 
-  it('edits from the keyboard without switching profiles', async () => {
+  it('edits from the row menu', async () => {
     const user = userEvent.setup();
     renderCard();
 
-    screen.getByTestId(`profile-virtual-edit-${GROUP.id}`).focus();
-    await user.keyboard('{Enter}');
+    await openMenu(user);
+    await user.click(screen.getByTestId(`profile-edit-button-virtual-${GROUP.id}`));
 
     expect(onEdit).toHaveBeenCalledTimes(1);
     expect(onSwitch).not.toHaveBeenCalled();
   });
 
-  it('deletes from the keyboard without switching profiles', async () => {
+  it('deletes from the row menu, by keyboard', async () => {
     const user = userEvent.setup();
     renderCard();
 
-    screen.getByTestId(`profile-virtual-delete-${GROUP.id}`).focus();
-    await user.keyboard(' ');
+    screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`).focus();
+    await user.keyboard('{Enter}');
+    await user.click(await screen.findByTestId(`profile-delete-button-virtual-${GROUP.id}`));
 
     expect(onDelete).toHaveBeenCalledTimes(1);
     expect(onSwitch).not.toHaveBeenCalled();
@@ -119,8 +124,10 @@ describe('VirtualProfileCard', () => {
       const user = userEvent.setup();
       renderCard({ activeMemberCount: 0 });
 
-      await user.click(screen.getByTestId(`profile-virtual-edit-${GROUP.id}`));
-      await user.click(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`));
+      await openMenu(user);
+      await user.click(screen.getByTestId(`profile-edit-button-virtual-${GROUP.id}`));
+      await openMenu(user);
+      await user.click(await screen.findByTestId(`profile-delete-button-virtual-${GROUP.id}`));
 
       expect(onEdit).toHaveBeenCalledTimes(1);
       expect(onDelete).toHaveBeenCalledTimes(1);

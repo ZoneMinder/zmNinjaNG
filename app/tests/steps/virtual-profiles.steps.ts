@@ -10,6 +10,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { openProfileRowMenu } from './profiles.steps';
 
 const { When, Then } = createBdd();
 
@@ -106,7 +107,8 @@ When('I click the group card for {string}', async ({ page }, name: string) => {
 
 When('I delete the group named {string}', async ({ page }, name: string) => {
   const card = page.locator(GROUP_CARD).filter({ hasText: name });
-  await card.locator('[data-testid^="profile-virtual-delete-"]').click();
+  await openProfileRowMenu(card);
+  await page.locator('[data-testid^="profile-delete-button-virtual-"]').click();
   // The confirmation has to promise the member servers survive; the step
   // below asserts they do.
   await expect(page.getByTestId('profile-virtual-delete-dialog')).toBeVisible({
