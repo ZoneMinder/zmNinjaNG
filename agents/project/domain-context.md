@@ -52,6 +52,14 @@ matching reality, fixing it is a protocol change like any rule edit.
   client-side signal is the status query, which a connkey with no process
   behind it answers without `progress`/`duration`. Monitors that store video
   without JPEGs hit this most, since `zms` then has to decode the video.
+- `zms` answers 503 once its streaming daemon is saturated, and a profile
+  switch is when that happens: the outgoing profile's quits are awaited but
+  their replies time out at 3s (`cmdQuitTimeoutSeconds`), so the incoming
+  profile opens a screenful of streams while the old processes still hold
+  slots. They free within seconds, so a young stream retries on a flat quick
+  interval that does not spend its give-up budget
+  (`lib/monitor/reconnect-backoff.ts`); climbing the ordinary exponential
+  curve through that window left a wall of tiles blank for ~20s.
 - Electron background/occlusion process switches do not fix MJPEG going
   blank on occluded windows; tried and reverted (69990402). The fix is
   stream-level reconnect on focus or visibility return (f7a8292e).

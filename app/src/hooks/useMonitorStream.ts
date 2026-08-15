@@ -25,6 +25,7 @@ import { useServerUrls } from './useServerUrls';
 import { useVisibilityResume } from './useVisibilityResume';
 import { useAuthStore } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
+import { planReconnect } from '../lib/monitor/reconnect-backoff';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
 import type { StreamOptions, ProfileId } from '../api/types';
 
@@ -118,6 +119,10 @@ export function useMonitorStream({
   const imgRef = useRef<HTMLImageElement>(null);
 
   const reconnectAttemptRef = useRef(0);
+  // When this stream first had a URL to try. A failure close to that moment is
+  // usually a server still freeing slots rather than a server that is gone,
+  // and gets the quicker schedule (see lib/monitor/reconnect-backoff).
+  const streamStartedAtRef = useRef(0);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mirror settings.insomnia into a ref so the scheduleReconnect closure
   // reads the latest value without re-running its effect.
@@ -217,6 +222,9 @@ export function useMonitorStream({
   // <img>'s native onError handler which the consuming player wires up.
   useEffect(() => {
     setImageSrc(streamUrl);
+    if (streamUrl && streamStartedAtRef.current === 0) {
+      streamStartedAtRef.current = Date.now();
+    }
   }, [streamUrl]);
 
   // MJPEG reconnect on stream error. Wired to the consumer's <img onError> via
@@ -236,7 +244,9 @@ export function useMonitorStream({
     }
     const attempt = reconnectAttemptRef.current;
     const insomniaOn = insomniaRef.current;
-    if (!insomniaOn && attempt >= ZM_INTEGRATION.mjpegReconnectMaxAttempts) {
+    const startedAt = streamStartedAtRef.current;
+    const plan = planReconnect(attempt, startedAt === 0 ? 0 : Date.now() - startedAt);
+    if (!insomniaOn && plan.countsTowardCap && attempt >= ZM_INTEGRATION.mjpegReconnectMaxAttempts) {
       log.monitor(
         `MJPEG stream gave up after ${attempt} reconnect attempts for monitor ${monitorId}`,
         LogLevel.ERROR,
@@ -245,14 +255,10 @@ export function useMonitorStream({
       releaseConnection();
       return;
     }
-    reconnectAttemptRef.current = attempt + 1;
-    const delay = Math.min(
-      ZM_INTEGRATION.mjpegReconnectBaseDelayMs * 2 ** attempt,
-      ZM_INTEGRATION.mjpegReconnectMaxDelayMs,
-    );
+    if (plan.countsTowardCap) reconnectAttemptRef.current = attempt + 1;
     reconnectTimerRef.current = setTimeout(() => {
       forceRegenerate({ killPrevious: true });
-    }, delay);
+    }, plan.delayMs);
   };
 
   // Reset the backoff counter (and cancel any pending reconnect) once a frame
