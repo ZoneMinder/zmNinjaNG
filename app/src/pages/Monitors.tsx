@@ -24,13 +24,12 @@ import { EmptyState } from '../components/ui/empty-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
-import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
+import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem } from '../components/common/view-options';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { usePermissions } from '../hooks/usePermissions';
 import { canEditMonitorSettings, canViewMonitors } from '../lib/permissions/zm-permissions';
 import { isPermissionDenied } from '../lib/permissions/permission-error';
 import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { filterMonitorsByGroup } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
 import { GroupFilterSelect } from '../components/filters/GroupFilterSelect';
@@ -380,20 +379,14 @@ export default function Monitors() {
               onCustomGridSubmit={handleMonitorCustomGridSubmit}
             />
           )}
-          <Select value={settings.monitorsFeedFit} onValueChange={handleFeedFitChange}>
-            <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="monitors-fit-select">
-              <SelectValue placeholder={t('monitors.feed_fit')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="contain" data-testid="monitors-fit-contain">
-                {t('montage.fit_fit')}
-              </SelectItem>
-              <SelectItem value="cover" data-testid="monitors-fit-cover">
-                {t('montage.fit_crop')}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
+          <ViewOptionsMenu testId="monitors">
+            <FeedFitItems
+              value={settings.monitorsFeedFit}
+              onChange={handleFeedFitChange}
+              testIdPrefix="monitors"
+            />
+            <AnalysisFramesItem />
+          </ViewOptionsMenu>
           <RefreshButton
             className="h-8 w-8 sm:h-9 sm:w-9"
             data-testid="monitors-refresh-button"

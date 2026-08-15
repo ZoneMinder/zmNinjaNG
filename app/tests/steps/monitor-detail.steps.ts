@@ -2,6 +2,8 @@ import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { log } from '../../src/lib/logger';
+import { getZmVersion } from '../helpers/zm-api';
+import { isZmVersionAtLeast } from '../../src/lib/zm/zm-version';
 
 const { When, Then } = createBdd();
 
@@ -62,10 +64,21 @@ When('I open the monitor settings dialog', async ({ page }) => {
 });
 
 Then('I should see the monitor mode dropdown', async ({ page }) => {
-  const modeDropdown = page.getByTestId('monitor-mode-select')
-    .or(page.locator('select').first())
-    .or(page.getByRole('combobox'));
-  await expect(modeDropdown.first()).toBeVisible({ timeout: testConfig.timeouts.transition });
+  // The Function dropdown only exists below ZM 1.38, which replaced one mode
+  // with separate capture/analyse/record states. Which side of that gate the
+  // server sits on comes from the API: the old fallback matched any combobox
+  // on the page, so it passed against a 1.38 server by finding the feed-fit
+  // control instead, and asserted nothing about modes at all.
+  const version = await getZmVersion();
+  if (isZmVersionAtLeast(version, '1.38.0')) {
+    await expect(page.getByTestId('monitor-controls-card')).toBeVisible({
+      timeout: testConfig.timeouts.transition,
+    });
+    return;
+  }
+  await expect(page.getByTestId('monitor-mode-select')).toBeVisible({
+    timeout: testConfig.timeouts.transition,
+  });
 });
 
 Then('the current mode should be displayed', async ({ page }) => {

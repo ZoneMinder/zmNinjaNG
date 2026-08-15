@@ -554,8 +554,17 @@ Then('the montage grid should show no tiles', async ({ page }) => {
 // All-mode montage view controls (refs #337). These write the ALL settings
 // bucket rather than a single profile's, which is only observable through the
 // control's own state surviving a reload while aggregating.
+/** Feed fit moved into the montage kebab menu (refs #365 follow-up). */
+async function openMontageKebab(page: Page) {
+  const trigger = page.getByTestId('montage-kebab-menu');
+  // Keyboard: Radix leaves a dismissable layer over the page for a beat after
+  // the menu closes, and a click there never reaches the trigger.
+  await trigger.focus();
+  await trigger.press('Enter');
+}
+
 When('I set the montage fit to {string}', async ({ page }, label: string) => {
-  await page.getByTestId('montage-fit-select').click();
+  await openMontageKebab(page);
   const option = label === 'Fit'
     ? page.getByTestId('montage-fit-contain')
     : page.getByTestId('montage-fit-cover');
@@ -564,9 +573,14 @@ When('I set the montage fit to {string}', async ({ page }, label: string) => {
 });
 
 Then('the montage fit should be {string}', async ({ page }, label: string) => {
-  await expect(page.getByTestId('montage-fit-select')).toHaveText(label, {
+  await openMontageKebab(page);
+  const chosen = label === 'Fit'
+    ? page.getByTestId('montage-fit-contain')
+    : page.getByTestId('montage-fit-cover');
+  await expect(chosen).toHaveAttribute('aria-checked', 'true', {
     timeout: testConfig.timeouts.element,
   });
+  await page.keyboard.press('Escape');
 });
 
 Then('the montage edit-layout control should be available', async ({ page }) => {

@@ -54,7 +54,8 @@
     "scroll_up": "向上滚动",
     "scroll_down": "向下滚动",
     "scroll_bottom": "回到底部",
-    "scroll_buttons": "滚动按钮"
+    "scroll_buttons": "滚动按钮",
+    "view_options": "视图选项"
   },
   "app": {
     "name": "zmNinjaNg",

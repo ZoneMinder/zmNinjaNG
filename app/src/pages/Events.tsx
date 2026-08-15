@@ -48,7 +48,7 @@ import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons
 import { useTranslation } from 'react-i18next';
 import { formatForServer, formatLocalDateTime } from '../lib/time';
 import { EmptyState } from '../components/ui/empty-state';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { ViewOptionsMenu, FeedFitItems } from '../components/common/view-options';
 import { NotificationBadge } from '../components/NotificationBadge';
 
 export default function Events() {
@@ -559,19 +559,13 @@ export default function Events() {
                 {viewMode === 'list' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
               </Button>
               <div className="flex items-center gap-2">
-                <Select value={normalizedThumbnailFit} onValueChange={handleThumbnailFitChange}>
-                  <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="events-thumbnail-fit-select">
-                    <SelectValue placeholder={t('events.thumbnail_fit')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contain" data-testid="events-thumbnail-fit-contain">
-                      {t('montage.fit_fit')}
-                    </SelectItem>
-                    <SelectItem value="cover" data-testid="events-thumbnail-fit-cover">
-                      {t('montage.fit_crop')}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <ViewOptionsMenu testId="events">
+                  <FeedFitItems
+                    value={normalizedThumbnailFit}
+                    onChange={handleThumbnailFitChange}
+                    testIdPrefix="events-thumbnail"
+                  />
+                </ViewOptionsMenu>
               </div>
               {viewMode === 'montage' && (
                 <EventMontageGridControls

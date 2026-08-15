@@ -206,3 +206,22 @@ export async function cancelAlarmDirect(monitorId: string): Promise<void> {
     throw new Error(`ZM API alarm cancel failed for monitor ${monitorId}: ${res.status} ${res.statusText}`);
   }
 }
+
+/**
+ * The server's ZoneMinder version, for scenarios whose control only exists on
+ * one side of a version gate. Derived from the API rather than from whether
+ * the control is on screen, which would assert nothing.
+ */
+export async function getZmVersion(): Promise<string> {
+  const token = await getAccessToken();
+  const { host } = testConfig.server;
+
+  const res = await fetch(`${host}/api/host/getVersion.json?token=${encodeURIComponent(token)}`);
+  if (!res.ok) {
+    throw new Error(`ZM API version fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { version?: string };
+  return data.version ?? '';
+}
+

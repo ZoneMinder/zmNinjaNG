@@ -17,10 +17,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTvKeyHandler } from '../hooks/useTvKeyHandler';
 import { useTvMode } from '../hooks/useTvMode';
 import { Button } from '../components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Video, Maximize, Pencil, ArrowLeftRight, Layers } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
-import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { EmptyState } from '../components/ui/empty-state';
@@ -611,19 +609,6 @@ export default function Montage() {
                 onLoadLayout={handleLoadLayout}
                 onDeleteLayout={handleDeleteLayout}
               />
-              <Select value={settings.montageFeedFit} onValueChange={handleFeedFitChange}>
-                <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="montage-fit-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cover" data-testid="montage-fit-cover">
-                    {t('montage.fit_crop')}
-                  </SelectItem>
-                  <SelectItem value="contain" data-testid="montage-fit-contain">
-                    {t('montage.fit_fit')}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
               <Button
                 onClick={handleEditModeToggle}
                 variant={isEditMode ? 'default' : 'outline'}
@@ -651,7 +636,6 @@ export default function Montage() {
                   <ArrowLeftRight className="h-4 w-4" />
                 </Button>
               )}
-              <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" />
               <Button
                 onClick={() => handleToggleFullscreen(true)}
                 variant="outline"
@@ -670,6 +654,8 @@ export default function Montage() {
                 onToggleVisibility={handleToggleMonitorVisibility}
                 scrollPadOn={showScrollPad}
                 onToggleScrollPad={toggleScrollPad}
+                feedFit={settings.montageFeedFit}
+                onFeedFitChange={handleFeedFitChange}
               />
               <NotificationBadge />
             </div>

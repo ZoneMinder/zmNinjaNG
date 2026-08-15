@@ -132,11 +132,17 @@ vi.mock('../../components/montage', async (importOriginal) => {
     MontageKebabMenu: ({
       items,
       onToggleVisibility,
+      onFeedFitChange,
     }: {
       items: Array<{ id: string; name: string; profileChip?: string }>;
       onToggleVisibility: (id: string) => void;
+      onFeedFitChange: (value: string) => void;
     }) => (
-      <div data-testid="montage-kebab-stub">
+      <>
+        {/* Feed fit moved into this menu. Kept outside the stub's own element:
+            tests enumerate the buttons inside it as the monitor list. */}
+        <button data-testid="montage-fit-select" onClick={() => onFeedFitChange('contain')} />
+        <div data-testid="montage-kebab-stub">
         {items.map((item) => (
           <button
             key={item.id}
@@ -146,7 +152,8 @@ vi.mock('../../components/montage', async (importOriginal) => {
             {item.profileChip ? `${item.name} (${item.profileChip})` : item.name}
           </button>
         ))}
-      </div>
+        </div>
+      </>
     ),
     MontageTileErrorBoundary: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     useMontageGrid: (options: unknown) => useMontageGridMock(options),
@@ -204,10 +211,10 @@ vi.mock('../../components/filters/GroupFilterSelect', () => ({
 }));
 
 // Radix Select needs pointer geometry jsdom does not provide; the stub keeps
-// the value and exposes one button that picks the other fit mode.
+// the value; the montage fit control now lives in the kebab menu.
 vi.mock('../../components/ui/select', () => ({
   Select: ({ value, onValueChange }: { value: string; onValueChange: (v: string) => void }) => (
-    <button data-testid="montage-fit-select" onClick={() => onValueChange('contain')}>
+    <button data-testid="select-stub" onClick={() => onValueChange('contain')}>
       {value}
     </button>
   ),

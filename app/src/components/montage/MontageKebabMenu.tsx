@@ -11,7 +11,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuSubContent,
   DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
+import { FeedFitItems, AnalysisFramesItem, type FeedFitChoice } from '../common/view-options';
 
 /** One entry in the show-monitors list. */
 export interface MontageVisibilityItem {
@@ -32,6 +34,8 @@ interface MontageKebabMenuProps {
   /** Whether the scroll pad is currently on screen. */
   scrollPadOn: boolean;
   onToggleScrollPad: () => void;
+  feedFit: string;
+  onFeedFitChange: (value: FeedFitChoice) => void;
 }
 
 export function MontageKebabMenu({
@@ -40,6 +44,8 @@ export function MontageKebabMenu({
   onToggleVisibility,
   scrollPadOn,
   onToggleScrollPad,
+  feedFit,
+  onFeedFitChange,
 }: MontageKebabMenuProps) {
   const { t } = useTranslation();
 
@@ -60,6 +66,12 @@ export function MontageKebabMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {/* Set once and then left alone, so they belong here rather than in a
+            header that has to fit a group filter, layouts, edit, fullscreen
+            and refresh besides. */}
+        <FeedFitItems value={feedFit} onChange={onFeedFitChange} testIdPrefix="montage" />
+        <AnalysisFramesItem />
+        <DropdownMenuSeparator />
         {/* Edit mode turns the pad on by itself, since a drag there reorders
             tiles rather than scrolling. This entry covers the rest: a grid
             taller than the screen on a touch device, where the tiles are the
