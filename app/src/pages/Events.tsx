@@ -43,6 +43,7 @@ import { EventMontageView } from '../components/events/EventMontageView';
 import { EventListView, type ScopedEventItem } from '../components/events/EventListView';
 import { EventsAllModeBar } from '../components/events/EventsAllModeBar';
 import { EventMontageGridControls } from '../components/events/EventMontageGridControls';
+import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
 import { EventsFilterPopover } from '../components/events/EventsFilterPopover';
 import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons';
 import { useTranslation } from 'react-i18next';
@@ -613,6 +614,7 @@ export default function Events() {
                 />
               </Popover>
 
+              <NinjiiToolbarButton />
               <RefreshButton
                 aria-label={t('events.refresh')}
                 data-testid="events-refresh-button"

@@ -2,6 +2,14 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Monitors from '../Monitors';
 
+// Its own tests cover the button's two gates; stubbing keeps useAssistantEnabled's
+// settings-store reads out of this file's mock surface, as with the analysis
+// toggle above.
+vi.mock('../../components/assistant/NinjiiToolbarButton', () => ({
+  NinjiiToolbarButton: () => null,
+}));
+
+
 const useScopedMonitorsMock = vi.fn();
 const useCurrentProfileMock = vi.fn();
 const useProfileScopeMock = vi.fn();

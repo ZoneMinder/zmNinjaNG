@@ -25,6 +25,7 @@ import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
 import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem, ViewOptionsSeparator } from '../components/common/view-options';
+import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { usePermissions } from '../hooks/usePermissions';
 import { canEditMonitorSettings, canViewMonitors } from '../lib/permissions/zm-permissions';
@@ -379,6 +380,7 @@ export default function Monitors() {
               onCustomGridSubmit={handleMonitorCustomGridSubmit}
             />
           )}
+          <NinjiiToolbarButton />
           <RefreshButton
             className="h-8 w-8 sm:h-9 sm:w-9"
             data-testid="monitors-refresh-button"

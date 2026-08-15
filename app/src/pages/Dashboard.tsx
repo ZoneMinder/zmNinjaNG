@@ -21,6 +21,7 @@ import { asProfileId } from '../api/types';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { NotificationBadge } from '../components/NotificationBadge';
+import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
 
 export default function Dashboard() {
     const { t } = useTranslation();
@@ -50,6 +51,7 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2">
                     {widgets.length > 0 && (
                         <>
+                            <NinjiiToolbarButton />
                             <RefreshButton size="sm" data-testid="dashboard-refresh-button" />
                             <Button
                                 variant={isEditing ? "default" : "outline"}

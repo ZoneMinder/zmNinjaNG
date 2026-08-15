@@ -431,7 +431,9 @@
       "history_turns_hint": "Wie viele frühere Fragen und Antworten das Modell sieht.",
       "advanced_note": "Temperatur 0 war beim Auswerten Ihrer Kameradaten messbar am genauesten. Höhere Werte führen eher dazu, dass der Assistent eine Anzahl, eine Uhrzeit oder einen Kameranamen nennt, der nicht in den Ergebnissen steht. Erhöhen Sie das Zeitlimit, wenn Ihr Server langsam antwortet. Mehr gemerkte Wortwechsel helfen bei Rückfragen, machen aber jede Antwort langsamer.",
       "backend_gemini_nano": "Auf dem Gerät (AICore)",
-      "gemini_nano_not_ready": "Gemini Nano ist auf diesem Gerät verfügbar, aber noch nicht heruntergeladen."
+      "gemini_nano_not_ready": "Gemini Nano ist auf diesem Gerät verfügbar, aber noch nicht heruntergeladen.",
+      "in_toolbar": "In Symbolleiste anzeigen",
+      "in_toolbar_desc": "Zeigt Ninjii neben dem Menü jeder Seite, für Fragen mit einem Tippen"
     },
     "language": "Sprache",
     "select_language": "Sprache auswählen",
@@ -1525,6 +1527,7 @@
     "timeframe_unclear": "Ich konnte den gemeinten Zeitraum nicht ermitteln. Nenne den Zeitraum, zum Beispiel „heute“ oder „21. Juli“.",
     "gemini_background_blocked": "Gemini Nano läuft nur, solange zmNinja sichtbar ist. Öffne die App erneut und versuche es nochmal.",
     "gemini_quota_exceeded": "Gemini Nano hat das heutige Nutzungslimit auf dem Gerät erreicht. Versuche es später erneut oder nutze einen Ollama-Server.",
-    "gemini_rate_limited": "Gemini Nano ist gerade ausgelastet. Warte kurz und versuche es erneut."
+    "gemini_rate_limited": "Gemini Nano ist gerade ausgelastet. Warte kurz und versuche es erneut.",
+    "ask_ninjii": "Ninjii fragen"
   }
 }

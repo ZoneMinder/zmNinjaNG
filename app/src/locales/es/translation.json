@@ -431,7 +431,9 @@
       "history_turns_hint": "Cuántas preguntas y respuestas anteriores ve el modelo.",
       "advanced_note": "La temperatura 0 resultó ser la más precisa al leer los datos de tus cámaras. Con valores más altos es más probable que el asistente indique un recuento, una hora o un nombre de cámara que no está en los resultados. Aumenta el tiempo de espera si tu servidor responde despacio. Recordar más intercambios ayuda con las preguntas de seguimiento, pero hace más lenta cada respuesta.",
       "backend_gemini_nano": "En el dispositivo (AICore)",
-      "gemini_nano_not_ready": "Gemini Nano está disponible en este dispositivo, pero aún no se ha descargado."
+      "gemini_nano_not_ready": "Gemini Nano está disponible en este dispositivo, pero aún no se ha descargado.",
+      "in_toolbar": "Mostrar en la barra",
+      "in_toolbar_desc": "Coloca a Ninjii junto al menú de cada página, a un toque de una pregunta"
     },
     "language": "Idioma",
     "select_language": "Seleccionar Idioma",
@@ -1525,6 +1527,7 @@
     "timeframe_unclear": "No pude determinar el período de tiempo al que te refieres. Indica el período, por ejemplo «hoy» o «21 de julio».",
     "gemini_background_blocked": "Gemini Nano solo funciona con zmNinja en pantalla. Vuelve a abrir la app e inténtalo de nuevo.",
     "gemini_quota_exceeded": "Gemini Nano alcanzó el límite de uso de hoy en el dispositivo. Inténtalo más tarde o usa un servidor Ollama.",
-    "gemini_rate_limited": "Gemini Nano está ocupado ahora mismo. Espera un momento e inténtalo de nuevo."
+    "gemini_rate_limited": "Gemini Nano está ocupado ahora mismo. Espera un momento e inténtalo de nuevo.",
+    "ask_ninjii": "Preguntar a Ninjii"
   }
 }

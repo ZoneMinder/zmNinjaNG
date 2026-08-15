@@ -431,7 +431,9 @@
       "history_turns_hint": "How many earlier questions and answers the model sees.",
       "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower.",
       "backend_gemini_nano": "On-device (AICore)",
-      "gemini_nano_not_ready": "Gemini Nano is available on this device but not downloaded yet."
+      "gemini_nano_not_ready": "Gemini Nano is available on this device but not downloaded yet.",
+      "in_toolbar": "Show in toolbar",
+      "in_toolbar_desc": "Puts Ninjii beside each page’s menu, so a question is one tap away"
     },
     "language": "Language",
     "select_language": "Select Language",
@@ -1525,6 +1527,7 @@
     "timeframe_unclear": "I could not work out the time period you mean. Tell me the period, like \"today\" or \"July 21\".",
     "gemini_background_blocked": "Gemini Nano only runs while zmNinja is on screen. Reopen the app and try again.",
     "gemini_quota_exceeded": "Gemini Nano has reached today's on-device usage limit. Try again later, or use an Ollama server.",
-    "gemini_rate_limited": "Gemini Nano is busy right now. Wait a moment and try again."
+    "gemini_rate_limited": "Gemini Nano is busy right now. Wait a moment and try again.",
+    "ask_ninjii": "Ask Ninjii"
   }
 }

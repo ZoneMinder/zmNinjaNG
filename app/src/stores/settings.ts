@@ -328,6 +328,8 @@ export interface ProfileSettings {
   // stored here (rule 7 settings are plaintext-persisted); it lives in
   // secureStorage under `${ASSISTANT.apiKeyStoragePrefix}${profileId}`.
   assistantEnabled: boolean;
+  /** Show Ninjii in each page's toolbar, beside the view menu (refs #246). */
+  assistantInToolbar: boolean;
   assistantBackend: AssistantBackend;
   assistantModelId: string;
   assistantOllamaBaseUrl: string;
@@ -495,6 +497,10 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   hoverPreview: DEFAULT_HOVER_PREVIEW,
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
   assistantEnabled: false,
+  // Off by default: the assistant already answers from the command palette and
+  // the keyboard, and a toolbar it shares with per-page controls is the one
+  // place a global tool has to earn its spot.
+  assistantInToolbar: false,
   assistantBackend: 'on-device',
   assistantModelId: ASSISTANT.defaultModelId,
   // Empty, not localhost: an unset URL is resolved against the profile's own

@@ -15,6 +15,16 @@ Feature: In-app assistant
     When I click the example prompt "Summarize my day"
     Then the assistant input should contain "Summarize my day"
 
+  Scenario: The toolbar button opens Ninjii, and only once asked for
+    Given I am logged into zmNinjaNg
+    And the assistant is enabled with the mock backend
+    When I navigate to the "Monitors" page
+    Then the Ninjii toolbar button should be absent
+    When I turn on the assistant toolbar button
+    And I navigate to the "Monitors" page
+    And I tap the Ninjii toolbar button
+    Then the assistant panel should open
+
   Scenario: Ask a question that counts events
     Given I am logged into zmNinjaNg
     And the assistant is enabled with the mock backend

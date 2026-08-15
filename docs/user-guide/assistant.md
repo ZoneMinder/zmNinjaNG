@@ -6,6 +6,14 @@ Ninjii answers questions about your cameras and events. It is read-only: it cann
 
 Go to **Settings > Ninjii** and turn on **Enable Ninjii**.
 
+Underneath it, **Show in toolbar** puts the Ninjii icon in the toolbar of the
+Dashboard, Monitors, Montage, Events, Timeline, and Live Activity screens,
+beside their menu, so a question is one tap away. It is off by default: Ninjii
+already answers from the command palette and the keyboard, and a toolbar shared
+with each page's own controls is the one place a global tool has to earn its
+spot. The setting only appears once Ninjii is enabled, and the icon only shows
+where the assistant is actually configured.
+
 Underneath, **Backend** picks where the model runs:
 
 - **Ollama (remote)**: the model runs on an [Ollama](https://ollama.com) server (or anything else speaking the OpenAI-compatible chat API) that you point the app at. The only option where the question leaves this device, and it goes to your server, not to anyone else's.
@@ -37,6 +45,7 @@ Once enabled, there are three ways to start a conversation:
 - Press `?` on a keyboard (desktop, web).
 - Open the command palette (`/`, the sidebar button, or the mobile header icon) and tap **Ask**.
 - Type a leading `?` directly into the command palette's search field.
+- Tap the Ninjii icon in a page's toolbar, if you have turned that on.
 
 Before you have typed anything, Ninjii shows a few example prompts as tappable chips (one of them is "Summarize my day"). Tapping a chip drops its text into the input so you can send it as-is or edit it first.
 
