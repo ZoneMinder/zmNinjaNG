@@ -24,7 +24,7 @@ import { EmptyState } from '../components/ui/empty-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { MonitorCard } from '../components/monitors/MonitorCard';
-import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem } from '../components/common/view-options';
+import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem, ViewOptionsSeparator } from '../components/common/view-options';
 import { MonitorSettingsDialog } from '../components/monitor-detail/MonitorSettingsDialog';
 import { usePermissions } from '../hooks/usePermissions';
 import { canEditMonitorSettings, canViewMonitors } from '../lib/permissions/zm-permissions';
@@ -385,6 +385,7 @@ export default function Monitors() {
               onChange={handleFeedFitChange}
               testIdPrefix="monitors"
             />
+            <ViewOptionsSeparator />
             <AnalysisFramesItem />
           </ViewOptionsMenu>
           <RefreshButton

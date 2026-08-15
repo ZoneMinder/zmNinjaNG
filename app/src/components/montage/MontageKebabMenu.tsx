@@ -70,8 +70,8 @@ export function MontageKebabMenu({
             header that has to fit a group filter, layouts, edit, fullscreen
             and refresh besides. */}
         <FeedFitItems value={feedFit} onChange={onFeedFitChange} testIdPrefix="montage" />
-        <AnalysisFramesItem />
         <DropdownMenuSeparator />
+        <AnalysisFramesItem />
         {/* Edit mode turns the pad on by itself, since a drag there reorders
             tiles rather than scrolling. This entry covers the rest: a grid
             taller than the screen on a touch device, where the tiles are the
@@ -85,9 +85,12 @@ export function MontageKebabMenu({
         >
           {t('common.scroll_buttons')}
         </DropdownMenuCheckboxItem>
+        {items.length > 0 && <DropdownMenuSeparator />}
         {items.length > 0 && (
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger data-testid="montage-kebab-visibility">
+            {/* inset: a sub-trigger has no indicator, so without it this text
+                starts 24px left of every checkable item above it. */}
+            <DropdownMenuSubTrigger inset data-testid="montage-kebab-visibility">
               {t('montage.menu_show_monitors')}
             </DropdownMenuSubTrigger>
             {/* Bounded width, or the submenu grows to the longest monitor

@@ -18,10 +18,10 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
 } from '../ui/dropdown-menu';
 import { useAnalysisFramesSetting } from '../../hooks/useAnalysisFramesSetting';
 
@@ -68,18 +68,19 @@ interface FeedFitItemsProps {
 export function FeedFitItems({ value, onChange, testIdPrefix }: FeedFitItemsProps) {
   const { t } = useTranslation();
 
+  // No group heading: it read "Fit" over an option also called "Fit". The
+  // items say what they do instead, which a menu has room for and a 100px
+  // select never did. The dashboard dialogs keep the short words, where a
+  // label of their own supplies the context.
   return (
-    <>
-      <DropdownMenuLabel>{t('montage.feed_fit')}</DropdownMenuLabel>
-      <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as FeedFitChoice)}>
-        <DropdownMenuRadioItem value="contain" data-testid={`${testIdPrefix}-fit-contain`}>
-          {t('montage.fit_fit')}
-        </DropdownMenuRadioItem>
-        <DropdownMenuRadioItem value="cover" data-testid={`${testIdPrefix}-fit-cover`}>
-          {t('montage.fit_crop')}
-        </DropdownMenuRadioItem>
-      </DropdownMenuRadioGroup>
-    </>
+    <DropdownMenuRadioGroup value={value} onValueChange={(v) => onChange(v as FeedFitChoice)}>
+      <DropdownMenuRadioItem value="contain" data-testid={`${testIdPrefix}-fit-contain`}>
+        {t('common.fit_whole_image')}
+      </DropdownMenuRadioItem>
+      <DropdownMenuRadioItem value="cover" data-testid={`${testIdPrefix}-fit-cover`}>
+        {t('common.crop_to_fill')}
+      </DropdownMenuRadioItem>
+    </DropdownMenuRadioGroup>
   );
 }
 
@@ -108,3 +109,6 @@ export function AnalysisFramesItem({ alwaysStreaming = false }: AnalysisFramesIt
     </DropdownMenuCheckboxItem>
   );
 }
+
+/** Re-exported so a screen composing a menu imports from one place. */
+export { DropdownMenuSeparator as ViewOptionsSeparator };

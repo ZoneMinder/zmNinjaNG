@@ -29,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
 import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
-import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem } from '../components/common/view-options';
+import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem, ViewOptionsSeparator } from '../components/common/view-options';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
@@ -376,6 +376,7 @@ export default function MonitorDetail() {
               onChange={handleFeedFitChange}
               testIdPrefix="monitor-detail"
             />
+            <ViewOptionsSeparator />
             {/* This page streams whatever the profile's Streaming Mode says,
                 so the control stays usable under snapshot. */}
             <AnalysisFramesItem alwaysStreaming />

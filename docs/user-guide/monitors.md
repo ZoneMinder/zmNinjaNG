@@ -40,7 +40,7 @@ The actual transport depends on your server:
 
 If Go2RTC connects but no video frames appear within 8 seconds, the app automatically falls back to MJPEG. Monitors that fail Go2RTC are cached for 5 minutes before the app retries Go2RTC on them.
 
-**Fit/Crop** and **Analysis frames** live in the ⋮ menu on the Monitors and Monitor Detail screens. The protocol label (enabled in {doc}`settings`) shows which streaming protocol is active on each feed. The Monitor Detail page also shows native video controls (play, pause, volume) for Go2RTC streams.
+How a feed fills its tile — **Fit whole image** or **Crop to fill** — and **Analysis frames** live in the ⋮ menu on the Monitors and Monitor Detail screens. The protocol label (enabled in {doc}`settings`) shows which streaming protocol is active on each feed. The Monitor Detail page also shows native video controls (play, pause, volume) for Go2RTC streams.
 
 For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode* setting does apply, see {doc}`settings` for details.
 
