@@ -105,3 +105,16 @@ export interface AdapterRequest {
   signal?: AbortSignal;
   onDownloadProgress?: (progress: HttpProgress) => void;
 }
+
+/**
+ * Whether the server says it has no such record. ZoneMinder answers a write
+ * against a deleted event this way, which happens routinely on a server that
+ * prunes: a list fetched a minute ago still shows the card, and the write goes
+ * to a row that is gone. That is not a failure to retry or a permission to
+ * explain - the right response is to refresh the list the card came from.
+ */
+export function isNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return (error as { status?: number }).status === 404;
+}
+

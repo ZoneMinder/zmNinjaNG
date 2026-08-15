@@ -430,6 +430,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
               <Button
                 onClick={handleInsomniaToggle}
                 variant={profileSettings.insomnia ? "default" : "outline"}
+                aria-pressed={profileSettings.insomnia}
                 size="icon"
                 className={isMobileDrawer ? "h-7 w-7" : "h-8 w-8"}
                 title={profileSettings.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
@@ -445,6 +446,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
               <Button
                 onClick={kioskIsLocked ? requestUnlock : handleLockToggle}
                 variant={kioskIsLocked ? "default" : "outline"}
+                aria-pressed={kioskIsLocked}
                 size="icon"
                 className={isMobileDrawer ? "h-7 w-7" : "h-8 w-8"}
                 title={kioskIsLocked ? t('kiosk.unlock_label') : t('kiosk.lock_label')}
@@ -460,6 +462,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
             <Button
               onClick={handleInsomniaToggle}
               variant={profileSettings.insomnia ? "default" : "outline"}
+              aria-pressed={profileSettings.insomnia}
               size="icon"
               className="h-8 w-8"
               title={profileSettings.insomnia ? t('montage.insomnia_enabled') : t('montage.insomnia_disabled')}
@@ -470,6 +473,7 @@ export function SidebarContent({ onMobileClose, isCollapsed }: SidebarContentPro
             <Button
               onClick={kioskIsLocked ? requestUnlock : handleLockToggle}
               variant={kioskIsLocked ? "default" : "outline"}
+              aria-pressed={kioskIsLocked}
               size="icon"
               className="h-8 w-8"
               title={kioskIsLocked ? t('kiosk.unlock_label') : t('kiosk.lock_label')}

@@ -411,6 +411,7 @@ export default function Logs() {
                     <div className="inline-flex h-8 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground" data-testid="log-source-tabs">
                         <Button
                             variant={logSource === 'zmng' ? 'default' : 'ghost'}
+                            aria-pressed={logSource === 'zmng'}
                             size="sm"
                             className="h-6 px-3 text-xs"
                             onClick={() => setLogSource('zmng')}
@@ -421,6 +422,7 @@ export default function Logs() {
                         </Button>
                         <Button
                             variant={logSource === 'server' ? 'default' : 'ghost'}
+                            aria-pressed={logSource === 'server'}
                             size="sm"
                             className="h-6 px-3 text-xs"
                             onClick={() => setLogSource('server')}

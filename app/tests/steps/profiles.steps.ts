@@ -1,5 +1,6 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
+import type { Locator } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { log } from '../../src/lib/logger';
 
@@ -31,8 +32,8 @@ Then('I should see the active profile indicator', async ({ page }) => {
 });
 
 When('I open the edit dialog for the first profile', async ({ page }) => {
-  const editButton = page.locator('[data-testid^="profile-edit-button-"]').first();
-  await editButton.click();
+  await openProfileRowMenu(page.locator('[data-testid="profile-card"]').first());
+  await page.locator('[data-testid^="profile-edit-button-"]').first().click();
 });
 
 Then('I should see the profile edit dialog', async ({ page }) => {
@@ -183,8 +184,8 @@ Then('the newly added profile should appear in the list', async ({ page }) => {
 
 When('I open the delete dialog for the newly added profile', async ({ page }) => {
   const card = page.locator('[data-testid="profile-card"]').filter({ hasText: newProfileName });
-  const deleteButton = card.locator('[data-testid^="profile-delete-button-"]');
-  await deleteButton.click();
+  await openProfileRowMenu(card);
+  await page.locator('[data-testid^="profile-delete-button-"]').click();
 });
 
 When('I confirm profile deletion', async ({ page }) => {
@@ -269,3 +270,44 @@ Then('the delete all profiles buttons should be reachable', async ({ page }) => 
   }
   await page.getByTestId('profiles-delete-all-cancel').click();
 });
+
+Then('the profile server addresses should be hidden', async ({ page }) => {
+  const first = page.locator('[data-testid="profile-card"]').first();
+  await expect(first.locator('[data-testid^="profile-urls-"][data-testid$="-toggle"]')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+  // The toggle exists; the addresses it guards do not.
+  await expect(
+    first.locator('[data-testid^="profile-urls-"]:not([data-testid$="-toggle"])')
+  ).toHaveCount(0);
+});
+
+When('I open the profile server addresses', async ({ page }) => {
+  await page
+    .locator('[data-testid="profile-card"]')
+    .first()
+    .locator('[data-testid^="profile-urls-"][data-testid$="-toggle"]')
+    .click();
+});
+
+Then('I should see the profile portal address', async ({ page }) => {
+  const urls = page
+    .locator('[data-testid="profile-card"]')
+    .first()
+    .locator('[data-testid^="profile-urls-"]:not([data-testid$="-toggle"])');
+  await expect(urls).toBeVisible({ timeout: testConfig.timeouts.element });
+  // A real address, not an empty shell: every profile has a portal URL.
+  await expect(urls).toContainText(/https?:\/\//);
+});
+
+/**
+ * Row actions live behind a per-row menu. Opened from the keyboard: Radix
+ * leaves a dismissable layer over the page for a beat after a menu closes, and
+ * a click landing on it never reaches the trigger, so a second open in the same
+ * scenario would silently do nothing.
+ */
+export async function openProfileRowMenu(card: Locator) {
+  const trigger = card.locator('[data-testid^="profile-actions-menu-"]');
+  await trigger.focus();
+  await trigger.press('Enter');
+}

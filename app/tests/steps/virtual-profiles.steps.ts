@@ -10,6 +10,7 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { openProfileRowMenu } from './profiles.steps';
 
 const { When, Then } = createBdd();
 
@@ -44,7 +45,11 @@ When('I switch to a group holding every profile', async ({ page }) => {
   await expect(page.getByTestId('virtual-profile-dialog')).toHaveCount(0, {
     timeout: testConfig.timeouts.element,
   });
-  await page.locator(GROUP_CARD).filter({ hasText: EVERY_SERVER_GROUP }).click();
+  await page
+    .locator(GROUP_CARD)
+    .filter({ hasText: EVERY_SERVER_GROUP })
+    .locator('[data-testid^="profile-virtual-switch-"]')
+    .click();
 });
 
 Then('I should see the new group action', async ({ page }) => {
@@ -93,12 +98,17 @@ Then('I should not see the group card for {string}', async ({ page }, name: stri
 });
 
 When('I click the group card for {string}', async ({ page }, name: string) => {
-  await page.locator(GROUP_CARD).filter({ hasText: name }).click();
+  await page
+    .locator(GROUP_CARD)
+    .filter({ hasText: name })
+    .locator('[data-testid^="profile-virtual-switch-"]')
+    .click();
 });
 
 When('I delete the group named {string}', async ({ page }, name: string) => {
   const card = page.locator(GROUP_CARD).filter({ hasText: name });
-  await card.locator('[data-testid^="profile-virtual-delete-"]').click();
+  await openProfileRowMenu(card);
+  await page.locator('[data-testid^="profile-delete-button-virtual-"]').click();
   // The confirmation has to promise the member servers survive; the step
   // below asserts they do.
   await expect(page.getByTestId('profile-virtual-delete-dialog')).toBeVisible({

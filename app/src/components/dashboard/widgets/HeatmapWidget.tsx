@@ -163,6 +163,7 @@ export const HeatmapWidget = memo(function HeatmapWidget({ title }: HeatmapWidge
             <Button
               key={btn.value}
               variant={timeRange === btn.value ? 'default' : 'outline'}
+              aria-pressed={timeRange === btn.value}
               size="sm"
               onClick={() => setTimeRange(btn.value)}
               className="text-xs flex-shrink-0"

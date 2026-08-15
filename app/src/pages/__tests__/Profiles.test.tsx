@@ -176,7 +176,8 @@ describe('Profiles Page', () => {
     useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
 
     render(<Profiles />);
-    await user.click(screen.getByTestId('profile-disable-toggle-p2'));
+    await user.click(screen.getByTestId('profile-actions-menu-p2'));
+    await user.click(await screen.findByTestId('profile-disable-toggle-p2'));
 
     expect(setProfileDisabledMock).toHaveBeenCalledWith('p2', true);
   });
@@ -190,10 +191,8 @@ describe('Profiles Page', () => {
 
     expect(screen.getByTestId('profile-disabled-badge')).toBeInTheDocument();
     expect(screen.queryByTestId('profile-switch-button-p2')).not.toBeInTheDocument();
-    // Edit, delete, and the re-enable toggle stay available.
-    expect(screen.getByTestId('profile-edit-button-p2')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-delete-button-p2')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-disable-toggle-p2')).toBeInTheDocument();
+    // Edit, delete, and the re-enable toggle stay available, in the row menu.
+    expect(screen.getByTestId('profile-actions-menu-p2')).toBeInTheDocument();
   });
 
   it('shows an error toast when disabling the active profile is rejected', async () => {
@@ -206,7 +205,8 @@ describe('Profiles Page', () => {
     useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
 
     render(<Profiles />);
-    await user.click(screen.getByTestId('profile-disable-toggle-p1'));
+    await user.click(screen.getByTestId('profile-actions-menu-p1'));
+    await user.click(await screen.findByTestId('profile-disable-toggle-p1'));
 
     expect(setProfileDisabledMock).toHaveBeenCalledWith('p1', true);
     expect(sonnerToast.error).toHaveBeenCalledWith('profiles.cannot_disable_active');
@@ -221,7 +221,7 @@ describe('Profiles Page', () => {
       useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
     });
 
-    it('names the group, counts its members, and warns about the cost', () => {
+    it('names the group and counts its members', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
@@ -229,7 +229,6 @@ describe('Profiles Page', () => {
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
       expect(card).toHaveTextContent('Backyard');
       expect(card).toHaveTextContent('profiles.group_member_count:{"count":1}');
-      expect(card).toHaveTextContent('profiles.group_resource_note');
     });
 
     it('renders group cards after every profile card', () => {
@@ -251,12 +250,12 @@ describe('Profiles Page', () => {
       expect(card.querySelector('[data-testid="profile-active-indicator"]')).toBeInTheDocument();
     });
 
-    it('switches to the group id when its card is clicked', async () => {
+    it('switches to the group id from its switch button', async () => {
       const user = userEvent.setup();
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
       expect(switchProfileMock).toHaveBeenCalledWith(GROUP.id);
       expect(mockNavigate).toHaveBeenCalledWith('/monitors');
@@ -270,7 +269,7 @@ describe('Profiles Page', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
       expect(mockNavigate).toHaveBeenCalledWith('/events');
       delete savedRoutes[GROUP.id];
@@ -294,7 +293,8 @@ describe('Profiles Page', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-virtual-edit-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
+      await user.click(await screen.findByTestId(`profile-edit-button-virtual-${GROUP.id}`));
 
       expect(screen.getByTestId('virtual-profile-dialog')).toHaveTextContent(
         'profiles.group_edit_title'
@@ -323,7 +323,8 @@ describe('Profiles Page', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
+      await user.click(await screen.findByTestId(`profile-delete-button-virtual-${GROUP.id}`));
 
       expect(screen.getByTestId('profile-virtual-delete-dialog')).toHaveTextContent(
         'profiles.delete_group_confirm_desc:{"name":"Backyard"}'
@@ -350,8 +351,7 @@ describe('Profiles Page', () => {
       expect(switchProfileMock).not.toHaveBeenCalled();
       expect(card).toHaveTextContent('profiles.group_no_active_members');
       // Still fixable: edit and delete are the way out.
-      expect(screen.getByTestId(`profile-virtual-edit-${GROUP.id}`)).toBeInTheDocument();
-      expect(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`)).toBeInTheDocument();
     });
 
     it('reports a failed group delete instead of closing silently', async () => {
@@ -363,7 +363,8 @@ describe('Profiles Page', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-virtual-delete-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
+      await user.click(await screen.findByTestId(`profile-delete-button-virtual-${GROUP.id}`));
       await user.click(screen.getByTestId('profile-virtual-delete-confirm'));
 
       expect(sonnerToast.error).toHaveBeenCalledWith('profiles.delete_group_error');

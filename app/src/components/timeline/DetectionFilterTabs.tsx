@@ -52,6 +52,7 @@ export const DetectionFilterTabs = memo(function DetectionFilterTabs({
         <Button
           key={cat}
           variant={selected === cat ? 'default' : 'outline'}
+          aria-pressed={selected === cat}
           size="sm"
           className="text-xs h-7 px-3"
           onClick={() => onSelect(cat)}

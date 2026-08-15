@@ -49,25 +49,14 @@ function surfaceCoverage(scroller: HTMLElement, gestureSurface: HTMLElement): nu
  * only strips at the screen edges and the page below the fold is stranded,
  * from the same page in portrait, where there is plenty of room to swipe.
  */
-export interface ScrollAffordance {
-  /**
-   * The page scrolls and the pointer is coarse, so the pad would do something
-   * if it were shown. Gates the toggle that offers it by hand.
-   */
-  offerPad: boolean;
-  /** The video covers enough that the pad should appear without being asked. */
-  needsPad: boolean;
-}
-
 export function useScrollAffordance(
   content: HTMLElement | null,
   gestureSurface: HTMLElement | null,
-): ScrollAffordance {
+): boolean {
   // Read through useSyncExternalStore rather than measuring into state from an
-  // effect: each snapshot is a plain boolean, so React re-reads them whenever
-  // the observer fires and there is no render-then-correct pass. Same shape as
-  // useIsMobile. Two stores rather than one returning an object, which would
-  // mint a new identity on every read and loop.
+  // effect: the snapshot is a plain boolean, so React re-reads it whenever the
+  // observer fires and there is no render-then-correct pass. Same shape as
+  // useIsMobile.
   const subscribe = useCallback(
     (onChange: () => void) => {
       if (!content) return () => {};
@@ -91,18 +80,13 @@ export function useScrollAffordance(
     return parent.scrollHeight - parent.clientHeight > SCROLL_PAD.minOverflowPx ? parent : null;
   }, [content, gestureSurface]);
 
-  const getOfferPad = useCallback(() => scrollParent() !== null, [scrollParent]);
-
   const getNeedsPad = useCallback(() => {
     const parent = scrollParent();
     if (!parent || !gestureSurface) return false;
     return surfaceCoverage(parent, gestureSurface) > SCROLL_PAD.maxSurfaceCoverage;
   }, [scrollParent, gestureSurface]);
 
-  const offerPad = useSyncExternalStore(subscribe, getOfferPad, () => false);
-  const needsPad = useSyncExternalStore(subscribe, getNeedsPad, () => false);
-
-  return { offerPad, needsPad };
+  return useSyncExternalStore(subscribe, getNeedsPad, () => false);
 }
 
 /**

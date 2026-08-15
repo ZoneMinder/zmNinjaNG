@@ -16,7 +16,7 @@ import { Badge } from '../ui/badge';
 import { EventThumbnail } from './EventThumbnail';
 import { EventThumbnailHoverPreview } from './EventThumbnailHoverPreview';
 import { EventDeleteButton } from './EventDeleteButton';
-import { Video, Calendar, Clock, Star, Archive, Hourglass } from 'lucide-react';
+import { Video, Calendar, Clock, Star, Archive, ArchiveRestore, Hourglass } from 'lucide-react';
 import { getEventCauseIcon } from '../../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../../lib/event/object-class-icons';
 import type { EventCardProps } from '../../api/types';
@@ -31,6 +31,7 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { canEditEvents } from '../../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../../hooks/useDeniedControl';
 import { isPermissionDenied } from '../../lib/permissions/permission-error';
+import { isNotFound } from '../../lib/http/types';
 import { markPermissionDenied, useIsPermissionDenied } from '../../stores/permissions';
 import { getSession } from '../../services/sessions';
 import { log, LogLevel } from '../../lib/logger';
@@ -130,7 +131,13 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
       // control ungated, so the refusal is the only thing that can explain
       // itself. Spend it once: say what happened, and grey the control so the
       // next press is not the same discovery (refs #344).
-      if (isPermissionDenied(err) && ownerProfileId) {
+      if (isNotFound(err) && ownerProfileId) {
+        // A server that prunes deletes events under an open list, so the card
+        // outlives the row. Refresh the list rather than leaving a ghost that
+        // fails the same way on every press.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) });
+        toast.error(t('events.event_gone'));
+      } else if (isPermissionDenied(err) && ownerProfileId) {
         markPermissionDenied(ownerProfileId, 'events-edit');
         toast.error(t('events.archive_permission_denied'));
       } else {
@@ -259,14 +266,22 @@ function EventCardComponent({ event, monitorName, profileId, profileChip, thumbn
                   aria-label={isArchived ? t('events.unarchive') : t('events.archive')}
                   data-testid="event-archive-button"
                 >
-                  <Archive
-                    className={cn(
-                      "h-4 w-4 sm:h-5 sm:w-5 transition-colors",
-                      isArchived
-                        ? "fill-primary stroke-primary"
-                        : "stroke-muted-foreground hover:stroke-primary"
-                    )}
-                  />
+                  {/* Shape carries the state, not fill: a solid archive box
+                      loses its lid and reads as a blob at this size, and colour
+                      alone says nothing to a colourblind reader. The restore
+                      arrow doubles as a hint at what the tap does, which is
+                      what the label already says. */}
+                  {isArchived ? (
+                    <ArchiveRestore
+                      className="h-4 w-4 sm:h-5 sm:w-5 transition-colors stroke-primary"
+                      data-testid="event-archive-icon-on"
+                    />
+                  ) : (
+                    <Archive
+                      className="h-4 w-4 sm:h-5 sm:w-5 transition-colors stroke-muted-foreground hover:stroke-primary"
+                      data-testid="event-archive-icon-off"
+                    />
+                  )}
                 </HintButton>
                 <EventDeleteButton eventId={event.Id} profileId={ownerProfileId} />
                 {(() => {

@@ -35,12 +35,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
-import { Server, Edit, Plus, Check, Loader2, Eye, EyeOff, Trash2, Power, PowerOff } from 'lucide-react';
+import { Server, Plus, Check, Loader2, Eye, EyeOff, Trash2, MoreVertical } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { Badge } from '../components/ui/badge';
 import type { Profile, VirtualProfile } from '../api/types';
 import { isAggregateProfileId } from '../api/types';
 import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
+import { ServerUrlDisclosure } from '../components/profiles/ServerUrlDisclosure';
+import { ProfileActionsMenu } from '../components/profiles/ProfileActionsMenu';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../components/ui/dropdown-menu';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
 import { resolveSwitchDestination } from '../lib/navigation';
 import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
@@ -400,15 +408,30 @@ export default function Profiles() {
                     <span className="hidden sm:inline">{t('profiles.add_profile')}</span>
                   </Button>
                   {profiles.length > 0 && (
-                    <Button
-                      onClick={() => setIsDeleteAllDialogOpen(true)}
-                      variant="destructive"
-                      className="h-9 sm:h-10"
-                      data-testid="profiles-delete-all-button"
-                    >
-                      <Trash2 className="h-4 w-4 sm:mr-2" />
-                      <span className="hidden sm:inline">{t('profiles.delete_all')}</span>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 sm:h-10 sm:w-10"
+                          title={t('profiles.more_actions')}
+                          aria-label={t('profiles.more_actions')}
+                          data-testid="profiles-menu"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() => setIsDeleteAllDialogOpen(true)}
+                          className="text-destructive focus:text-destructive"
+                          data-testid="profiles-delete-all-button"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {t('profiles.delete_all')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
@@ -422,9 +445,14 @@ export default function Profiles() {
                     data-testid="profile-card"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {profile.id === currentProfile?.id && (
-                        <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
-                      )}
+                      {/* Always present, empty when this is not the current
+                          profile, so selecting a row does not shift its name
+                          and badges sideways. */}
+                      <span className="w-4 shrink-0">
+                        {profile.id === currentProfile?.id && (
+                          <Check className="h-4 w-4 text-primary" data-testid="profile-active-indicator" />
+                        )}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium" data-testid="profile-name">{profile.name}</span>
@@ -436,27 +464,20 @@ export default function Profiles() {
                               {t('profiles.disabled')}
                             </Badge>
                           )}
-                          {profile.username && profile.password ? (
-                            <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">
-                              ✓ {t('profiles.credentials')}
-                            </Badge>
-                          ) : (
+                          {!(profile.username && profile.password) && (
                             <Badge variant="outline" className="text-xs text-orange-600 dark:text-orange-400 border-orange-600 dark:border-orange-400">
                               ⚠ {t('profiles.no_credentials')}
                             </Badge>
                           )}
                         </div>
-                        <div className="space-y-1 text-xs font-mono">
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.portal')}:</span> {profile.portalUrl}
-                          </p>
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.api')}:</span> {profile.apiUrl}
-                          </p>
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.streaming')}:</span> {profile.cgiUrl}
-                          </p>
-                        </div>
+                        <ServerUrlDisclosure
+                          testId={`profile-urls-${profile.id}`}
+                          rows={[
+                            { label: t('profiles.portal'), url: profile.portalUrl },
+                            { label: t('profiles.api'), url: profile.apiUrl },
+                            { label: t('profiles.streaming'), url: profile.cgiUrl },
+                          ].filter((row) => row.url)}
+                        />
                         {!(profile.username && profile.password) && (
                           <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
                             {t('profiles.add_creds_hint')}
@@ -482,39 +503,15 @@ export default function Profiles() {
                           )}
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleToggleDisabled(profile)}
-                        title={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
-                        aria-label={profile.disabled ? t('profiles.enable') : t('profiles.disable')}
-                        data-testid={`profile-disable-toggle-${profile.id}`}
-                      >
-                        {profile.disabled ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleOpenEditDialog(profile)}
-                        title={t('common.edit')}
-                        aria-label={t('common.edit')}
-                        data-testid={`profile-edit-button-${profile.id}`}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {profiles.length > 1 && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleOpenDeleteDialog(profile)}
-                          className="text-destructive hover:text-destructive"
-                          title={t('common.delete')}
-                          aria-label={t('common.delete')}
-                          data-testid={`profile-delete-button-${profile.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <ProfileActionsMenu
+                        targetId={profile.id}
+                        disabled={!!profile.disabled}
+                        onEdit={() => handleOpenEditDialog(profile)}
+                        onToggleDisabled={() => handleToggleDisabled(profile)}
+                        // The last profile stays, or the app has no server to
+                        // talk to and no way back except setup.
+                        onDelete={profiles.length > 1 ? () => handleOpenDeleteDialog(profile) : undefined}
+                      />
                     </div>
                   </div>
                 ))}
@@ -528,6 +525,13 @@ export default function Profiles() {
                   group={group}
                   isActive={currentProfileId === group.id}
                   isSwitching={switchingProfileId === group.id}
+                  // The stored membership in stored order, so the list reads
+                  // the way the group was built. A member that no longer
+                  // exists simply drops out.
+                  memberUrls={group.memberProfileIds
+                    .map((id) => profiles.find((p) => p.id === id))
+                    .filter((p): p is Profile => !!p)
+                    .map((p) => ({ label: p.name, url: p.portalUrl }))}
                   activeMemberCount={countActiveMembers(group, profiles)}
                   onSwitch={() => handleSwitchProfile(group.id)}
                   onEdit={() => setGroupDialog({ group })}

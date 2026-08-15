@@ -101,6 +101,7 @@ export function GridColumnsMenu({
                 <Button
                   key={cols}
                   variant={gridCols === cols ? 'default' : 'outline'}
+                  aria-pressed={gridCols === cols}
                   data-testid={testId}
                   onClick={() => {
                     onApplyGridLayout(cols);

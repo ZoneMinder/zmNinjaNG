@@ -1,5 +1,5 @@
 import { createBdd } from 'playwright-bdd';
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { getEventCount } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
@@ -851,3 +851,31 @@ Then('the full-size event frame is gone if events exist', async ({ page }) => {
   if (!(await serverHasEvents())) return;
   await expect(page.getByTestId('event-frame-viewer-image')).toBeHidden({ timeout: testConfig.timeouts.element });
 });
+
+/** The event detail page scrolls its own container, not the app shell's main. */
+function eventDetailScroller(page: Page) {
+  return page.locator('[data-testid="event-detail-scroller"]');
+}
+
+When('I show the scroll pad on the event', async ({ page }) => {
+  await page.getByTestId('scroll-pad-toggle').click();
+  await expect(page.getByTestId('scroll-pad')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+});
+
+When('I tap the event scroll pad down button', async ({ page }) => {
+  await eventDetailScroller(page).evaluate((el) => el.scrollTo({ top: 0 }));
+  await page.getByTestId('scroll-down').click();
+});
+
+Then('the event detail should have scrolled down', async ({ page }) => {
+  // The pad walks up from what it is pointed at, so aiming it at an element
+  // with no scrolling ancestor left every button doing nothing (refs #365).
+  await expect
+    .poll(() => eventDetailScroller(page).evaluate((el) => el.scrollTop), {
+      timeout: testConfig.timeouts.element,
+    })
+    .toBeGreaterThan(0);
+});
+

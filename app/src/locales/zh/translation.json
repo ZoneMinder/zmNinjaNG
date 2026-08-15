@@ -262,7 +262,8 @@
     "failed_to_load": "加载事件失败：{{error}}",
     "delete_permission_denied": "删除事件需要 Events: Edit 权限。",
     "archive_permission_denied": "归档事件需要 Events: Edit 权限。",
-    "no_event_permission": "此账户没有事件权限。"
+    "no_event_permission": "此账户没有事件权限。",
+    "event_gone": "此事件在服务器上已不存在"
   },
   "event_detail": {
     "event_id": "事件 ID",
@@ -1073,7 +1074,9 @@
     "delete_group_confirm_desc": "删除分组“{{name}}”？其中的服务器不会被删除。",
     "delete_group_success": "虚拟配置组已删除",
     "delete_group_error": "删除虚拟配置组失败",
-    "group_no_active_members": "该分组中没有启用的服务器"
+    "group_no_active_members": "该分组中没有启用的服务器",
+    "details": "详情",
+    "more_actions": "更多操作"
   },
   "profile_picker": {
     "label": "配置"

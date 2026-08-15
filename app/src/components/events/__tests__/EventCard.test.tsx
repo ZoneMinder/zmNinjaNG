@@ -10,6 +10,8 @@ import { createHttpError } from '../../../lib/http/types';
 import { usePermissionDenialStore } from '../../../stores/permissions';
 
 const navigate = vi.fn();
+// Calls through: the assertion is that the list gets refreshed, not that it doesn't.
+const invalidateQueries = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
 
 function renderWithClient(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -392,6 +394,7 @@ describe('EventCard when ZoneMinder refuses the archive', () => {
     mockEventsPermission = undefined;
     usePermissionDenialStore.setState({ denied: {} });
     vi.mocked(setEventArchived).mockReset();
+    invalidateQueries.mockClear();
   });
 
   it('names the permission instead of blaming the archive', async () => {
@@ -426,5 +429,31 @@ describe('EventCard when ZoneMinder refuses the archive', () => {
 
     await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalledWith('events.archive_failed'));
     expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('says the event is gone rather than blaming the archive, and drops the stale card', async () => {
+    // A server that prunes deletes events under an open list, so the card is
+    // still on screen when the write goes out. ZoneMinder answers 404.
+    vi.mocked(setEventArchived).mockRejectedValue(createHttpError(404, 'Not Found', {}, {}));
+
+    renderEventCard({}, { profileId: asProfileId('p1') });
+    fireEvent.click(screen.getByTestId('event-archive-button'));
+
+    await waitFor(() => expect(vi.mocked(toast.error)).toHaveBeenCalledWith('events.event_gone'));
+    // The list refetches, which is what takes the ghost off screen.
+    await waitFor(() => expect(invalidateQueries).toHaveBeenCalled());
+    expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('shows the restore icon on an archived event, and the plain one otherwise', () => {
+    // Shape rather than fill: a solid archive box loses its lid and reads as a
+    // blob, and colour alone leaves nothing for a colourblind reader.
+    const { unmount } = renderEventCard({ Archived: '1' }, { profileId: asProfileId('p1') });
+    expect(screen.getByTestId('event-archive-icon-on')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-archive-icon-off')).not.toBeInTheDocument();
+    unmount();
+
+    renderEventCard({ Archived: '0' }, { profileId: asProfileId('p1') });
+    expect(screen.getByTestId('event-archive-icon-off')).toBeInTheDocument();
   });
 });

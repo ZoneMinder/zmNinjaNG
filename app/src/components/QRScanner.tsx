@@ -425,7 +425,7 @@ export function QRScanner({ open, onOpenChange, onScan }: QRScannerProps) {
 
           {/* Load from file button */}
           <Button
-            variant={isNative ? 'outline' : 'outline'}
+            variant="outline"
             className="w-full"
             onClick={handleLoadFromFile}
             disabled={isProcessingFile}

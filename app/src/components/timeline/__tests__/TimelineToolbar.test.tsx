@@ -30,15 +30,15 @@ describe('TimelineToolbar scroll pad control', () => {
     }) as unknown as typeof window.matchMedia;
   });
 
-  it('stays hidden where the pad is not on offer', () => {
-    render(<TimelineToolbar {...base} offerScrollPad={false} />);
-    expect(screen.queryByTestId('timeline-scroll-pad-toggle')).not.toBeInTheDocument();
+  it('is always available, so the pad can be summoned on any timeline', () => {
+    render(<TimelineToolbar {...base} />);
+    expect(screen.getByTestId('timeline-scroll-pad-toggle')).toBeInTheDocument();
   });
 
   it('toggles the pad when offered', async () => {
     const onToggleScrollPad = vi.fn();
     render(
-      <TimelineToolbar {...base} offerScrollPad onToggleScrollPad={onToggleScrollPad} />
+      <TimelineToolbar {...base} onToggleScrollPad={onToggleScrollPad} />
     );
 
     const button = screen.getByTestId('timeline-scroll-pad-toggle');
@@ -49,7 +49,7 @@ describe('TimelineToolbar scroll pad control', () => {
   });
 
   it('reports the pad being on', () => {
-    render(<TimelineToolbar {...base} offerScrollPad scrollPadOn />);
+    render(<TimelineToolbar {...base} scrollPadOn />);
     expect(screen.getByTestId('timeline-scroll-pad-toggle')).toHaveAttribute(
       'aria-pressed',
       'true'

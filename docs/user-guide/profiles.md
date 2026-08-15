@@ -36,9 +36,9 @@ If you have multiple profiles, tap on a profile card to switch to it. The app wi
 
 A virtual profile group is a named set of servers you view together. Switch into a group and the app pulls from every server in it at once instead of a single one.
 
-Once you have two or more profiles that aren't disabled, a **New Virtual Profile Group** button appears at the end of the profile list. Give the group a name and tick the servers it holds. A group needs at least one server, and its name has to be free: no other group and no profile can already be using it, since both appear side by side in the profile switcher. Groups can only hold profiles, never other groups. Dropping back below two enabled profiles removes the button, since there is nothing left to combine.
+Once you have two or more profiles that aren't disabled, a **New Virtual Profile Group** button appears at the end of the profile list. Give the group a name and tick the servers it holds; the dialog notes that aggregating several servers can be resource-heavy. A group needs at least one server, and its name has to be free: no other group and no profile can already be using it, since both appear side by side in the profile switcher. Groups can only hold profiles, never other groups. Dropping back below two enabled profiles removes the button, since there is nothing left to combine.
 
-Each group gets its own card at the end of the profile list, showing how many servers it holds and a note that aggregating several servers can be resource-heavy. Tap the card to switch into the group, or use its edit and delete icons. Those icons keep working when the button is gone, since editing or deleting is the only way out of that state. The profile switcher lists groups after the profiles, behind the same two-enabled-profiles rule as the button.
+Each group gets its own card at the end of the profile list, showing how many servers it holds. **Details** on the card lists the address of each server the group pulls from. Switch into the group with its **Switch** button, the same as a profile row; edit and delete live in the card's ⋮ menu. A group whose servers are all disabled or deleted offers no Switch at all, since it would land on empty screens; the menu keeps working, which is the only way out of that state. The profile switcher lists groups after the profiles, behind the same two-enabled-profiles rule as the button.
 
 A group aggregates Monitors, Montage, Events (including its montage/grid view), Timeline, Dashboard, and Live Activity. The Monitors and Montage screens show every camera from every server in the group, and each card or tile carries a chip naming the server it came from; Montage caps the total number of live streams it opens at once, so a large combined camera count doesn't try to open every stream from every server simultaneously. A toggle at the top of Monitors groups the cards by server instead of one flat list. Events and Timeline merge the group's history into one list, grid, or canvas, sorted by actual time across servers in different timezones, and each event carries the same server chip. If a server is unreachable while others respond, its data is skipped and an error strip with a retry button appears for it; data from every reachable server still shows. Tapping a monitor or event opens its detail directly, without switching the active profile first, and a push notification for any known server's event opens straight to that event the same way. The notification bell badge and its history sum the group's own unread counts and events. The app also remembers the last page you were on separately for each group and each profile, so switching into a group returns you to wherever you last left it there, not wherever the profile you switched from was showing.
 
@@ -54,7 +54,7 @@ Streaming Mode gets a third option while aggregating. A Streaming Mode row named
 
 Disabling a member profile drops it out of the group for as long as it stays disabled; re-enabling it brings it back. Deleting a profile removes it from every group that held it.
 
-A group can end up with nothing left to combine, if every server in it is disabled. It cannot be switched to in that state, since it would only show you empty screens, and its card says so in place of the server count. The card's edit and delete icons keep working, so you can add a server back to the group, or remove the group.
+A group can end up with nothing left to combine, if every server in it is disabled. It cannot be switched to in that state, since it would only show you empty screens, and its card says so in place of the server count. The card's ⋮ menu keeps working, so you can add a server back to the group, or remove the group.
 
 Every group keeps its own settings, and nothing is shared between them. Set one group's Streaming Mode to **Streaming** and every other group stays on whatever you left it on. Which servers you can pick from a screen's profile picker follows the group too, since those pickers list the servers in scope.
 
@@ -64,15 +64,21 @@ Deleting a group deletes the group and the settings it accumulated. The servers 
 
 ## Editing a Profile
 
-Tap the edit icon on a profile card to modify the connection details. You can change the URL, credentials, or display name.
+Choose **Edit** from a profile card's ⋮ menu to modify the connection details. You can change the URL, credentials, or display name.
+
+Each profile card keeps its portal, API, and streaming addresses behind
+**Details**. They are set once and only matter when something is wrong,
+so the card leads with the name, the badges, and the buttons instead.
 
 ## Disabling a Profile
 
-Tap the power icon on a profile card to disable it without deleting it. A disabled profile stays listed, greyed out with a **Disabled** badge, but can't be switched to and drops out of every group that holds it, including the count that decides whether a new group can be made at all. Tap the icon again to re-enable it.
+Choose **Disable** from a profile card's ⋮ menu to switch it off without deleting it. A disabled profile stays listed, greyed out with a **Disabled** badge, but can't be switched to and drops out of every group that holds it, including the count that decides whether a new group can be made at all. Choose **Enable** from the same menu to bring it back.
 
 ## Deleting a Profile
 
-Tap the delete icon on a profile card. You'll be asked to confirm before the profile is removed.
+Choose **Delete** from a profile card's ⋮ menu. You'll be asked to confirm before the profile is removed. The last remaining profile offers no Delete, since the app would have no server left to talk to.
+
+**Delete all profiles** lives in the ⋮ menu beside **Add Profile**, away from the buttons you reach for daily.
 
 ## Security
 

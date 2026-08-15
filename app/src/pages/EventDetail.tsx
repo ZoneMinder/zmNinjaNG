@@ -13,6 +13,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { canEditEvents } from '../lib/permissions/zm-permissions';
 import { useDeniedControl } from '../hooks/useDeniedControl';
 import { isPermissionDenied } from '../lib/permissions/permission-error';
+import { isNotFound } from '../lib/http/types';
 import { markPermissionDenied, useIsPermissionDenied } from '../stores/permissions';
 import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
@@ -32,7 +33,7 @@ import { Mp4EventPlayer } from '../components/events/Mp4EventPlayer';
 import { ZmsEventPlayer } from '../components/events/ZmsEventPlayer';
 import { EventFrameCarousel } from '../components/events/EventFrameCarousel';
 import { TagChip } from '../components/events/TagChip';
-import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, HardDrive, AlertTriangle, Download, Archive, ArchiveRestore, Video, Star, Timer, Tag, ChevronLeft, ChevronRight, ChevronsUpDown, Loader2, ListVideo } from 'lucide-react';
 import { getEventCauseIcon } from '../lib/event/event-icons';
 import { getObjectClassIconFromList } from '../lib/event/object-class-icons';
 import { useDateTimeFormat } from '../hooks/useDateTimeFormat';
@@ -241,7 +242,14 @@ export default function EventDetail() {
       log.eventDetail('Archive toggle failed', LogLevel.ERROR, { eventId: event.Event.Id, next, error: err });
       // The account may be too restricted to have been gated in advance, in
       // which case this refusal is the only explanation anyone gets (refs #344).
-      if (isPermissionDenied(err) && ownerProfileId) {
+      if (isNotFound(err) && ownerProfileId) {
+        // The event was deleted while this page was open, which a pruning
+        // server does routinely. Refreshing lets the page say so through its
+        // own error state instead of insisting the archive failed.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.events(ownerProfileId) });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.event(ownerProfileId, event.Event.Id) });
+        toast.error(t('events.event_gone'));
+      } else if (isPermissionDenied(err) && ownerProfileId) {
         markPermissionDenied(ownerProfileId, 'events-edit');
         toast.error(t('events.archive_permission_denied'));
       } else {
@@ -301,15 +309,19 @@ export default function EventDetail() {
   // Pinch-to-zoom and pan for event video/image
   // Page element for the tap-to-scroll affordance, shown when the player covers
   // the viewport and leaves no free surface to swipe (refs #365).
-  const pageRef = useRef<HTMLDivElement | null>(null);
-  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
-  const setPageNode = useCallback((el: HTMLDivElement | null) => {
-    pageRef.current = el;
-    setPageEl(el);
+  // This page brings its own scroller rather than scrolling the app shell's
+  // <main>, and it sits *below* the page root. The pad walks up from what it
+  // is given, so pointing it at the root would find only <main>, which does
+  // not scroll here, and every button would do nothing (refs #365).
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const setScrollerNode = useCallback((el: HTMLDivElement | null) => {
+    scrollerRef.current = el;
+    setScrollerEl(el);
   }, []);
 
   const zoomPan = useZoomPan({ maxScale: 4 });
-  const { offerPad, needsPad } = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const needsPad = useScrollAffordance(scrollerEl, zoomPan.containerEl);
   // Shown automatically when the player leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
   const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
@@ -462,7 +474,7 @@ export default function EventDetail() {
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
   return (
-    <div ref={setPageNode} className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -523,30 +535,29 @@ export default function EventDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          {offerPad && (
-            <Button
-              variant={showScrollPad ? 'secondary' : 'ghost'}
-              size="icon"
-              title={t('common.scroll_buttons')}
-              aria-label={t('common.scroll_buttons')}
-              aria-pressed={showScrollPad}
-              className="h-8 w-8 sm:h-9 sm:w-9"
-              onClick={toggleScrollPad}
-              data-testid="scroll-pad-toggle"
-            >
-              <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          )}
+          <Button
+            variant={showScrollPad ? 'default' : 'outline'}
+            size="icon"
+            title={t('common.scroll_buttons')}
+            aria-label={t('common.scroll_buttons')}
+            aria-pressed={showScrollPad}
+            className="h-8 w-8 sm:h-9 sm:w-9"
+            onClick={toggleScrollPad}
+            data-testid="scroll-pad-toggle"
+          >
+            <ChevronsUpDown className="h-4 w-4 sm:h-5 sm:w-5" />
+          </Button>
           <Button
             variant={isFav ? "default" : "outline"}
-            size="sm"
-            className="gap-2 h-8 sm:h-9"
+            aria-pressed={isFav}
+            size="icon"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             onClick={handleFavoriteToggle}
             title={isFav ? t('events.unfavorite') : t('events.favorite')}
+            aria-label={isFav ? t('events.unfavorite') : t('events.favorite')}
             data-testid="event-detail-favorite-button"
           >
             <Star className={isFav ? "h-4 w-4 fill-current" : "h-4 w-4"} />
-            <span className="hidden sm:inline">{isFav ? t('events.favorited') : t('events.favorite')}</span>
           </Button>
           <Button variant="outline" size="sm" className="gap-2 h-8 sm:h-9" onClick={() => navigate(routeProfileId ? `/all/monitors/${routeProfileId}/${event.Event.MonitorId}` : `/monitors/${event.Event.MonitorId}`)} title={t('event_detail.view_camera')} data-testid="event-detail-view-camera">
             <Video className="h-4 w-4" />
@@ -569,20 +580,29 @@ export default function EventDetail() {
             <span className="hidden sm:inline">{t('event_detail.continuous_play')}</span>
           </Button>
           <Button
-            variant={isArchived ? "default" : "outline"}
-            size="sm"
+            variant="outline"
+            aria-pressed={isArchived}
+            size="icon"
+            className="h-8 w-8 sm:h-9 sm:w-9"
             {...archiveProps}
             disabled={isArchiving}
+            aria-label={isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}
             data-testid="event-detail-archive"
           >
-            <Archive className={isArchived ? "h-4 w-4 fill-current" : "h-4 w-4"} />
-            <span className="hidden sm:inline">{isArchived ? t('event_detail.unarchive') : t('event_detail.archive')}</span>
+            {/* Same idiom as the event card: the icon says archived, the button
+                does not fill. A filled control here read as a white slab in the
+                dark themes, where primary is near-white. */}
+            {isArchived ? (
+              <ArchiveRestore className="h-4 w-4 stroke-primary" data-testid="event-detail-archive-icon-on" />
+            ) : (
+              <Archive className="h-4 w-4" data-testid="event-detail-archive-icon-off" />
+            )}
           </Button>
           {hasVideo && (
             <Button
               variant="outline"
-              size="sm"
-              className="gap-2 h-8 sm:h-9"
+              size="icon"
+              className="h-8 w-8 sm:h-9 sm:w-9"
               onClick={() => {
                 if (hasVideo && ownerProfile) {
                   downloadEventVideo(
@@ -597,10 +617,10 @@ export default function EventDetail() {
                 }
               }}
               title={t('event_detail.download_video')}
+              aria-label={t('event_detail.download_video')}
               data-testid="download-video-button"
             >
               <Download className="h-4 w-4" />
-              <span className="hidden sm:inline">{t('event_detail.download_video')}</span>
             </Button>
           )}
         </div>
@@ -609,6 +629,8 @@ export default function EventDetail() {
       {/* Main Content */}
       <div
         key={id}
+        ref={setScrollerNode}
+        data-testid="event-detail-scroller"
         className={cn(
           'flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto',
           incomingSlide === 'left' && 'event-slide-left',
@@ -834,7 +856,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {showScrollPad && <ScrollPad targetRef={pageRef} />}
+      {showScrollPad && <ScrollPad targetRef={scrollerRef} />}
     </div>
   );
 }

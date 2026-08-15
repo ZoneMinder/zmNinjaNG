@@ -358,6 +358,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
             <div className="flex flex-wrap gap-1 shrink-0">
                 <Button
                     variant={selectedRange === '24h' ? 'default' : 'outline'}
+                    aria-pressed={selectedRange === '24h'}
                     size="sm"
                     className="text-xs h-7 px-2"
                     onClick={() => setRange(24, '24h')}
@@ -366,6 +367,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </Button>
                 <Button
                     variant={selectedRange === '48h' ? 'default' : 'outline'}
+                    aria-pressed={selectedRange === '48h'}
                     size="sm"
                     className="text-xs h-7 px-2"
                     onClick={() => setRange(48, '48h')}
@@ -374,6 +376,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </Button>
                 <Button
                     variant={selectedRange === '1w' ? 'default' : 'outline'}
+                    aria-pressed={selectedRange === '1w'}
                     size="sm"
                     className="text-xs h-7 px-2"
                     onClick={() => setRangeDays(7, '1w')}
@@ -382,6 +385,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </Button>
                 <Button
                     variant={selectedRange === '2w' ? 'default' : 'outline'}
+                    aria-pressed={selectedRange === '2w'}
                     size="sm"
                     className="text-xs h-7 px-2"
                     onClick={() => setRangeDays(14, '2w')}
@@ -390,6 +394,7 @@ export const TimelineWidget = memo(function TimelineWidget() {
                 </Button>
                 <Button
                     variant={selectedRange === '1m' ? 'default' : 'outline'}
+                    aria-pressed={selectedRange === '1m'}
                     size="sm"
                     className="text-xs h-7 px-2"
                     onClick={() => setRangeDays(30, '1m')}

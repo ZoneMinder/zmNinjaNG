@@ -262,7 +262,8 @@
     "failed_to_load": "No se pudieron cargar los eventos: {{error}}",
     "delete_permission_denied": "Eliminar eventos requiere el permiso Events: Edit.",
     "archive_permission_denied": "Archivar eventos requiere el permiso Events: Edit.",
-    "no_event_permission": "Esta cuenta no tiene permisos de eventos."
+    "no_event_permission": "Esta cuenta no tiene permisos de eventos.",
+    "event_gone": "Este evento ya no existe en el servidor"
   },
   "event_detail": {
     "event_id": "ID de Evento",
@@ -1073,7 +1074,9 @@
     "delete_group_confirm_desc": "¿Eliminar el grupo \"{{name}}\"? Sus servidores no se eliminan.",
     "delete_group_success": "Grupo virtual de perfiles eliminado",
     "delete_group_error": "No se pudo eliminar el grupo virtual de perfiles",
-    "group_no_active_members": "Ningún servidor activo en este grupo"
+    "group_no_active_members": "Ningún servidor activo en este grupo",
+    "details": "Detalles",
+    "more_actions": "Más acciones"
   },
   "profile_picker": {
     "label": "Perfil"

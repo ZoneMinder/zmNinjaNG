@@ -181,6 +181,13 @@ Feature: Event Browsing and Management
     When I close the full-size event frame if events exist
     Then the full-size event frame is gone if events exist
 
+  @web
+  Scenario: The scroll pad scrolls the event detail page
+    When I click into the first event if events exist
+    And I show the scroll pad on the event
+    And I tap the event scroll pad down button
+    Then the event detail should have scrolled down
+
   @all
   Scenario: Collapsed frame carousel fetches no frame images
     When I click into the first event if events exist

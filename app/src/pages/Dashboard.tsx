@@ -53,6 +53,7 @@ export default function Dashboard() {
                             <RefreshButton size="sm" data-testid="dashboard-refresh-button" />
                             <Button
                                 variant={isEditing ? "default" : "outline"}
+                                aria-pressed={isEditing}
                                 size="sm"
                                 onClick={toggleEditMode}
                                 className={isEditing ? "bg-green-600 hover:bg-green-700" : ""}
