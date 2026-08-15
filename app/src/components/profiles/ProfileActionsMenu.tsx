@@ -53,7 +53,7 @@ export function ProfileActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuItem onSelect={onEdit} data-testid={`profile-edit-button-${targetId}`}>
-          <Edit className="h-4 w-4" />
+          <Edit className="h-4 w-4 mr-2" />
           {t('common.edit')}
         </DropdownMenuItem>
 
@@ -62,7 +62,7 @@ export function ProfileActionsMenu({
             onSelect={onToggleDisabled}
             data-testid={`profile-disable-toggle-${targetId}`}
           >
-            {disabled ? <Power className="h-4 w-4" /> : <PowerOff className="h-4 w-4" />}
+            {disabled ? <Power className="h-4 w-4 mr-2" /> : <PowerOff className="h-4 w-4 mr-2" />}
             {disabled ? t('profiles.enable') : t('profiles.disable')}
           </DropdownMenuItem>
         )}
@@ -73,7 +73,7 @@ export function ProfileActionsMenu({
             className="text-destructive focus:text-destructive"
             data-testid={`profile-delete-button-${targetId}`}
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="h-4 w-4 mr-2" />
             {t('common.delete')}
           </DropdownMenuItem>
         )}

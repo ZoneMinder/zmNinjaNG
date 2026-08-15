@@ -427,7 +427,7 @@ export default function Profiles() {
                           className="text-destructive focus:text-destructive"
                           data-testid="profiles-delete-all-button"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 mr-2" />
                           {t('profiles.delete_all')}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
