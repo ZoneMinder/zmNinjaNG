@@ -97,7 +97,10 @@ export function VirtualProfileDialog({ group, onClose }: VirtualProfileDialogPro
           <DialogTitle>
             {group ? t('profiles.group_edit_title') : t('profiles.group_create_title')}
           </DialogTitle>
-          <DialogDescription>{t('profiles.group_dialog_desc')}</DialogDescription>
+          <DialogDescription>
+            {t('profiles.group_dialog_desc')}{' '}
+            {t('profiles.group_resource_note')}
+          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-2">

@@ -423,9 +423,14 @@ export default function Profiles() {
                     data-testid="profile-card"
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
-                      {profile.id === currentProfile?.id && (
-                        <Check className="h-4 w-4 text-primary shrink-0" data-testid="profile-active-indicator" />
-                      )}
+                      {/* Always present, empty when this is not the current
+                          profile, so selecting a row does not shift its name
+                          and badges sideways. */}
+                      <span className="w-4 shrink-0">
+                        {profile.id === currentProfile?.id && (
+                          <Check className="h-4 w-4 text-primary" data-testid="profile-active-indicator" />
+                        )}
+                      </span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium" data-testid="profile-name">{profile.name}</span>
@@ -437,11 +442,7 @@ export default function Profiles() {
                               {t('profiles.disabled')}
                             </Badge>
                           )}
-                          {profile.username && profile.password ? (
-                            <Badge variant="outline" className="text-xs text-green-600 dark:text-green-400 border-green-600 dark:border-green-400">
-                              ✓ {t('profiles.credentials')}
-                            </Badge>
-                          ) : (
+                          {!(profile.username && profile.password) && (
                             <Badge variant="outline" className="text-xs text-orange-600 dark:text-orange-400 border-orange-600 dark:border-orange-400">
                               ⚠ {t('profiles.no_credentials')}
                             </Badge>

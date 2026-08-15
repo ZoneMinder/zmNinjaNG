@@ -76,32 +76,35 @@ describe('VirtualProfileCard', () => {
     expect(onSwitch).not.toHaveBeenCalled();
   });
 
-  it('still switches when the card itself takes the key', async () => {
+  it('switches from its own button, like a profile row', async () => {
     const user = userEvent.setup();
     renderCard();
 
-    screen.getByTestId(`profile-card-virtual-${GROUP.id}`).focus();
-    await user.keyboard('{Enter}');
+    await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
     expect(onSwitch).toHaveBeenCalledTimes(1);
     expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('does not switch when the card body is clicked', async () => {
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+
+    // The card is a container, not a control: a stray tap on it while reading
+    // the member list should not move the whole app to another server.
+    expect(onSwitch).not.toHaveBeenCalled();
   });
 
   // A group whose members are all disabled or deleted aggregates nothing, and
   // switching to it lands on empty screens with no way to tell why. The card
   // stays fully editable and deletable, which is the only way back.
   describe('with no active members', () => {
-    it('refuses to switch by click or key', async () => {
-      const user = userEvent.setup();
+    it('offers no switch at all', () => {
       renderCard({ activeMemberCount: 0 });
 
-      const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
-      await user.click(card);
-      card.focus();
-      await user.keyboard('{Enter}');
-
-      expect(onSwitch).not.toHaveBeenCalled();
-      expect(card).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.queryByTestId(`profile-virtual-switch-${GROUP.id}`)).not.toBeInTheDocument();
     });
 
     it('says so instead of counting members', () => {

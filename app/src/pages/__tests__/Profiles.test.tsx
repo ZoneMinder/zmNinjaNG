@@ -221,7 +221,7 @@ describe('Profiles Page', () => {
       useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
     });
 
-    it('names the group, counts its members, and warns about the cost', () => {
+    it('names the group and counts its members', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
@@ -229,7 +229,6 @@ describe('Profiles Page', () => {
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
       expect(card).toHaveTextContent('Backyard');
       expect(card).toHaveTextContent('profiles.group_member_count:{"count":1}');
-      expect(card).toHaveTextContent('profiles.group_resource_note');
     });
 
     it('renders group cards after every profile card', () => {
@@ -251,12 +250,12 @@ describe('Profiles Page', () => {
       expect(card.querySelector('[data-testid="profile-active-indicator"]')).toBeInTheDocument();
     });
 
-    it('switches to the group id when its card is clicked', async () => {
+    it('switches to the group id from its switch button', async () => {
       const user = userEvent.setup();
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
       expect(switchProfileMock).toHaveBeenCalledWith(GROUP.id);
       expect(mockNavigate).toHaveBeenCalledWith('/monitors');
@@ -270,7 +269,7 @@ describe('Profiles Page', () => {
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
-      await user.click(screen.getByTestId(`profile-card-virtual-${GROUP.id}`));
+      await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
       expect(mockNavigate).toHaveBeenCalledWith('/events');
       delete savedRoutes[GROUP.id];
