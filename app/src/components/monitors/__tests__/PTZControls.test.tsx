@@ -172,3 +172,66 @@ describe('PTZControls without control permission', () => {
     expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
   });
 });
+
+/**
+ * The pad must offer only the axes the driver has. ZoneMinder's own pad hides
+ * up/down without CanTilt and left/right without CanPan
+ * (skins/classic/includes/control_functions.php); a pan-only driver such as a
+ * single-servo mount rejects every tilt command, so an arrow that sends one is
+ * a button that cannot work.
+ *
+ * `invisible` keeps the 3x3 grid from reflowing, which is how the diagonals
+ * were already handled.
+ */
+describe('PTZControls axis capabilities', () => {
+  const isHidden = (testId: string) =>
+    screen.getByTestId(testId).className.includes('invisible');
+
+  it('hides the tilt arrows and keeps pan when the driver cannot tilt', () => {
+    const panOnly = {
+      CanMove: '1', CanMoveCon: '1', CanPan: '1', CanTilt: '0',
+    } as unknown as ZMControl;
+
+    render(<PTZControls onCommand={vi.fn()} control={panOnly} />);
+
+    expect(isHidden('ptz-up')).toBe(true);
+    expect(isHidden('ptz-down')).toBe(true);
+    expect(isHidden('ptz-left')).toBe(false);
+    expect(isHidden('ptz-right')).toBe(false);
+  });
+
+  it('hides the pan arrows and keeps tilt when the driver cannot pan', () => {
+    const tiltOnly = {
+      CanMove: '1', CanMoveCon: '1', CanPan: '0', CanTilt: '1',
+    } as unknown as ZMControl;
+
+    render(<PTZControls onCommand={vi.fn()} control={tiltOnly} />);
+
+    expect(isHidden('ptz-left')).toBe(true);
+    expect(isHidden('ptz-right')).toBe(true);
+    expect(isHidden('ptz-up')).toBe(false);
+    expect(isHidden('ptz-down')).toBe(false);
+  });
+
+  it('hides the diagonals when an axis is missing, even with CanMoveDiag', () => {
+    const panOnlyDiag = {
+      CanMove: '1', CanMoveCon: '1', CanPan: '1', CanTilt: '0', CanMoveDiag: '1',
+    } as unknown as ZMControl;
+
+    render(<PTZControls onCommand={vi.fn()} control={panOnlyDiag} />);
+
+    for (const id of ['ptz-up-left', 'ptz-up-right', 'ptz-down-left', 'ptz-down-right']) {
+      expect(isHidden(id)).toBe(true);
+    }
+  });
+
+  it('shows every arrow when a control definition omits the axis fields', () => {
+    const legacy = { CanMove: '1', CanMoveCon: '1', CanMoveDiag: '1' } as unknown as ZMControl;
+
+    render(<PTZControls onCommand={vi.fn()} control={legacy} />);
+
+    for (const id of ['ptz-up', 'ptz-down', 'ptz-left', 'ptz-right', 'ptz-up-left']) {
+      expect(isHidden(id)).toBe(false);
+    }
+  });
+});
