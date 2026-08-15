@@ -33,6 +33,11 @@ export function AssistantWidget() {
         <Button
           type="button"
           onClick={open}
+          // size="icon" for the padding, not the box: the default size carries
+          // px-4, which in a 48px circle leaves 16px of content width and
+          // squeezed the logo narrower than it is tall before object-contain
+          // letterboxed it back.
+          size="icon"
           aria-label={t('assistant.reopen')}
           data-testid="assistant-fab"
           // bottom-20 (not bottom-4) offsets this above BackgroundTaskDrawer's
@@ -40,7 +45,11 @@ export function AssistantWidget() {
           className="fixed bottom-20 right-4 z-50 h-12 w-12 rounded-full shadow-lg"
         >
           {/* decorative: the button's own aria-label already names Ninjii */}
-          <img src={NINJII_LOGO_URL} alt="" className="h-7 w-7 rounded-full object-contain" />
+          <img
+            src={NINJII_LOGO_URL}
+            alt=""
+            className="h-full w-full rounded-full object-contain p-1.5"
+          />
         </Button>
       )}
 
