@@ -13,6 +13,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { LiveActivityTile } from '../LiveActivityTile';
 import type { ActiveMonitorEntry } from '../../../lib/monitor/live-activity';
 import type { Monitor, Profile } from '../../../api/types';
+import type { ProfileId } from '../../../api/types';
 
 const propCalls = vi.hoisted(() => [] as Record<string, unknown>[]);
 
@@ -239,5 +240,40 @@ describe('LiveActivityTile', () => {
     );
 
     expect(Object.is(propCalls[0].titleIcon, propCalls[1].titleIcon)).toBe(false);
+  });
+
+  it('opens the monitor when its media is activated', () => {
+    renderTile(EPISODE_START);
+
+    // Montage navigates from a wrapper around the whole tile; this page has no
+    // such wrapper, so the media area carries it.
+    const props = propCalls.at(-1)!;
+    (props.onMediaActivate as () => void)();
+
+    expect(navigate).toHaveBeenCalledWith('/monitors/3', { state: { from: '/live-activity' } });
+  });
+
+  it('opens the owning server monitor while aggregating', () => {
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={MONITOR}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        rowSpan={ROW_SPAN}
+        onDismiss={onDismiss}
+        profileId={'p2' as ProfileId}
+      />
+    );
+
+    const props = propCalls.at(-1)!;
+    (props.onMediaActivate as () => void)();
+
+    expect(navigate).toHaveBeenCalledWith('/all/monitors/p2/3', {
+      state: { from: '/live-activity' },
+    });
   });
 });

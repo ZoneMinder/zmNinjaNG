@@ -7,7 +7,7 @@
  * already near its size limit.
  */
 
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { NavigateFunction } from 'react-router-dom';
@@ -85,6 +85,17 @@ export function LiveActivityTile({
     getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation) ??
     MONITOR_UI.fallbackAspectRatio;
 
+  // Stable identity: the elapsed label re-renders this component every second,
+  // and a fresh function here would defeat MontageMonitor's memo and re-render
+  // live video with it. Deep route while aggregating, so the monitor opens
+  // against its own server without switching the active profile (refs #337).
+  const openMonitor = useCallback(() => {
+    navigate(
+      profileId ? `/all/monitors/${profileId}/${monitor.Id}` : `/monitors/${monitor.Id}`,
+      { state: { from: '/live-activity' } },
+    );
+  }, [navigate, profileId, monitor.Id]);
+
   return (
     <div
       // Enter: a tile fades and scales up over 200ms instead of popping into
@@ -139,6 +150,11 @@ export function LiveActivityTile({
         titleIcon={titleIcon}
         mediaAspectRatio={mediaAspectRatio}
         fromRoute="/live-activity"
+        // Montage opens a monitor from a wrapper around the whole tile; this
+        // page has none, so the media area is the target. Deep route while
+        // aggregating, so the monitor opens against its own server without
+        // switching the active profile first (refs #337).
+        onMediaActivate={openMonitor}
       />
       {/* Sits where the alarm-count badge used to, clear of the tile header's
           own buttons. stopPropagation so clearing a tile never doubles as a
