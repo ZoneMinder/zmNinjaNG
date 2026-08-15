@@ -1074,7 +1074,8 @@
     "delete_group_confirm_desc": "Gruppe \"{{name}}\" löschen? Ihre Server bleiben erhalten.",
     "delete_group_success": "Virtuelle Profilgruppe gelöscht",
     "delete_group_error": "Virtuelle Profilgruppe konnte nicht gelöscht werden",
-    "group_no_active_members": "Keine aktiven Server in dieser Gruppe"
+    "group_no_active_members": "Keine aktiven Server in dieser Gruppe",
+    "server_details": "Serverdetails"
   },
   "profile_picker": {
     "label": "Profil"

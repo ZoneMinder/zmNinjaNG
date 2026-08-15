@@ -30,13 +30,16 @@ const onSwitch = vi.fn();
 const onEdit = vi.fn();
 const onDelete = vi.fn();
 
-function renderCard(overrides: { activeMemberCount?: number } = {}) {
+function renderCard(
+  overrides: { activeMemberCount?: number; memberUrls?: { label: string; url: string }[] } = {}
+) {
   return render(
     <VirtualProfileCard
       group={GROUP}
       isActive={false}
       isSwitching={false}
       activeMemberCount={overrides.activeMemberCount ?? 2}
+      memberUrls={overrides.memberUrls ?? []}
       onSwitch={onSwitch}
       onEdit={onEdit}
       onDelete={onDelete}
@@ -128,5 +131,28 @@ describe('VirtualProfileCard', () => {
     expect(screen.getByTestId(`profile-card-virtual-${GROUP.id}`)).toHaveTextContent(
       'profiles.group_member_count:{"count":2}'
     );
+  });
+
+  it('names the servers it aggregates, once opened', async () => {
+    renderCard({
+      memberUrls: [
+        { label: 'Home', url: 'https://home.example.com/zm' },
+        { label: 'Office', url: 'https://office.example.com/zm' },
+      ],
+    });
+
+    // Folded away: the card is about the group, not its plumbing.
+    expect(screen.queryByText('https://home.example.com/zm')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId(`profile-urls-virtual-${GROUP.id}-toggle`));
+    expect(screen.getByText('https://home.example.com/zm')).toBeInTheDocument();
+    expect(screen.getByText('https://office.example.com/zm')).toBeInTheDocument();
+  });
+
+  it('opening the addresses does not switch to the group', async () => {
+    renderCard({ memberUrls: [{ label: 'Home', url: 'https://home.example.com/zm' }] });
+
+    await userEvent.click(screen.getByTestId(`profile-urls-virtual-${GROUP.id}-toggle`));
+    expect(onSwitch).not.toHaveBeenCalled();
   });
 });

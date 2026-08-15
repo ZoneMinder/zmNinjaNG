@@ -41,6 +41,7 @@ import { Badge } from '../components/ui/badge';
 import type { Profile, VirtualProfile } from '../api/types';
 import { isAggregateProfileId } from '../api/types';
 import { VirtualProfileCard } from '../components/profiles/VirtualProfileCard';
+import { ServerUrlDisclosure } from '../components/profiles/ServerUrlDisclosure';
 import { countActiveMembers } from '../lib/profile/virtual-profile';
 import { resolveSwitchDestination } from '../lib/navigation';
 import { VirtualProfileDialog } from '../components/profiles/VirtualProfileDialog';
@@ -446,17 +447,14 @@ export default function Profiles() {
                             </Badge>
                           )}
                         </div>
-                        <div className="space-y-1 text-xs font-mono">
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.portal')}:</span> {profile.portalUrl}
-                          </p>
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.api')}:</span> {profile.apiUrl}
-                          </p>
-                          <p className="text-muted-foreground break-all">
-                            <span className="font-sans font-medium text-foreground">{t('profiles.streaming')}:</span> {profile.cgiUrl}
-                          </p>
-                        </div>
+                        <ServerUrlDisclosure
+                          testId={`profile-urls-${profile.id}`}
+                          rows={[
+                            { label: t('profiles.portal'), url: profile.portalUrl },
+                            { label: t('profiles.api'), url: profile.apiUrl },
+                            { label: t('profiles.streaming'), url: profile.cgiUrl },
+                          ].filter((row) => row.url)}
+                        />
                         {!(profile.username && profile.password) && (
                           <p className="text-xs text-orange-600 dark:text-orange-400 mt-1">
                             {t('profiles.add_creds_hint')}
@@ -528,6 +526,13 @@ export default function Profiles() {
                   group={group}
                   isActive={currentProfileId === group.id}
                   isSwitching={switchingProfileId === group.id}
+                  // The stored membership in stored order, so the list reads
+                  // the way the group was built. A member that no longer
+                  // exists simply drops out.
+                  memberUrls={group.memberProfileIds
+                    .map((id) => profiles.find((p) => p.id === id))
+                    .filter((p): p is Profile => !!p)
+                    .map((p) => ({ label: p.name, url: p.portalUrl }))}
                   activeMemberCount={countActiveMembers(group, profiles)}
                   onSwitch={() => handleSwitchProfile(group.id)}
                   onEdit={() => setGroupDialog({ group })}

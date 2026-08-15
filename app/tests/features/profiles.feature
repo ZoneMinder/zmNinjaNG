@@ -12,6 +12,12 @@ Feature: Profile Management
     Then I should see at least 1 profile cards
 
   @all
+  Scenario: Server addresses stay folded away until asked for
+    Then the profile server addresses should be hidden
+    When I open the profile server addresses
+    Then I should see the profile portal address
+
+  @all
   Scenario: Active profile has a visible indicator
     Then I should see the active profile indicator
 

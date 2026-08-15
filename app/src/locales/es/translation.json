@@ -1074,7 +1074,8 @@
     "delete_group_confirm_desc": "¿Eliminar el grupo \"{{name}}\"? Sus servidores no se eliminan.",
     "delete_group_success": "Grupo virtual de perfiles eliminado",
     "delete_group_error": "No se pudo eliminar el grupo virtual de perfiles",
-    "group_no_active_members": "Ningún servidor activo en este grupo"
+    "group_no_active_members": "Ningún servidor activo en este grupo",
+    "server_details": "Detalles del servidor"
   },
   "profile_picker": {
     "label": "Perfil"

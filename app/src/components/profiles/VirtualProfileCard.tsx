@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Check, Edit, Layers, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { VirtualProfile } from '../../api/types';
+import { ServerUrlDisclosure, type ServerUrlRow } from './ServerUrlDisclosure';
 
 interface VirtualProfileCardProps {
   group: VirtualProfile;
@@ -20,6 +21,9 @@ interface VirtualProfileCardProps {
   /** Members this group can actually aggregate: `countActiveMembers`. Zero
    *  makes the card unswitchable, never unmanageable. */
   activeMemberCount: number;
+  /** One row per member server: its name and portal address. Folded away by
+   *  default - a group is chosen by name, and read for what it aggregates. */
+  memberUrls: ServerUrlRow[];
   onSwitch: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -30,6 +34,7 @@ export function VirtualProfileCard({
   isActive,
   isSwitching,
   activeMemberCount,
+  memberUrls,
   onSwitch,
   onEdit,
   onDelete,
@@ -83,6 +88,7 @@ export function VirtualProfileCard({
           >
             {t('profiles.group_resource_note')}
           </p>
+          <ServerUrlDisclosure rows={memberUrls} testId={`profile-urls-virtual-${group.id}`} />
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">

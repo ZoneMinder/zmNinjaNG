@@ -269,3 +269,33 @@ Then('the delete all profiles buttons should be reachable', async ({ page }) => 
   }
   await page.getByTestId('profiles-delete-all-cancel').click();
 });
+
+Then('the profile server addresses should be hidden', async ({ page }) => {
+  const first = page.locator('[data-testid="profile-card"]').first();
+  await expect(first.locator('[data-testid^="profile-urls-"][data-testid$="-toggle"]')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+  // The toggle exists; the addresses it guards do not.
+  await expect(
+    first.locator('[data-testid^="profile-urls-"]:not([data-testid$="-toggle"])')
+  ).toHaveCount(0);
+});
+
+When('I open the profile server addresses', async ({ page }) => {
+  await page
+    .locator('[data-testid="profile-card"]')
+    .first()
+    .locator('[data-testid^="profile-urls-"][data-testid$="-toggle"]')
+    .click();
+});
+
+Then('I should see the profile portal address', async ({ page }) => {
+  const urls = page
+    .locator('[data-testid="profile-card"]')
+    .first()
+    .locator('[data-testid^="profile-urls-"]:not([data-testid$="-toggle"])');
+  await expect(urls).toBeVisible({ timeout: testConfig.timeouts.element });
+  // A real address, not an empty shell: every profile has a portal URL.
+  await expect(urls).toContainText(/https?:\/\//);
+});
+
