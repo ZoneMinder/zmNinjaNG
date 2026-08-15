@@ -64,6 +64,7 @@ function renderTile(now: number, entry: ActiveMonitorEntry = ENTRY) {
       now={now}
       rowSpan={ROW_SPAN}
       onDismiss={onDismiss}
+      hoverPreview={false}
     />
   );
 }
@@ -114,6 +115,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START + 5_000}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
 
@@ -150,6 +152,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START}
         rowSpan={undefined}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
     expect(screen.getByTestId('live-activity-tile').style.gridRowEnd).toBe('');
@@ -188,6 +191,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
     const [w, h] = String(propCalls[0].mediaAspectRatio).split('/').map(Number);
@@ -236,6 +240,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START + 1_000}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
       />
     );
 
@@ -265,6 +270,7 @@ describe('LiveActivityTile', () => {
         now={EPISODE_START}
         rowSpan={ROW_SPAN}
         onDismiss={onDismiss}
+        hoverPreview={false}
         profileId={'p2' as ProfileId}
       />
     );
@@ -275,5 +281,26 @@ describe('LiveActivityTile', () => {
     expect(navigate).toHaveBeenCalledWith('/all/monitors/p2/3', {
       state: { from: '/live-activity' },
     });
+  });
+
+  it('passes the hover-preview setting through to the monitor', () => {
+    render(
+      <LiveActivityTile
+        entry={ENTRY}
+        monitor={MONITOR}
+        status={undefined}
+        currentProfile={PROFILE}
+        accessToken="t"
+        navigate={navigate}
+        now={EPISODE_START}
+        rowSpan={ROW_SPAN}
+        onDismiss={onDismiss}
+        hoverPreview
+      />
+    );
+
+    // A four-link prop chain from the page's settings to the player is where
+    // a wire quietly comes loose.
+    expect(propCalls.at(-1)!.hoverPreview).toBe(true);
   });
 });

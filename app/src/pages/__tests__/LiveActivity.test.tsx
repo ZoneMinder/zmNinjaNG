@@ -57,12 +57,21 @@ vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
   AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
 }));
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-    settings: env.settings,
-  }),
-}));
+// Async so the real defaults can be pulled in: `env` is vi.hoisted and runs
+// before imports, so it cannot name one itself. The page reads nested settings
+// such as hoverPreview, and a fixture listing only what today's tests touch
+// breaks on the next key that lands (testing playbook).
+vi.mock('../../hooks/useCurrentProfile', async () => {
+  const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
+    '../../stores/settings',
+  );
+  return {
+    useCurrentProfile: () => ({
+      currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
+      settings: { ...DEFAULT_SETTINGS, ...env.settings },
+    }),
+  };
+});
 
 // LiveActivity.tsx reads currentProfileId via useProfileStore directly (not
 // through useCurrentProfile, which resolves to null in All mode) - same
@@ -610,10 +619,15 @@ describe('LiveActivity', () => {
     // needs a fresh module graph: reset it, doMock the override, then
     // re-import both the page and the mocked API functions it will resolve to.
     vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', () => ({
+    vi.doMock('../../hooks/useCurrentProfile', async () => {
+      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
+        '../../stores/settings',
+      );
+      return {
       useCurrentProfile: () => ({
         currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
         settings: {
+          ...DEFAULT_SETTINGS,
           liveActivityPollSeconds: 5,
           liveActivityDwellSeconds: 30,
           liveActivityMaxTiles: 12,
@@ -622,7 +636,8 @@ describe('LiveActivity', () => {
           monitorGridCols: 2,
         },
       }),
-    }));
+      };
+    });
 
     const { default: LiveActivityWithIgnore } = await import('../LiveActivity');
     const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
@@ -672,10 +687,15 @@ describe('LiveActivity', () => {
     // tail: exactly the window before a tile dwells out. Winding down is
     // signalled by the state icon dropping out of the header instead. refs #313
     vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', () => ({
+    vi.doMock('../../hooks/useCurrentProfile', async () => {
+      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
+        '../../stores/settings',
+      );
+      return {
       useCurrentProfile: () => ({
         currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
         settings: {
+          ...DEFAULT_SETTINGS,
           liveActivityPollSeconds: 5,
           liveActivityDwellSeconds: 30,
           liveActivityMaxTiles: 12,
@@ -684,7 +704,8 @@ describe('LiveActivity', () => {
           monitorGridCols: 2,
         },
       }),
-    }));
+      };
+    });
     vi.doMock('../../stores/notifications', () => ({
       resolvePollIntervalMs: () => 20,
       useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
@@ -727,10 +748,15 @@ describe('LiveActivity', () => {
     // back to a plain update). A tile that stopped alarming still has to
     // leave, which is what proves the fallback path publishes anything at all.
     vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', () => ({
+    vi.doMock('../../hooks/useCurrentProfile', async () => {
+      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
+        '../../stores/settings',
+      );
+      return {
       useCurrentProfile: () => ({
         currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
         settings: {
+          ...DEFAULT_SETTINGS,
           liveActivityPollSeconds: 5,
           // 10ms of dwell, so the window closes between two fast polls.
           liveActivityDwellSeconds: 0.01,
@@ -740,7 +766,8 @@ describe('LiveActivity', () => {
           monitorGridCols: 2,
         },
       }),
-    }));
+      };
+    });
     vi.doMock('../../stores/notifications', () => ({
       resolvePollIntervalMs: () => 20,
       useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>

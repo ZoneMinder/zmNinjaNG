@@ -615,7 +615,8 @@
         "notifications": "Notificaciones",
         "assistant": "Tarjetas del asistente",
         "playback_speed": "Velocidad",
-        "playback_speed_desc": "Velocidad de previsualización de eventos."
+        "playback_speed_desc": "Velocidad de previsualización de eventos.",
+        "live_activity": "Mosaicos de Actividad en vivo"
       }
     }
   },

@@ -29,6 +29,8 @@ interface LiveActivityTileProps {
   currentProfile: Profile | null;
   accessToken: string | null;
   navigate: NavigateFunction;
+  /** Whether a tile's video opens the enlarged preview on hover. */
+  hoverPreview: boolean;
   /** All mode only: the owning profile's id/display name, threaded straight
    *  through to MontageMonitor (its LiveMonitorPlayer cache-key scoping,
    *  events watermark, and profile chip). Undefined in single mode. */
@@ -54,6 +56,7 @@ export function LiveActivityTile({
   currentProfile,
   accessToken,
   navigate,
+  hoverPreview,
   profileId,
   profileChip,
   now,
@@ -150,6 +153,7 @@ export function LiveActivityTile({
         titleIcon={titleIcon}
         mediaAspectRatio={mediaAspectRatio}
         fromRoute="/live-activity"
+        hoverPreview={hoverPreview}
         // Montage opens a monitor from a wrapper around the whole tile; this
         // page has none, so the media area is the target. Deep route while
         // aggregating, so the monitor opens against its own server without

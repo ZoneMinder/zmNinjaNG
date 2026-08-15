@@ -102,11 +102,25 @@ vi.mock('../../../hooks/useServerUrls', () => ({
   }),
 }));
 
-vi.mock('../../../stores/auth', () => ({
-  useAuthStore: (selector: (state: { version: string }) => unknown) =>
-    selector({ version: '1.38.0' }),
-  useAuthSlice: () => ({ version: '1.38.0' }),
-}));
+// Partial: the hover preview this component can now wrap its player in pulls
+// in the stream lifecycle, which registers its resolver against this module on
+// import. A hand-listed mock drops that export and the whole file fails to
+// load rather than any one test failing.
+// The hover preview this component can now wrap its player in pulls in the
+// stream lifecycle, which registers a resolver against this module and
+// subscribes to the store. Keep the hand-written selector shape the tests
+// rely on, and add what the new import path needs.
+vi.mock('../../../stores/auth', () => {
+  const useAuthStore = Object.assign(
+    (selector: (state: { version: string }) => unknown) => selector({ version: '1.38.0' }),
+    { subscribe: () => () => {}, getState: () => ({ version: '1.38.0' }) },
+  );
+  return {
+    useAuthStore,
+    useAuthSlice: () => ({ version: '1.38.0' }),
+    registerAuthClientResolver: () => {},
+  };
+});
 
 vi.mock('../../../stores/notifications', () => {
   const state = { profileEvents: {} };

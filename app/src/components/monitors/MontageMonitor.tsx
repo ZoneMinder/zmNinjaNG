@@ -25,6 +25,7 @@ import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ProfileChip } from '../ui/profile-chip';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
+import { MonitorHoverPreview } from './MonitorHoverPreview';
 import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { downloadSnapshotFromElement } from '../../services/download';
@@ -113,6 +114,11 @@ interface MontageMonitorProps {
    */
   onMediaActivate?: () => void;
   /**
+   * Wraps the player in the enlarged hover preview, as the monitor cards do.
+   * The caller decides, because the setting that gates it is per surface.
+   */
+  hoverPreview?: boolean;
+  /**
    * Ask ZM for a cheaper stream for this tile (All-mode "reduced" stream
    * tuning, refs #337). Decided by the page - Montage sets it while
    * aggregating, Live Activity does not - and forwarded untouched to the
@@ -153,6 +159,7 @@ function MontageMonitorComponent({
   mediaAspectRatio,
   fromRoute = '/montage',
   onMediaActivate,
+  hoverPreview = false,
   reduceStream = false,
   paused = false,
   forceViewMode,
@@ -407,19 +414,32 @@ function MontageMonitorComponent({
         }
         data-testid="montage-monitor-media"
       >
-        <LiveMonitorPlayer
-          monitor={monitor}
-          profile={currentProfile}
-          profileId={profileId}
-          externalMediaRef={mediaRef}
-          objectFit={resolvedFit}
-          muted={isMuted}
-          className="w-full h-full"
-          onProtocolChange={setProtocol}
-          reduceStream={reduceStream}
-          paused={paused}
-          forceViewMode={forceViewMode}
-        />
+        {(() => {
+          const player = (
+            <LiveMonitorPlayer
+              monitor={monitor}
+              profile={currentProfile}
+              profileId={profileId}
+              externalMediaRef={mediaRef}
+              objectFit={resolvedFit}
+              muted={isMuted}
+              className="w-full h-full"
+              onProtocolChange={setProtocol}
+              reduceStream={reduceStream}
+              paused={paused}
+              forceViewMode={forceViewMode}
+            />
+          );
+          // Same wrapper the monitor cards use, so the preview behaves the
+          // same everywhere: desktop only, its own connkey, torn down on close.
+          return hoverPreview ? (
+            <MonitorHoverPreview monitor={monitor} profileId={profileId}>
+              {player}
+            </MonitorHoverPreview>
+          ) : (
+            player
+          );
+        })()}
         {settings.montageShowToolbar && settings.showProtocolLabel && (
           <span className="absolute bottom-1.5 right-1.5 z-30 text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white/90 font-medium pointer-events-none">
             {protocol}

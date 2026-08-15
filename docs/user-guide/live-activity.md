@@ -4,6 +4,8 @@ Live Activity shows only the cameras that ZoneMinder currently reports as alarmi
 
 Tapping a tile's video opens that camera's monitor page, the same as tapping one in Montage; on a computer the tile outlines itself as you hover to show it will. The X in the corner dismisses a tile instead, and the buttons in its header still do their own jobs.
 
+On a computer, hovering a tile can also open an enlarged live preview, the same one the monitor and event lists offer. It is off here by default, since a tile is already streaming that camera at size and the preview opens a second connection for a bigger copy; turn it on under Settings ▸ Appearance ▸ Hover preview ▸ **Live Activity tiles**.
+
 ## Why a monitor lingers after its alarm clears
 
 A monitor does not disappear the instant its alarm clears. It stays on screen for a short dwell window (30 seconds by default) after its last alarm, then leaves. This is not just to avoid a jarring flicker: each tile that appears or disappears opens or closes a live video connection to the server. A monitor that flickered in and out of alarm every few seconds would open and close that connection just as fast, which is unnecessary load on the server. The dwell window smooths that out.

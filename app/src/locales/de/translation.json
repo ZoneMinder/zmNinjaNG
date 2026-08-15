@@ -615,7 +615,8 @@
         "notifications": "Benachrichtigungen",
         "assistant": "Assistent-Karten",
         "playback_speed": "Geschwindigkeit",
-        "playback_speed_desc": "Tempo der Ereignis-Vorschau bei Hover/Druck."
+        "playback_speed_desc": "Tempo der Ereignis-Vorschau bei Hover/Druck.",
+        "live_activity": "Live-Aktivität-Kacheln"
       }
     }
   },
