@@ -54,7 +54,10 @@
     "scroll_up": "Monter",
     "scroll_down": "Descendre",
     "scroll_bottom": "Aller en bas",
-    "scroll_buttons": "Boutons de défilement"
+    "scroll_buttons": "Boutons de défilement",
+    "view_options": "Options d'affichage",
+    "fit_whole_image": "Ajuster l'image entière",
+    "crop_to_fill": "Rogner pour remplir"
   },
   "app": {
     "name": "zmNinjaNg",

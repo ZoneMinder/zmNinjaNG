@@ -37,6 +37,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     expect(screen.getByTestId('montage-kebab-menu')).toBeInTheDocument();
@@ -51,6 +53,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -66,6 +70,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -89,6 +95,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -109,6 +117,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -128,6 +138,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -149,6 +161,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -167,6 +181,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -191,6 +207,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -209,6 +227,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
       scrollPadOn={false}
       onToggleScrollPad={vi.fn()}
+      feedFit="contain"
+      onFeedFitChange={vi.fn()}
       />
     );
     await user.click(screen.getByTestId('montage-kebab-menu'));
@@ -226,6 +246,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
         scrollPadOn={false}
         onToggleScrollPad={onToggleScrollPad}
+        feedFit="contain"
+        onFeedFitChange={vi.fn()}
       />
     );
 
@@ -245,6 +267,8 @@ describe('MontageKebabMenu', () => {
         onToggleVisibility={onToggleVisibility}
         scrollPadOn
         onToggleScrollPad={vi.fn()}
+        feedFit="contain"
+        onFeedFitChange={vi.fn()}
       />
     );
 

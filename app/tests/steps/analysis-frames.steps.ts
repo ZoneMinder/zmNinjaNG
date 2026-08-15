@@ -1,5 +1,5 @@
 import { createBdd } from 'playwright-bdd';
-import { expect } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { testConfig } from '../helpers/config';
 import { ZMS_COMMANDS } from '../../src/lib/zm/zm-constants';
 import { log } from '../../src/lib/logger';
@@ -60,9 +60,13 @@ async function clickAnalysisToggle(page: import('@playwright/test').Page): Promi
       component: 'e2e',
     });
   }
+  await openViewOptions(page);
   const toggle = page.getByTestId('analysis-frames-toggle');
   await expect(toggle).toBeEnabled();
   await toggle.click();
+  // The item keeps the menu open, so close it before anything asserts on the
+  // page underneath.
+  await page.keyboard.press('Escape');
 }
 
 When('I turn analysis frames on', async ({ page }) => {
@@ -101,9 +105,27 @@ Then('the analysis-on command should be re-sent for the new stream', async ({ pa
 });
 
 Then('the analysis frames toggle should be active', async ({ page }) => {
-  await expect(page.getByTestId('analysis-frames-toggle')).toHaveAttribute('aria-pressed', 'true');
+  await openViewOptions(page);
+  await expect(page.getByTestId('analysis-frames-toggle')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('Escape');
 });
 
 Then('the analysis frames toggle should be inactive', async ({ page }) => {
-  await expect(page.getByTestId('analysis-frames-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await openViewOptions(page);
+  await expect(page.getByTestId('analysis-frames-toggle')).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
 });
+
+/**
+ * Analysis frames moved into each screen's view-options menu. Opened from the
+ * keyboard: Radix leaves a dismissable layer over the page for a beat after a
+ * menu closes, so a click in that window never reaches the trigger.
+ */
+async function openViewOptions(page: Page) {
+  const trigger = page.locator('[data-testid$="-menu"]').first();
+  await trigger.focus();
+  await trigger.press('Enter');
+  await expect(page.getByTestId('analysis-frames-toggle')).toBeVisible({
+    timeout: testConfig.timeouts.element,
+  });
+}

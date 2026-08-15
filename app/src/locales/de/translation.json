@@ -54,7 +54,10 @@
     "scroll_up": "Nach oben",
     "scroll_down": "Nach unten",
     "scroll_bottom": "Ganz nach unten",
-    "scroll_buttons": "Scroll-Tasten"
+    "scroll_buttons": "Scroll-Tasten",
+    "view_options": "Ansichtsoptionen",
+    "fit_whole_image": "Ganzes Bild einpassen",
+    "crop_to_fill": "Zum Füllen zuschneiden"
   },
   "app": {
     "name": "zmNinjaNg",

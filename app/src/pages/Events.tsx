@@ -31,7 +31,7 @@ import { scopedEventKey } from '../lib/event/scoped-event-key';
 import { useScrollRestoration } from '../hooks/useScrollRestoration';
 import { PullToRefreshIndicator } from '../components/ui/pull-to-refresh-indicator';
 import { Button } from '../components/ui/button';
-import { Filter, ArrowLeft, LayoutGrid, List, Clock, X } from 'lucide-react';
+import { Filter, ArrowLeft, LayoutGrid, List, Clock, X, Crop } from 'lucide-react';
 import { RefreshButton } from '../components/common/RefreshButton';
 import { filterMonitorsByGroup, includedMonitorIdParam } from '../lib/monitor/filters';
 import { useGroupFilter } from '../hooks/useGroupFilter';
@@ -48,7 +48,6 @@ import { QuickDateRangeButtons } from '../components/ui/quick-date-range-buttons
 import { useTranslation } from 'react-i18next';
 import { formatForServer, formatLocalDateTime } from '../lib/time';
 import { EmptyState } from '../components/ui/empty-state';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { NotificationBadge } from '../components/NotificationBadge';
 
 export default function Events() {
@@ -558,21 +557,6 @@ export default function Events() {
               >
                 {viewMode === 'list' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
               </Button>
-              <div className="flex items-center gap-2">
-                <Select value={normalizedThumbnailFit} onValueChange={handleThumbnailFitChange}>
-                  <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="events-thumbnail-fit-select">
-                    <SelectValue placeholder={t('events.thumbnail_fit')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="contain" data-testid="events-thumbnail-fit-contain">
-                      {t('montage.fit_fit')}
-                    </SelectItem>
-                    <SelectItem value="cover" data-testid="events-thumbnail-fit-cover">
-                      {t('montage.fit_crop')}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               {viewMode === 'montage' && (
                 <EventMontageGridControls
                   gridCols={gridControls.gridCols}
@@ -633,6 +617,23 @@ export default function Events() {
                 aria-label={t('events.refresh')}
                 data-testid="events-refresh-button"
               />
+              {/* One preference, so a toggle rather than a menu holding it
+                  alone. Pressed means cropped to fill, the state that differs
+                  from the default. */}
+              <Button
+                variant={normalizedThumbnailFit === 'cover' ? 'default' : 'outline'}
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9"
+                aria-pressed={normalizedThumbnailFit === 'cover'}
+                title={t('common.crop_to_fill')}
+                aria-label={t('common.crop_to_fill')}
+                onClick={() =>
+                  handleThumbnailFitChange(normalizedThumbnailFit === 'cover' ? 'contain' : 'cover')
+                }
+                data-testid="events-thumbnail-fit-toggle"
+              >
+                <Crop className="h-4 w-4" />
+              </Button>
             </div>
           </div>
           {viewMode === 'montage' && gridControls.isScreenTooSmall && (

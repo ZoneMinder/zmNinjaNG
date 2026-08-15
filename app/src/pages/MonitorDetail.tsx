@@ -20,7 +20,6 @@ import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers, Video, Eye, Disc } from 'lucide-react';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { cn } from '../lib/utils';
@@ -30,7 +29,7 @@ import { useTranslation } from 'react-i18next';
 import { useInsomnia } from '../hooks/useInsomnia';
 import { PTZControls } from '../components/monitors/PTZControls';
 import { LiveMonitorPlayer } from '../components/monitors/LiveMonitorPlayer';
-import { AnalysisFramesToggle } from '../components/monitors/AnalysisFramesToggle';
+import { ViewOptionsMenu, FeedFitItems, AnalysisFramesItem, ViewOptionsSeparator } from '../components/common/view-options';
 import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
@@ -371,20 +370,6 @@ export default function MonitorDetail() {
           </Button>
         </div>
         <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <Select value={settings.monitorDetailFeedFit} onValueChange={handleFeedFitChange}>
-            <SelectTrigger className="h-8 sm:h-9 w-[100px]" data-testid="monitor-detail-fit-select">
-              <SelectValue placeholder={t('monitor_detail.feed_fit')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="contain" data-testid="monitor-detail-fit-contain">
-                {t('montage.fit_fit')}
-              </SelectItem>
-              <SelectItem value="cover" data-testid="monitor-detail-fit-cover">
-                {t('montage.fit_crop')}
-              </SelectItem>
-            </SelectContent>
-          </Select>
-          <AnalysisFramesToggle className="h-8 w-8 sm:h-9 sm:w-9" alwaysStreaming />
           <Button
             variant={showScrollPad ? 'default' : 'outline'}
             size="icon"
@@ -408,6 +393,17 @@ export default function MonitorDetail() {
           >
             <Settings className="h-4 w-4 sm:h-5 sm:w-5" />
           </Button>
+          <ViewOptionsMenu testId="monitor-detail">
+            <FeedFitItems
+              value={settings.monitorDetailFeedFit}
+              onChange={handleFeedFitChange}
+              testIdPrefix="monitor-detail"
+            />
+            <ViewOptionsSeparator />
+            {/* This page streams whatever the profile's Streaming Mode says,
+                so the control stays usable under snapshot. */}
+            <AnalysisFramesItem alwaysStreaming />
+          </ViewOptionsMenu>
         </div>
       </div>
       )}
