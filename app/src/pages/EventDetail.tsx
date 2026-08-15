@@ -309,15 +309,19 @@ export default function EventDetail() {
   // Pinch-to-zoom and pan for event video/image
   // Page element for the tap-to-scroll affordance, shown when the player covers
   // the viewport and leaves no free surface to swipe (refs #365).
-  const pageRef = useRef<HTMLDivElement | null>(null);
-  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
-  const setPageNode = useCallback((el: HTMLDivElement | null) => {
-    pageRef.current = el;
-    setPageEl(el);
+  // This page brings its own scroller rather than scrolling the app shell's
+  // <main>, and it sits *below* the page root. The pad walks up from what it
+  // is given, so pointing it at the root would find only <main>, which does
+  // not scroll here, and every button would do nothing (refs #365).
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
+  const setScrollerNode = useCallback((el: HTMLDivElement | null) => {
+    scrollerRef.current = el;
+    setScrollerEl(el);
   }, []);
 
   const zoomPan = useZoomPan({ maxScale: 4 });
-  const needsPad = useScrollAffordance(pageEl, zoomPan.containerEl);
+  const needsPad = useScrollAffordance(scrollerEl, zoomPan.containerEl);
   // Shown automatically when the player leaves nowhere to swipe, and on request
   // from the header toggle anywhere the page scrolls at all (refs #365).
   const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
@@ -470,7 +474,7 @@ export default function EventDetail() {
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
   return (
-    <div ref={setPageNode} className="flex flex-col h-full bg-background">
+    <div className="flex flex-col h-full bg-background">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
@@ -625,6 +629,8 @@ export default function EventDetail() {
       {/* Main Content */}
       <div
         key={id}
+        ref={setScrollerNode}
+        data-testid="event-detail-scroller"
         className={cn(
           'flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto',
           incomingSlide === 'left' && 'event-slide-left',
@@ -850,7 +856,7 @@ export default function EventDetail() {
         </div>
       </div>
 
-      {showScrollPad && <ScrollPad targetRef={pageRef} />}
+      {showScrollPad && <ScrollPad targetRef={scrollerRef} />}
     </div>
   );
 }
