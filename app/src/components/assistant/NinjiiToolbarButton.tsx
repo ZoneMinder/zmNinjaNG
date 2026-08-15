@@ -38,8 +38,18 @@ export function NinjiiToolbarButton() {
       aria-label={t('assistant.ask_ninjii')}
       data-testid="ninjii-toolbar-button"
     >
-      {/* Decorative: the button's own label already names Ninjii. */}
-      <img src={NINJII_LOGO_URL} alt="" className="h-5 w-5 rounded-full object-contain" />
+      {/*
+        Fills the control rather than taking a fixed size: `size="icon"` sets
+        only a box and no padding, and the base class's `size-4` rule matches
+        svg, not img, so a pinned 20px logo sat small in a 32px button and
+        smaller still in the 36px one. Padding rather than a size keeps it
+        right at both. Decorative: the button's own label names Ninjii.
+      */}
+      <img
+        src={NINJII_LOGO_URL}
+        alt=""
+        className="h-full w-full rounded-full object-contain p-1"
+      />
     </Button>
   );
 }
