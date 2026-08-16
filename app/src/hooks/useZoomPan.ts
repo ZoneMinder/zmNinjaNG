@@ -62,9 +62,15 @@ export function useZoomPan({
       el.style.willChange = 'transform';
       el.style.width = '100%';
       el.style.height = '100%';
-      el.style.touchAction = 'none';
     }
   }, []);
+
+  // Same rule as the container above, on the transformed child.
+  useEffect(() => {
+    const el = innerElRef.current;
+    if (!el) return;
+    el.style.touchAction = isZoomed ? 'none' : 'pan-y';
+  }, [isZoomed, containerEl]);
 
   // Write transform directly to the DOM
   const applyTransform = useCallback(
@@ -313,6 +319,15 @@ export function useZoomPan({
 
   // Apply touch/drag styles to container and block the browser's native image
   // drag (ghost image) so a mouse drag pans instead of dragging the picture.
+  //
+  // touch-action follows the zoom, which is what lets a tablet scroll the page
+  // with a finger anywhere on the feed:
+  //  - not zoomed: `pan-y` hands vertical drags to the browser, so the page
+  //    scrolls from over the video instead of only from whatever strip is left
+  //    beside it. Horizontal is still ours, so swiping between monitors works,
+  //    and pinch is two-fingered, so zooming still starts here.
+  //  - zoomed: `none`, because a one-finger drag now has to pan the image, and
+  //    the page must not steal it.
   useEffect(() => {
     // Read through the ref: `containerEl` is only the dependency that re-runs
     // this once the node exists, and styling a value held in state trips
@@ -320,7 +335,7 @@ export function useZoomPan({
     const el = containerRef.current;
     if (!el) return;
     el.classList.add('no-native-drag');
-    el.style.touchAction = 'none';
+    el.style.touchAction = isZoomed ? 'none' : 'pan-y';
     const onDragStart = (e: Event) => e.preventDefault();
     el.addEventListener('dragstart', onDragStart);
     return () => {
@@ -328,7 +343,7 @@ export function useZoomPan({
       el.style.touchAction = '';
       el.removeEventListener('dragstart', onDragStart);
     };
-  }, [containerEl]);
+  }, [containerEl, isZoomed]);
 
   return {
     ref: setContainer,

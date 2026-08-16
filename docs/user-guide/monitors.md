@@ -68,7 +68,9 @@ Once zoomed in, you can pan the view in several ways:
 - **On-screen arrows**: the directional buttons that appear next to the zoom controls when zoomed.
 - **Keyboard arrow keys**: pan the zoomed view (desktop). Arrow keys only pan while zoomed in; at normal zoom they behave as usual.
 - **Mouse drag**: click and drag the image to move it. The pointer shows a grab cursor when the view is zoomed.
-- **Touch**: pinch to zoom, then drag with one finger to pan.
+- **Touch**: pinch to zoom, then drag with one finger to pan. Until you zoom
+  in, dragging up and down over the image scrolls the page instead, so a phone
+  or tablet does not need a clear strip beside the video to scroll from.
 
 Press the reset button to return to the full, unzoomed image.
 
