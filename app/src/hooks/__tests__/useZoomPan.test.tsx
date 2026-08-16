@@ -7,7 +7,7 @@ import { useZoomPan } from '../useZoomPan';
 // handler can run end to end.
 let api: ReturnType<typeof useZoomPan>;
 function Harness() {
-  api = useZoomPan({ minScale: 1, maxScale: 4 });
+  api = useZoomPan({ maxScale: 4 });
   return (
     <div ref={api.ref} data-testid="container">
       <div ref={api.innerRef} data-testid="inner" />

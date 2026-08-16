@@ -144,7 +144,6 @@ export default function MonitorDetail() {
 
   // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
   const zoomPan = useZoomPan({
-    minScale: 0.5,
     maxScale: 4,
     swipeEnabled: !!enabledMonitors && enabledMonitors.length > 1,
     onSwipeLeft,

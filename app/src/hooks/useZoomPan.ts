@@ -9,7 +9,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useGesture } from '@use-gesture/react';
 
 interface UseZoomPanOptions {
-  minScale?: number;
   maxScale?: number;
   onSwipeLeft?: () => void;
   onSwipeRight?: () => void;
@@ -29,7 +28,6 @@ const PAN_STEP = 80;
 const WHEEL_STEP = 0.15;
 
 export function useZoomPan({
-  minScale = 1,
   maxScale = 4,
   onSwipeLeft,
   onSwipeRight,
@@ -75,7 +73,9 @@ export function useZoomPan({
   // Write transform directly to the DOM
   const applyTransform = useCallback(
     (s: number, x: number, y: number, animate: boolean) => {
-      const scale = Math.max(minScale, Math.min(maxScale, s));
+      // Fit is the floor. Smaller than the frame is never a state a user
+      // asked for, and it used to be one they could only leave by pinching out.
+      const scale = Math.max(1, Math.min(maxScale, s));
       let cx = x;
       let cy = y;
 
@@ -95,7 +95,7 @@ export function useZoomPan({
         innerElRef.current.style.transform = `translate(${cx}px, ${cy}px) scale(${scale})`;
       }
     },
-    [minScale, maxScale],
+    [maxScale],
   );
 
   const syncState = useCallback(() => {
@@ -125,7 +125,7 @@ export function useZoomPan({
 
   const zoomOut = useCallback(() => {
     const cur = stateRef.current;
-    const newScale = Math.max(minScale, cur.scale - ZOOM_STEP);
+    const newScale = Math.max(1, cur.scale - ZOOM_STEP);
     if (newScale < ZOOM_THRESHOLD) {
       reset();
       return;
@@ -138,7 +138,7 @@ export function useZoomPan({
     const cy = height / 2;
     applyTransform(newScale, cx - (cx - cur.x) * ratio, cy - (cy - cur.y) * ratio, true);
     syncState();
-  }, [applyTransform, minScale, reset, syncState]);
+  }, [applyTransform, reset, syncState]);
 
   const panLeft = useCallback(() => {
     const cur = stateRef.current;
@@ -260,7 +260,19 @@ export function useZoomPan({
     {
       target: containerRef,
       eventOptions: { passive: false },
-      pinch: { scaleBounds: { min: minScale, max: maxScale }, rubberband: true },
+      pinch: {
+        // Floor at fit, not at minScale: the wheel path already clamps to 1,
+        // and a pinch that reached 0.5 left the picture smaller than its frame
+        // with no way back but pinching out. Now that touch-action is pan-y
+        // while unzoomed, the browser can claim a touch and cancel a pinch
+        // half way through, and a half-recognised one used to land on that
+        // floor - which is the "it zooms out the moment I touch a feed".
+        scaleBounds: { min: 1, max: maxScale },
+        // And it takes a real pinch to start one: a stray touch that the
+        // browser is about to turn into a scroll should not nudge the zoom.
+        threshold: 0.1,
+        rubberband: true,
+      },
       // Pointer events (no touch:true) so mouse drag pans on desktop too.
       drag: { filterTaps: true },
       // Non-passive so the wheel handler can preventDefault page scroll.
