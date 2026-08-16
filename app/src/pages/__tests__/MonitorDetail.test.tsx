@@ -58,6 +58,9 @@ vi.mock('../../api/monitors', () => ({
 vi.mock('../../api/zones', () => ({ getZones: vi.fn() }));
 
 vi.mock('../../hooks/useCurrentProfile', () => ({
+  // The scroll pad reads the remembered setting through this one; the page
+  // itself only ever calls useProfileById.
+  useCurrentProfile: () => ({ settings: h.settings }),
   useProfileById: (profileId?: string) => ({
     profile: profileId === 'unknown-profile'
       ? null

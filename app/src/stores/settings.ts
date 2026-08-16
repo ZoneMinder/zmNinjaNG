@@ -38,6 +38,8 @@ export type AllModeNotifications = 'live' | 'muted' | 'off';
  *  server, or 'per-server' to leave each server's own choice alone. */
 export type AllModeViewMode = ViewMode | 'per-server';
 export const ALL_MODE_NOTIFICATIONS_VALUES: readonly AllModeNotifications[] = ['live', 'muted', 'off'] as const;
+
+
 // Declared by the modules that consume them, so those modules do not import
 // this store (refs #281). Re-exported for the existing callers.
 export type { AllModeStreamTuning };
@@ -320,6 +322,12 @@ export interface ProfileSettings {
   thumbnailFallbackChain: ThumbnailFallbackEntry[];
   // Hover preview toggles for events/monitors/dashboard/timeline
   hoverPreview: HoverPreviewSettings;
+  /**
+   * Whether the scroll pad is on screen. Remembered per profile: a tablet
+   * where the video owns every drag wants it on for good, and should not have
+   * to ask again on each visit.
+   */
+  showScrollPad: boolean;
   // Playback speed for event hover/longpress preview (ZMS rate percentage).
   // Only affects EventZmsHoverPlayer; live monitor previews are real-time.
   hoverPreviewPlaybackRate: HoverPreviewPlaybackRate;
@@ -495,6 +503,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   componentLogLevels: {},
   thumbnailFallbackChain: DEFAULT_THUMBNAIL_FALLBACK_CHAIN,
   hoverPreview: DEFAULT_HOVER_PREVIEW,
+  showScrollPad: false,
   hoverPreviewPlaybackRate: DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE,
   assistantEnabled: false,
   // Off by default: the assistant already answers from the command palette and

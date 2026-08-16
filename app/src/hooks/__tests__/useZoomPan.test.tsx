@@ -7,7 +7,7 @@ import { useZoomPan } from '../useZoomPan';
 // handler can run end to end.
 let api: ReturnType<typeof useZoomPan>;
 function Harness() {
-  api = useZoomPan({ minScale: 1, maxScale: 4 });
+  api = useZoomPan({ maxScale: 4 });
   return (
     <div ref={api.ref} data-testid="container">
       <div ref={api.innerRef} data-testid="inner" />
@@ -110,6 +110,7 @@ describe('useZoomPan keyboard pan', () => {
     expect(api.scale).toBeGreaterThan(1);
   });
 
+
   it('shows a grab cursor only when zoomed', () => {
     const { container } = mountZoomable();
     expect(container.style.cursor).toBe('');
@@ -117,5 +118,19 @@ describe('useZoomPan keyboard pan', () => {
     expect(container.style.cursor).toBe('grab');
     act(() => api.reset());
     expect(container.style.cursor).toBe('');
+  });
+
+  it('leaves vertical drags to the page until the view is zoomed', () => {
+    // The tablet case: a feed filling the screen used to swallow every finger
+    // drag, so scrolling meant finding whatever strip was left beside it.
+    const { container } = mountZoomable();
+    expect(container.style.touchAction).toBe('pan-y');
+
+    // Zoomed, a one-finger drag has to pan the image instead.
+    act(() => api.zoomIn());
+    expect(container.style.touchAction).toBe('none');
+
+    act(() => api.reset());
+    expect(container.style.touchAction).toBe('pan-y');
   });
 });

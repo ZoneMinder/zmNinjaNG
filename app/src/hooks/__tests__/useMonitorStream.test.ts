@@ -14,6 +14,7 @@ import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import { httpGet } from '../../lib/http';
 import type { Profile } from '../../api/types';
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { ZM_INTEGRATION } from '../../lib/zmninja-ng-constants';
 
 // Mock dependencies
 vi.mock('../../lib/http', () => ({
@@ -292,7 +293,7 @@ describe('useMonitorStream', () => {
     }
   });
 
-  it('reconnects with backoff on stream error, releasing the errored connkey first', async () => {
+  it('retries quickly when a fresh stream errors, releasing the errored connkey first', async () => {
     let key = 100;
     const regenerateConnKey = vi.fn((monitorId: string) => {
       const k = ++key;
@@ -311,23 +312,67 @@ describe('useMonitorStream', () => {
 
       mockHttpGet.mockClear();
 
-      // Stream errors: a reconnect is scheduled but must not fire before the
-      // backoff delay (1s base).
+      // Stream errors seconds after it appeared, which is the profile-switch
+      // case: a reconnect is scheduled at the early interval, and must not
+      // fire before it.
       act(() => {
         result.current.reportStreamError();
       });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ZM_INTEGRATION.mjpegEarlyRetryDelayMs - 100);
+      });
       expect(mockHttpGet).not.toHaveBeenCalled();
 
-      // After the base delay, the reconnect CMD_QUITs the old connkey (101)
-      // before minting a fresh one (102).
+      // Then the reconnect CMD_QUITs the old connkey (101) before minting a
+      // fresh one (102).
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1000);
+        await vi.advanceTimersByTimeAsync(100);
       });
       expect(mockHttpGet).toHaveBeenCalledWith(
         expect.stringContaining('connkey=101'),
         expect.anything(),
       );
       expect(result.current.streamUrl).toContain('connkey=102');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps retrying a young stream instead of spending its give-up budget', async () => {
+    // The profile-switch case: a screenful of tiles opens into a server still
+    // freeing the slots the outgoing profile just quit, so every one of them
+    // errors several times in a row. Before the opening window existed, six
+    // such errors used the whole allowance and the tile went dark until a
+    // remount - which is why changing screens "fixed" it.
+    let key = 100;
+    const regenerateConnKey = vi.fn((monitorId: string) => {
+      const k = ++key;
+      useMonitorStore.setState((s) => ({ connKeys: { ...s.connKeys, [monitorId]: k } }));
+      return k;
+    });
+    useMonitorStore.setState({ connKeys: {}, regenerateConnKey });
+
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+
+      // Seven failures inside the window, one more than the cap allows.
+      for (let i = 0; i < 7; i++) {
+        act(() => {
+          result.current.reportStreamError();
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(ZM_INTEGRATION.mjpegEarlyRetryDelayMs);
+        });
+      }
+
+      // Still streaming on a fresh key rather than given up: the connkey is
+      // live in the store, and the URL carries one.
+      expect(result.current.streamUrl).toContain('connkey=');
+      expect(useMonitorStore.getState().connKeys['profile-1:1']).toBeDefined();
     } finally {
       vi.useRealTimers();
     }
@@ -349,19 +394,30 @@ describe('useMonitorStream', () => {
 
     mockHttpGet.mockClear();
 
-    // mjpegReconnectMaxAttempts is 6: the first six errors schedule retries,
-    // the seventh hits the cap and gives up.
-    act(() => {
-      for (let i = 0; i < 7; i++) result.current.reportStreamError();
-    });
+    // Past the opening window, where retries start spending the budget: inside
+    // it they are free, so a saturated server cannot exhaust the allowance
+    // meant for a server that is actually gone. Fake timers scoped to this
+    // block: a leaked system-time mock breaks every test that follows.
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + ZM_INTEGRATION.mjpegEarlyRetryWindowMs + 1000);
 
-    // On give-up the current connkey (101) is released via CMD_QUIT and cleared
-    // from the store, not orphaned until unmount.
-    expect(mockHttpGet).toHaveBeenCalledWith(
-      expect.stringContaining('connkey=101'),
-      expect.anything(),
-    );
-    expect(useMonitorStore.getState().connKeys['profile-1:1']).toBeUndefined();
+      // mjpegReconnectMaxAttempts is 6: the first six errors schedule retries,
+      // the seventh hits the cap and gives up.
+      act(() => {
+        for (let i = 0; i < 7; i++) result.current.reportStreamError();
+      });
+
+      // On give-up the current connkey (101) is released via CMD_QUIT and
+      // cleared from the store, not orphaned until unmount.
+      expect(mockHttpGet).toHaveBeenCalledWith(
+        expect.stringContaining('connkey=101'),
+        expect.anything(),
+      );
+      expect(useMonitorStore.getState().connKeys['profile-1:1']).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('empties streamUrl and imageSrc while disabled, and mints a fresh connkey on re-enable', async () => {

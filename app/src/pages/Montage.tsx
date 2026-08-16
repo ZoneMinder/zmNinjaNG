@@ -54,7 +54,7 @@ import {
 } from '../components/montage';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
-import { useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { useScrollPad } from '../hooks/useScrollPad';
 import { useFullscreenMode } from '../hooks/useFullscreenMode';
 import { tileIdFor } from '../components/montage/hooks/useMontageGrid';
 
@@ -237,9 +237,10 @@ export default function Montage() {
 
   // Edit mode state lifted to page level
   const [isEditMode, setIsEditMode] = useState(false);
-  // Edit mode turns the pad on by itself - a drag there reorders tiles instead
-  // of scrolling - and the kebab entry overrides that either way (refs #365).
-  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(isEditMode);
+  // Edit mode shows the pad whatever the setting says: a drag there reorders
+  // tiles rather than scrolling, which is a fact about the mode rather than a
+  // preference. The kebab entry writes the remembered setting (refs #365).
+  const [showScrollPad, toggleScrollPad] = useScrollPad(isEditMode);
 
   // Active saved layout name (persisted in settings)
   const activeLayoutName = bucket.activeLayoutName;

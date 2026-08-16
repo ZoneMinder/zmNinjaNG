@@ -72,6 +72,13 @@ export const ZM_INTEGRATION = {
   mjpegReconnectMaxDelayMs: 15000, // 15 seconds
   mjpegReconnectMaxAttempts: 6,
 
+  // A stream that fails in its first seconds is usually looking at a server
+  // still freeing the slots a profile switch just quit, which answers 503 and
+  // then recovers. It retries at this flat interval for this long, and those
+  // tries do not spend the attempt budget - see lib/monitor/reconnect-backoff.
+  mjpegEarlyRetryWindowMs: 12000,
+  mjpegEarlyRetryDelayMs: 2000,
+
   // Grace delay before a scheduled CMD_QUIT fires. Lets React StrictMode's
   // dev double-mount cancel the quit instead of killing a stream the
   // surviving mount is still using. See lib/zm/zms-quit.ts.
@@ -147,17 +154,6 @@ export const SCROLL_PAD = {
   // Fraction of the visible height one up/down tap moves. Short of a full page
   // so a row stays on screen as a reference point.
   stepFraction: 0.8,
-  // Overflow below this is a rounding difference or a sliver of padding, not
-  // content the user is missing, so the pad stays away (refs #365).
-  minOverflowPx: 24,
-  // Share of the scrollport the zoom/pan surface has to cover before the pad
-  // appears. A fraction rather than a pixel count of leftover page: monitor
-  // detail caps the player at 100svh-7rem in landscape, so ~112px always
-  // remains and any absolute threshold under that switched the pad off on the
-  // very layout #365 reported. Above 70% the video dominates and what is left
-  // is a strip at the screen edges, where a drag up competes with the system
-  // Recents gesture.
-  maxSurfaceCoverage: 0.7,
 } as const;
 
 /**
