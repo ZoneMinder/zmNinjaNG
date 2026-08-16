@@ -49,7 +49,7 @@ import { log, LogLevel } from '../lib/logger';
 import { generateEventMarkers, type VideoMarker } from '../lib/event/video-markers';
 import { useEventFavoritesStore } from '../stores/eventFavorites';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { useScrollPad } from '../hooks/useScrollPad';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { ZoomControls } from '../components/ui/zoom-controls';
 import { ErrorBanner, DetailPageSkeleton } from '../components/ui/query-state';
@@ -310,21 +310,13 @@ export default function EventDetail() {
   // Page element for the tap-to-scroll affordance, shown when the player covers
   // the viewport and leaves no free surface to swipe (refs #365).
   // This page brings its own scroller rather than scrolling the app shell's
-  // <main>, and it sits *below* the page root. The pad walks up from what it
-  // is given, so pointing it at the root would find only <main>, which does
-  // not scroll here, and every button would do nothing (refs #365).
+  // <main>, and the pad walks up from what it is given - so it takes that
+  // container, not the page root, which has no scrolling ancestor (refs #365).
   const scrollerRef = useRef<HTMLDivElement | null>(null);
-  const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
-  const setScrollerNode = useCallback((el: HTMLDivElement | null) => {
-    scrollerRef.current = el;
-    setScrollerEl(el);
-  }, []);
+  const [showScrollPad, toggleScrollPad] = useScrollPad();
 
+  // Pinch-to-zoom and pan for event video/image
   const zoomPan = useZoomPan({ maxScale: 4 });
-  const needsPad = useScrollAffordance(scrollerEl, zoomPan.containerEl);
-  // Shown automatically when the player leaves nowhere to swipe, and on request
-  // from the header toggle anywhere the page scrolls at all (refs #365).
-  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
 
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.
@@ -629,7 +621,7 @@ export default function EventDetail() {
       {/* Main Content */}
       <div
         key={id}
-        ref={setScrollerNode}
+        ref={scrollerRef}
         data-testid="event-detail-scroller"
         className={cn(
           'flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto',

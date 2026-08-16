@@ -13,7 +13,7 @@ import { FilterX, Clock } from 'lucide-react';
 import { PageContainer } from '../components/common/PageContainer';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { NinjiiToolbarButton } from '../components/assistant/NinjiiToolbarButton';
-import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { useScrollPad } from '../hooks/useScrollPad';
 import { ErrorBanner } from '../components/ui/query-state';
 import { resolveQueryError } from '../lib/query/query-error';
 import { subDays } from 'date-fns';
@@ -59,19 +59,11 @@ export default function Timeline() {
 
   // Brush-to-zoom mode toggle
   const [brushMode, setBrushMode] = useState(false);
-  // The canvas sets touch-action: none to own pan and pinch, and it grows one
-  // row per monitor, so on a touch screen it can cover the viewport and leave
-  // nowhere to swipe the page (refs #365). Same element serves as the pad's
-  // scroll target - it walks up to the scrolling ancestor - and as the gesture
-  // surface the measurement is about.
+  // The canvas sets touch-action: none to own pan and pinch, so a swipe over
+  // it never scrolls this page. The pad takes the canvas area: it walks up
+  // from what it is given to find the scrolling ancestor.
   const canvasAreaRef = useRef<HTMLDivElement | null>(null);
-  const [canvasAreaEl, setCanvasAreaEl] = useState<HTMLDivElement | null>(null);
-  const setCanvasAreaNode = useCallback((el: HTMLDivElement | null) => {
-    canvasAreaRef.current = el;
-    setCanvasAreaEl(el);
-  }, []);
-  const needsPad = useScrollAffordance(canvasAreaEl, canvasAreaEl);
-  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
+  const [showScrollPad, toggleScrollPad] = useScrollPad();
 
   // Live mode: subscribe to notification store for new events, fall back to polling
   const [liveMode, setLiveMode] = useState(false);
@@ -506,7 +498,7 @@ export default function Timeline() {
                 onCenter={() => fireViewportAction('reset')}
                 onGoToNow={() => fireViewportAction('goToNow')}
               />
-              <div ref={setCanvasAreaNode}>
+              <div ref={canvasAreaRef}>
               <TimelineCanvas
                 monitors={monitorRows}
                 events={canvasEvents}

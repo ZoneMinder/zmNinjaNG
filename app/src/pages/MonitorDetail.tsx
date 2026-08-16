@@ -37,7 +37,7 @@ import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/moni
 import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
-import { useScrollAffordance, useScrollPadToggle } from '../hooks/useScrollAffordance';
+import { useScrollPad } from '../hooks/useScrollPad';
 import { ScrollPad } from '../components/ui/scroll-pad';
 import { useServerUrls } from '../hooks/useServerUrls';
 
@@ -142,16 +142,6 @@ export default function MonitorDetail() {
     profileId: routeProfileId,
   });
 
-  // Page element for the tap-to-scroll affordance below. Tracked as state as
-  // well as a ref because the measurement re-runs when the element appears,
-  // while the pad only reads it on a tap - the same split useZoomPan makes.
-  const pageRef = useRef<HTMLDivElement | null>(null);
-  const [pageEl, setPageEl] = useState<HTMLDivElement | null>(null);
-  const setPageNode = useCallback((el: HTMLDivElement | null) => {
-    pageRef.current = el;
-    setPageEl(el);
-  }, []);
-
   // Pinch-to-zoom and pan (zooms around focal point, pan when zoomed, swipe when not)
   const zoomPan = useZoomPan({
     minScale: 0.5,
@@ -161,12 +151,10 @@ export default function MonitorDetail() {
     onSwipeRight,
   });
 
-  // The live view leaves nowhere to swipe once it covers the viewport, which is
-  // what happens on a tablet in landscape (refs #365).
-  const needsPad = useScrollAffordance(pageEl, zoomPan.containerEl);
-  // Shown automatically when the video leaves nowhere to swipe, and on request
-  // from the header toggle anywhere the page scrolls at all (refs #365).
-  const [showScrollPad, toggleScrollPad] = useScrollPadToggle(needsPad);
+  // Remembered per profile: the video owns every drag that lands on it, so a
+  // tablet wants the pad for good rather than once per visit.
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  const [showScrollPad, toggleScrollPad] = useScrollPad();
 
   const { portalPath, apiBaseUrl } = useServerUrls(monitor?.Monitor.ServerId, routeProfileId);
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : ownerProfile?.portalUrl || '';
@@ -302,7 +290,7 @@ export default function MonitorDetail() {
 
   return (
     <div
-      ref={setPageNode}
+      ref={pageRef}
       className={cn(
         'flex flex-col h-full',
         isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background'

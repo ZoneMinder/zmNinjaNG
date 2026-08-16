@@ -11,11 +11,11 @@ Events are drawn as colored bars on a horizontal time axis. Each monitor gets it
 - **Tap an event bar** to jump to that event's detail view
 
 The canvas owns touch gestures for panning and zooming, so a swipe over it moves
-through time rather than scrolling the page. It also grows one row per monitor,
-which on a tablet can leave nothing to swipe when the filters and event list sit
-below the fold. When that happens a column of scroll buttons appears on the
-right edge: jump to the top, up one screen, down one screen, and jump to the
-bottom. The up/down arrows in the toolbar show and hide them at any time.
+through time rather than scrolling the page, and it grows one row per monitor, so
+on a tablet there can be nothing left to swipe. The up/down arrows in the toolbar
+put a column of scroll buttons on the right edge: jump to the top, up one screen,
+down one screen, and jump to the bottom. The choice is remembered for that
+server.
 
 ## Filtering
 

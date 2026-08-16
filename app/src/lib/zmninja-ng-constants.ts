@@ -154,17 +154,6 @@ export const SCROLL_PAD = {
   // Fraction of the visible height one up/down tap moves. Short of a full page
   // so a row stays on screen as a reference point.
   stepFraction: 0.8,
-  // Overflow below this is a rounding difference or a sliver of padding, not
-  // content the user is missing, so the pad stays away (refs #365).
-  minOverflowPx: 24,
-  // Share of the scrollport the zoom/pan surface has to cover before the pad
-  // appears. A fraction rather than a pixel count of leftover page: monitor
-  // detail caps the player at 100svh-7rem in landscape, so ~112px always
-  // remains and any absolute threshold under that switched the pad off on the
-  // very layout #365 reported. Above 70% the video dominates and what is left
-  // is a strip at the screen edges, where a drag up competes with the system
-  // Recents gesture.
-  maxSurfaceCoverage: 0.7,
 } as const;
 
 /**
