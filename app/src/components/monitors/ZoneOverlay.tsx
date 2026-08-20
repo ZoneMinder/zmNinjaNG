@@ -134,7 +134,7 @@ export function ZoneOverlay({
       data-testid="zone-overlay"
     >
       {filteredZones.map((zone) => {
-        const points = coordsToSvgPointsWithTransform(zone.Coords, transform, zone.Units);
+        const points = coordsToSvgPointsWithTransform(zone.Coords, transform);
         const color = getZoneColor(zone.Type);
         const isHovered = hoveredZoneId === zone.Id;
 

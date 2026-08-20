@@ -171,17 +171,13 @@ export const TAGS_BATCH_SIZE = 100;
 export const ZM_API_DATETIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';
 
 /**
- * Zone Coordinate Units
+ * Zone Coordinate Space
  *
  * A zone's `Coords` are stored either in capture pixels or in percent of the
- * frame, and the zone's `Units` field says which. ZoneMinder 1.39 writes
- * `Percent` for new zones so a zone survives a resolution change; older
- * servers wrote pixels and may omit the field entirely, which means pixels.
- * Anything drawing zone coordinates has to check this before scaling.
+ * frame, and no field says which: the zone's `Units` column describes the
+ * analysis parameters (MinAlarmPixels and its friends), not the coordinates.
+ * ZoneMinder's own renderer treats a point above this value as pixels and
+ * anything at or below it as percent (`web/includes/Zone.php`, `svg_polygon`),
+ * so anything drawing zone coordinates decides the same way.
  */
-export const ZM_ZONE_UNITS = {
-  pixels: 'Pixels',
-  percent: 'Percent',
-} as const;
-
-export type ZmZoneUnits = typeof ZM_ZONE_UNITS[keyof typeof ZM_ZONE_UNITS];
+export const ZONE_PERCENT_MAX = 100;
