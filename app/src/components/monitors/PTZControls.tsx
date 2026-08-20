@@ -146,7 +146,16 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
   const controlDenied = canUseControl(permissions) === 'denied';
 
   const canMove = control?.CanMove === '1';
-  const canMoveDiag = control?.CanMoveDiag === '1';
+  // The driver decides which axes exist. ZoneMinder hides the up/down arrows
+  // without CanTilt and left/right without CanPan (skins/classic/includes/
+  // control_functions.php), so a pan-only driver never gets tilt buttons whose
+  // commands it would reject. Only an explicit '0' hides an axis: a control
+  // definition that omits the field predates the column, and losing every arrow
+  // there would be worse than showing one that does nothing.
+  const canPan = control?.CanPan !== '0';
+  const canTilt = control?.CanTilt !== '0';
+  // Diagonals need both axes, matching $hasDiag in control_functions.php.
+  const canMoveDiag = canPan && canTilt && control?.CanMoveDiag === '1';
   const canMoveCon = control?.CanMoveCon === '1';
   const canMoveRel = control?.CanMoveRel === '1';
   const canMoveAbs = control?.CanMoveAbs === '1';
@@ -211,7 +220,7 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
             repeatIntervalMs={moveRepeatMs}
             onCommand={onCommand}
             disabled={disabled}
-            className="rounded-full"
+            className={cn("rounded-full", !canTilt && "invisible")}
             title={t('ptz.move_up')}
             testId="ptz-up"
           >
@@ -236,7 +245,7 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
             repeatIntervalMs={moveRepeatMs}
             onCommand={onCommand}
             disabled={disabled}
-            className="rounded-full"
+            className={cn("rounded-full", !canPan && "invisible")}
             title={t('ptz.move_left')}
             testId="ptz-left"
           >
@@ -260,7 +269,7 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
             repeatIntervalMs={moveRepeatMs}
             onCommand={onCommand}
             disabled={disabled}
-            className="rounded-full"
+            className={cn("rounded-full", !canPan && "invisible")}
             title={t('ptz.move_right')}
             testId="ptz-right"
           >
@@ -285,7 +294,7 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
             repeatIntervalMs={moveRepeatMs}
             onCommand={onCommand}
             disabled={disabled}
-            className="rounded-full"
+            className={cn("rounded-full", !canTilt && "invisible")}
             title={t('ptz.move_down')}
             testId="ptz-down"
           >
