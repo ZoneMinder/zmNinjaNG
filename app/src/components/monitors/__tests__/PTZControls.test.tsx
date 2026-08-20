@@ -184,8 +184,10 @@ describe('PTZControls without control permission', () => {
  * were already handled.
  */
 describe('PTZControls axis capabilities', () => {
-  const isHidden = (testId: string) =>
-    screen.getByTestId(testId).className.includes('invisible');
+  const expectHidden = (testId: string) =>
+    expect(screen.getByTestId(testId)).toHaveClass('invisible');
+  const expectShown = (testId: string) =>
+    expect(screen.getByTestId(testId)).not.toHaveClass('invisible');
 
   it('hides the tilt arrows and keeps pan when the driver cannot tilt', () => {
     const panOnly = {
@@ -194,10 +196,10 @@ describe('PTZControls axis capabilities', () => {
 
     render(<PTZControls onCommand={vi.fn()} control={panOnly} />);
 
-    expect(isHidden('ptz-up')).toBe(true);
-    expect(isHidden('ptz-down')).toBe(true);
-    expect(isHidden('ptz-left')).toBe(false);
-    expect(isHidden('ptz-right')).toBe(false);
+    expectHidden('ptz-up');
+    expectHidden('ptz-down');
+    expectShown('ptz-left');
+    expectShown('ptz-right');
   });
 
   it('hides the pan arrows and keeps tilt when the driver cannot pan', () => {
@@ -207,10 +209,10 @@ describe('PTZControls axis capabilities', () => {
 
     render(<PTZControls onCommand={vi.fn()} control={tiltOnly} />);
 
-    expect(isHidden('ptz-left')).toBe(true);
-    expect(isHidden('ptz-right')).toBe(true);
-    expect(isHidden('ptz-up')).toBe(false);
-    expect(isHidden('ptz-down')).toBe(false);
+    expectHidden('ptz-left');
+    expectHidden('ptz-right');
+    expectShown('ptz-up');
+    expectShown('ptz-down');
   });
 
   it('hides the diagonals when an axis is missing, even with CanMoveDiag', () => {
@@ -221,7 +223,7 @@ describe('PTZControls axis capabilities', () => {
     render(<PTZControls onCommand={vi.fn()} control={panOnlyDiag} />);
 
     for (const id of ['ptz-up-left', 'ptz-up-right', 'ptz-down-left', 'ptz-down-right']) {
-      expect(isHidden(id)).toBe(true);
+      expectHidden(id);
     }
   });
 
@@ -231,7 +233,24 @@ describe('PTZControls axis capabilities', () => {
     render(<PTZControls onCommand={vi.fn()} control={legacy} />);
 
     for (const id of ['ptz-up', 'ptz-down', 'ptz-left', 'ptz-right', 'ptz-up-left']) {
-      expect(isHidden(id)).toBe(false);
+      expectShown(id);
     }
+  });
+
+  it('hides an axis the server reports as anything other than capable', () => {
+    // ZMControlSchema coerces the field to a string, so a server that answers
+    // with a JSON boolean or an empty column arrives here as 'false' or ''.
+    // Those mean the same as '0' and must hide the axis; only an absent field
+    // is treated as capable.
+    const coercedFalse = {
+      CanMove: '1', CanMoveCon: '1', CanPan: 'false', CanTilt: '',
+    } as unknown as ZMControl;
+
+    render(<PTZControls onCommand={vi.fn()} control={coercedFalse} />);
+
+    expectHidden('ptz-left');
+    expectHidden('ptz-right');
+    expectHidden('ptz-up');
+    expectHidden('ptz-down');
   });
 });
