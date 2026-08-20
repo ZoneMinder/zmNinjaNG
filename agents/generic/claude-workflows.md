@@ -75,6 +75,10 @@ named fleet.
   pipeline exits with the last command's status and a failing suite reads
   as success. Run the gate bare, check its exit, then filter output
   separately. This shipped a red commit here once.
+- A CI job that skips its own steps still reports green. Before trusting a
+  required check, read what it ran: two required checks here passed on every
+  PR for months, one whose workflow had been deleted and one that skipped
+  itself for a missing secret (M2).
 - Merging waits for green CI, but never by polling: queue it with
   `gh pr merge --auto` at PR creation and GitHub merges when checks pass.
   Caution: if the repo's auto-merge setting is off, `--auto` silently

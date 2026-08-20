@@ -65,9 +65,9 @@ That breadth is the reason the guardrails exist: a change to a shared
 component can misbehave on **five platforms at once**, and no single
 machine can verify all of them. Platform divergence is therefore written
 down where agents will find it (the Native contract, the native playbook,
-the platform quirks in domain-context), web e2e runs in CI, and device
-e2e (Android emulator, iOS simulator and tablet) is run manually from
-scripts, never by agents.
+the platform quirks in domain-context), web e2e runs in CI wherever a
+ZoneMinder is configured to point it at, and device e2e (Android emulator,
+iOS simulator and tablet) is run manually from scripts, never by agents.
 
 Releases follow the same posture. Android and desktop binaries are built
 by the GitHub workflows, not on a laptop: the ``build-*`` workflows are
@@ -93,7 +93,7 @@ Every workflow, and what fires it:
    * - ``ci.yml``
      - every PR, push to main
      - version guard, lints, build, unit tests (full-history checkout for
-       the evidence gate), web e2e
+       the evidence gate), and web e2e when the ZM secrets are set
    * - ``claude.yml``
      - @claude mention on issues and PRs
      - summons an agent into the thread
@@ -309,7 +309,7 @@ How the pieces fit
      PP === GATE
      GP === GATE
      CL === GATE
-     PR["every PR"] === CI["ci.yml<br/>tests, lints, build, web e2e"]
+     PR["every PR"] === CI["ci.yml<br/>tests, lints, build"]
      GATE --> CI
      FAIL["breakage or review finding"] -- "fix PR proposes rule + gate<br/>(self-improvement protocol)" --> AG
      FAIL -- "durable fact (M5)" --> PP
