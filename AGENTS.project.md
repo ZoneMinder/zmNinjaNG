@@ -123,7 +123,6 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 - Flex text uses `min-w-0`, `truncate`, and a `title`; multi-line text uses `line-clamp-N`.
 - Do not commit incidental native build-number bumps. Commit intended bumps alone as `chore:`.
 - GitHub comments end with `Posted by Claude, assisting @<login>.`, where `<login>` comes from `gh api user --jq .login`. Never hardcode a username. Commits carry no such line.
-- Label issues and PRs `core` (behavior changes) or `refactor` (behavior-preserving) by hand.
 - Test builds use a matching GitHub workflow; add one only when none fits.
 - Developer docs teach React where they first rely on it.
 
