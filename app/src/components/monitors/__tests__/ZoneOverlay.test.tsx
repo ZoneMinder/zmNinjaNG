@@ -58,7 +58,7 @@ describe('ZoneOverlay', () => {
         {...base}
         monitorWidth={2560}
         monitorHeight={1920}
-        zones={[zone({ Id: 9, Units: 'Percent', Coords: '0,0 100,0 100,100 0,100' })]}
+        zones={[zone({ Id: 9, Coords: '0,0 100,0 100,100 0,100' })]}
       />
     );
 
@@ -81,6 +81,28 @@ describe('ZoneOverlay', () => {
     expect(screen.getByTestId('zone-polygon-10')).toHaveAttribute(
       'points',
       '0,0 2560,0 2560,1920 0,1920'
+    );
+  });
+
+  /**
+   * A zone's Units field describes its analysis parameters, not its
+   * coordinates, and the column now defaults to Percent. A zone carried over
+   * from an older server can therefore say Percent over pixel coords, and
+   * scaling those would throw the polygon far off the frame.
+   */
+  it('keeps a pixel zone that claims Percent units', () => {
+    render(
+      <ZoneOverlay
+        {...base}
+        monitorWidth={2560}
+        monitorHeight={1920}
+        zones={[zone({ Id: 13, Units: 'Percent', Coords: '756,387 1551,513 1656,1970 696,1812' })]}
+      />
+    );
+
+    expect(screen.getByTestId('zone-polygon-13')).toHaveAttribute(
+      'points',
+      '756,387 1551,513 1656,1970 696,1812'
     );
   });
 

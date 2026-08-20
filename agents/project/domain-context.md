@@ -34,13 +34,19 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Event Server v7.0.22 and later always sends a real `eid` in pushes. The
   historical fake-eid bug (a `Date.now()` value where an event id belongs)
   was app-side tray handling, not the ES.
-- A zone's `Coords` are pixels or percent of the frame, and the zone's own
-  `Units` field (`Pixels` / `Percent`) says which. 1.39.18 writes `Percent`
-  for every zone, so a full-frame zone reads `0,0 100,0 100,100 0,100` with
-  `Area: 10000` regardless of the monitor's resolution; older servers wrote
-  pixels and may omit `Units`, which means pixels. Percent values carry two
-  decimals, so parse them as floats. Anything drawing zone coordinates scales
-  by `Units` first, and rotation is applied after, in pixel space.
+- A zone's `Coords` are pixels or percent of the frame and no field says
+  which. The zone's `Units` column (`Pixels` / `Percent`) describes the
+  analysis parameters (`MinAlarmPixels` and friends), not the coordinates, and
+  its column default is now `Percent`, so a zone carried over from an older
+  server reads `Units: Percent` over pixel coords. Trusting that field scales
+  those coords by a hundred and throws the polygon off the frame. ZoneMinder's
+  own renderer decides by magnitude, in `web/includes/Zone.php`'s
+  `svg_polygon`: any point above 100 makes the whole zone pixels, everything
+  at or below is percent. Match it, corner included (a pixel zone inside the
+  top-left 100x100 reads as percent), so a zone looks the same here as in
+  ZoneMinder's zone editor. 1.39.18 writes percent, so a full-frame zone reads
+  `0,0 100,0 100,100 0,100`; percent values carry two decimals, so parse them
+  as floats, and scale before rotation, which works in pixel space.
 
 ## Streaming and media
 

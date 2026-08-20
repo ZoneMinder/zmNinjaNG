@@ -5,7 +5,7 @@
  */
 
 import type { ZoneType } from '../../api/types';
-import { ZM_ZONE_UNITS } from '../zm/zm-constants';
+import { ZONE_PERCENT_MAX } from '../zm/zm-constants';
 import type { MonitorRotation } from './monitor-rotation';
 
 /**
@@ -156,6 +156,31 @@ export function transformPoint(point: Point, transform: ZoneTransform): Point {
 }
 
 /**
+ * Whether a zone's points are percent of the frame rather than capture pixels.
+ *
+ * ZoneMinder stores a zone either way and gives no reliable field saying which:
+ * the zone's `Units` column names the units of the analysis parameters
+ * (MinAlarmPixels and its friends), not of the coordinates, and its column
+ * default is now Percent, so an old zone can read Units: 'Percent' while its
+ * coordinates are still pixels. ZoneMinder's own renderer decides by magnitude
+ * instead, in `web/includes/Zone.php`:
+ *
+ *     $isPixel = false;
+ *     foreach ($points as $point) {
+ *       if ($point['x'] > 100 || $point['y'] > 100) { $isPixel = true; break; }
+ *     }
+ *
+ * This matches it, including the corner it accepts: a pixel zone contained
+ * entirely within the top-left 100x100 pixels reads as percent. Following the
+ * upstream renderer means a zone looks the same here as in ZoneMinder's own
+ * zone editor, which is the comparison a user actually makes.
+ */
+function isPercentSpace(points: Point[]): boolean {
+  return points.length > 0
+    && points.every(p => p.x <= ZONE_PERCENT_MAX && p.y <= ZONE_PERCENT_MAX);
+}
+
+/**
  * Converts zone coordinates to SVG polygon points string with optional rotation transformation.
  *
  * The overlay's viewBox is the monitor's pixel space, so percent coords are
@@ -166,25 +191,19 @@ export function transformPoint(point: Point, transform: ZoneTransform): Point {
  *
  * @param coords - The coordinate string from ZoneMinder
  * @param transform - Optional transformation to apply (rotation)
- * @param units - The zone's Units field; percent coords are scaled to pixels.
- *   An absent value means pixels, which is what servers without the field send.
  * @returns SVG points string (e.g., "0,0 100,0 100,100 0,100")
  */
-export function coordsToSvgPointsWithTransform(
-  coords: string,
-  transform?: ZoneTransform,
-  units?: string
-): string {
+export function coordsToSvgPointsWithTransform(coords: string, transform?: ZoneTransform): string {
   const parsed = parseZoneCoords(coords);
 
   if (!transform) {
     return parsed.map(p => `${p.x},${p.y}`).join(' ');
   }
 
-  const points = units === ZM_ZONE_UNITS.percent
+  const points = isPercentSpace(parsed)
     ? parsed.map(p => ({
-        x: (p.x / 100) * transform.originalWidth,
-        y: (p.y / 100) * transform.originalHeight,
+        x: (p.x / ZONE_PERCENT_MAX) * transform.originalWidth,
+        y: (p.y / ZONE_PERCENT_MAX) * transform.originalHeight,
       }))
     : parsed;
 

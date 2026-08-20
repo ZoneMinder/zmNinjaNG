@@ -241,7 +241,7 @@ describe('coordsToSvgPointsWithTransform', () => {
       originalHeight: 1920,
     };
     // A full-frame percent zone must span the whole frame in pixels.
-    const result = coordsToSvgPointsWithTransform('0,0 100,0 100,100 0,100', transform, 'Percent');
+    const result = coordsToSvgPointsWithTransform('0,0 100,0 100,100 0,100', transform);
     expect(result).toBe('0,0 2560,0 2560,1920 0,1920');
   });
 
@@ -252,10 +252,17 @@ describe('coordsToSvgPointsWithTransform', () => {
       originalHeight: 1920,
     };
     // 50% of 2560x1920 is 1280,960, which 180 degrees maps onto itself.
-    const result = coordsToSvgPointsWithTransform('50,50', transform, 'Percent');
+    const result = coordsToSvgPointsWithTransform('50,50', transform);
     expect(result).toBe('1280,960');
   });
 
+  /**
+   * Units names the units of the analysis parameters (MinAlarmPixels and its
+   * friends), not of the coordinates, and its column default flipped to
+   * Percent. A pre-existing zone can therefore read Units: 'Percent' while its
+   * Coords are still pixels, and scaling those would throw the polygon off the
+   * frame. ZoneMinder's own renderer ignores Units and decides by magnitude.
+   */
   it('leaves pixel coords alone', () => {
     const transform: ZoneTransform = {
       rotation: { kind: 'none' },
@@ -263,9 +270,29 @@ describe('coordsToSvgPointsWithTransform', () => {
       originalHeight: 1920,
     };
     const coords = '756,387 1551,513 1656,1970 696,1812';
-    expect(coordsToSvgPointsWithTransform(coords, transform, 'Pixels')).toBe(coords);
-    // A server that omits Units predates the percent option, so it means pixels.
     expect(coordsToSvgPointsWithTransform(coords, transform)).toBe(coords);
+  });
+
+  it('reads a zone as pixels when a single point passes 100', () => {
+    const transform: ZoneTransform = {
+      rotation: { kind: 'none' },
+      originalWidth: 2560,
+      originalHeight: 1920,
+    };
+    // Three points would fit percent space; the fourth cannot, so the zone is
+    // pixels and none of it is scaled. This is ZoneMinder's own rule.
+    const coords = '10,10 90,10 90,101 10,90';
+    expect(coordsToSvgPointsWithTransform(coords, transform)).toBe(coords);
+  });
+
+  it('treats a point at exactly 100 as percent', () => {
+    const transform: ZoneTransform = {
+      rotation: { kind: 'none' },
+      originalWidth: 2560,
+      originalHeight: 1920,
+    };
+    // ZoneMinder's test is `> 100`, so the full-frame percent zone stays percent.
+    expect(coordsToSvgPointsWithTransform('100,100', transform)).toBe('2560,1920');
   });
 });
 
