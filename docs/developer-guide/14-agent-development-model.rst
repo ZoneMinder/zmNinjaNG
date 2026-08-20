@@ -94,9 +94,6 @@ Every workflow, and what fires it:
      - every PR, push to main
      - version guard, lints, build, unit tests (full-history checkout for
        the evidence gate), web e2e
-   * - ``label-guard.yml``
-     - PR open/sync/label events
-     - requires or auto-assigns the ``core``/``refactor`` label
    * - ``claude.yml``
      - @claude mention on issues and PRs
      - summons an agent into the thread
@@ -227,8 +224,7 @@ whole-branch review runs before the PR. The
 records the practices that make this reliable, down to the trap that a
 piped gate command hides a red exit status.
 
-The PR itself is mostly ceremony by this point: the label guard derives
-``core`` or ``refactor`` from the commit types, branch protection holds
+The PR itself is mostly ceremony by this point: branch protection holds
 the merge until every required check passes, and the merge is queued with
 GitHub auto-merge rather than polled for. What the gates cannot prove,
 the maintainer checks by hand where it matters: UI work gets a real
@@ -266,10 +262,7 @@ A **gate** is a script that enforces a rule. Rule M1 requires one for any
 rule a script could check, added in the same change as the rule; an audit
 here once found every ungated rule violated while every gated rule held,
 which is the entire argument. Current gates: the unit suite, three
-blocking lints, the ratcheted lint baseline, a CI
-`label guard <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__
-that requires a ``core`` or ``refactor`` label on every PR (derived from
-commit types when absent), and
+blocking lints, the ratcheted lint baseline, and
 `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__,
 which checks the instruction files themselves: symbols named in contracts
 exist in the code, the core file contains no project names, the
@@ -316,8 +309,7 @@ How the pieces fit
      PP === GATE
      GP === GATE
      CL === GATE
-     PR["every PR"] === LG["label-guard.yml<br/>core / refactor label"]
-     PR === CI["ci.yml<br/>tests, lints, build, web e2e"]
+     PR["every PR"] === CI["ci.yml<br/>tests, lints, build, web e2e"]
      GATE --> CI
      FAIL["breakage or review finding"] -- "fix PR proposes rule + gate<br/>(self-improvement protocol)" --> AG
      FAIL -- "durable fact (M5)" --> PP
@@ -496,9 +488,8 @@ here are structural rather than tooling:
   recorded maintainer decision, not a silent bump.
 - Ceremony is priced: implementation delegates to subagents on the
   cheapest model that fits the task, trivial gate-covered edits skip the
-  dispatch entirely, independent review runs only where judgment is
-  involved, and the label guard classifies PRs from commit types instead
-  of spending a model call on it. Plans that embed their tests verbatim
+  dispatch entirely, and independent review runs only where judgment is
+  involved. Plans that embed their tests verbatim
   are part of the same economics: transcription is the cheapest work a
   model does, so the expensive thinking happens once, at planning time.
 
@@ -514,9 +505,9 @@ this repo; it shapes the maintainer's sessions, not the repository.
 
 Two honest observations from using the stack on this project. Ponytail's
 bias shows up in decisions that are visible in the history: two
-instruction files instead of a template hierarchy, one gate file instead
-of a test per rule, a shell heuristic instead of a model call in the
-label guard. And output compression is the reason rule P6 exists: in one
+instruction files instead of a template hierarchy, and one gate file
+instead of a test per rule. And output compression is the reason rule P6
+exists: in one
 working session the rtk wrapper capped a commit count at 50 on a
 2254-commit repo, hid a failing test behind a log-file path, and masked a
 red gate's exit status through a pipeline, each caught only by rerunning
@@ -552,8 +543,7 @@ produces most of the seed content.
 Claude Code needs a two-line
 `CLAUDE.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/CLAUDE.md>`__
 importing the two instruction files; other harnesses read ``AGENTS.md``
-directly. The labels, the label-guard workflow, and the two periodic
-reviews are all optional.
+directly. The two periodic reviews are optional.
 
 Do not start with thirty rules. A handful of contracts plus the core is
 enough, and the protocol grows the rest one incident at a time. Rules
@@ -569,7 +559,6 @@ Where everything lives
 - `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__, area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
 - `docs/superpowers/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers>`__, approved specs and implementation plans
 - `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__, the instruction-system gate
-- `label-guard.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/label-guard.yml>`__, the PR label gate
 - `mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__, the history mining skill
 - `fable-review <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/fable-review>`__, the scored codebase review skill
 

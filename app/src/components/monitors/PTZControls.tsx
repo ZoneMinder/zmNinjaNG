@@ -149,11 +149,14 @@ export function PTZControls({ onCommand, profileId, className, disabled, control
   // The driver decides which axes exist. ZoneMinder hides the up/down arrows
   // without CanTilt and left/right without CanPan (skins/classic/includes/
   // control_functions.php), so a pan-only driver never gets tilt buttons whose
-  // commands it would reject. Only an explicit '0' hides an axis: a control
-  // definition that omits the field predates the column, and losing every arrow
-  // there would be worse than showing one that does nothing.
-  const canPan = control?.CanPan !== '0';
-  const canTilt = control?.CanTilt !== '0';
+  // commands it would reject. Present means '1', as everywhere else here: the
+  // schema coerces the field to a string, so a server answering with a JSON
+  // boolean or an empty column would slip past a `!== '0'` test. An absent
+  // field is the one case treated as capable, since losing every arrow on a
+  // control definition that never sent the column is worse than showing one
+  // that does nothing.
+  const canPan = control?.CanPan === undefined || control.CanPan === '1';
+  const canTilt = control?.CanTilt === undefined || control.CanTilt === '1';
   // Diagonals need both axes, matching $hasDiag in control_functions.php.
   const canMoveDiag = canPan && canTilt && control?.CanMoveDiag === '1';
   const canMoveCon = control?.CanMoveCon === '1';
