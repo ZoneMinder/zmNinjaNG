@@ -63,6 +63,12 @@ describe('parseZoneCoords', () => {
       { x: 100, y: 100 },
     ]);
   });
+
+  it('keeps the fraction on percent coords', () => {
+    // ZoneMinder sends percent zones with two decimals. Truncating them to
+    // whole percent moves a vertex by up to a full percent of the frame.
+    expect(parseZoneCoords('38.05,20.73')).toEqual([{ x: 38.05, y: 20.73 }]);
+  });
 });
 
 describe('getZoneColor palette', () => {
@@ -219,6 +225,47 @@ describe('coordsToSvgPointsWithTransform', () => {
     const coords = '0,0 100,0 100,100 0,100';
     const result = coordsToSvgPointsWithTransform(coords, transform);
     expect(result).toBe('0,100 0,0 100,0 100,100');
+  });
+
+  /**
+   * ZoneMinder stores a zone in percent or in pixels and says which in the
+   * zone's Units field (1.39 writes Percent by default). Percent coords drawn
+   * straight into a pixel viewBox collapse into the top-left corner of the
+   * frame, which is the whole bug: a full-frame zone on a 2560x1920 monitor
+   * covered about four percent of it.
+   */
+  it('scales percent coords to the monitor pixel space', () => {
+    const transform: ZoneTransform = {
+      rotation: { kind: 'none' },
+      originalWidth: 2560,
+      originalHeight: 1920,
+    };
+    // A full-frame percent zone must span the whole frame in pixels.
+    const result = coordsToSvgPointsWithTransform('0,0 100,0 100,100 0,100', transform, 'Percent');
+    expect(result).toBe('0,0 2560,0 2560,1920 0,1920');
+  });
+
+  it('scales percent coords before applying rotation', () => {
+    const transform: ZoneTransform = {
+      rotation: { kind: 'degrees', degrees: 180 },
+      originalWidth: 2560,
+      originalHeight: 1920,
+    };
+    // 50% of 2560x1920 is 1280,960, which 180 degrees maps onto itself.
+    const result = coordsToSvgPointsWithTransform('50,50', transform, 'Percent');
+    expect(result).toBe('1280,960');
+  });
+
+  it('leaves pixel coords alone', () => {
+    const transform: ZoneTransform = {
+      rotation: { kind: 'none' },
+      originalWidth: 2560,
+      originalHeight: 1920,
+    };
+    const coords = '756,387 1551,513 1656,1970 696,1812';
+    expect(coordsToSvgPointsWithTransform(coords, transform, 'Pixels')).toBe(coords);
+    // A server that omits Units predates the percent option, so it means pixels.
+    expect(coordsToSvgPointsWithTransform(coords, transform)).toBe(coords);
   });
 });
 

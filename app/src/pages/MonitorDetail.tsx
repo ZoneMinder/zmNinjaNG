@@ -107,6 +107,10 @@ export default function MonitorDetail() {
   // unknown profile, so the existing error state below covers both cases
   // without new branching (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  // One value for the picture and the zone overlay on top of it: the overlay
+  // has to be letterboxed or cropped exactly as the feed is, or the zones sit
+  // at a different scale than what they outline.
+  const feedFit = isFullscreen ? 'contain' : settings.monitorDetailFeedFit;
   const accessToken = useAuthSlice(ownerProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const dataEnabled = !!id && !!ownerProfile;
@@ -451,7 +455,7 @@ export default function MonitorDetail() {
               profile={ownerProfile}
               profileId={routeProfileId ?? undefined}
               externalMediaRef={mediaRef}
-              objectFit={isFullscreen ? 'contain' : settings.monitorDetailFeedFit}
+              objectFit={feedFit}
               showControls={true}
               onProtocolChange={setProtocol}
               forceViewMode="streaming"
@@ -464,6 +468,7 @@ export default function MonitorDetail() {
               rotation={parseMonitorRotation(monitor.Monitor.Orientation)}
               monitorId={monitor.Monitor.Id}
               visible={showZones && !isZonesLoading}
+              objectFit={feedFit}
             />
           </div>
           <ZoneLegend

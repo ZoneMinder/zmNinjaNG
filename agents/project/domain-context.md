@@ -34,6 +34,13 @@ matching reality, fixing it is a protocol change like any rule edit.
 - Event Server v7.0.22 and later always sends a real `eid` in pushes. The
   historical fake-eid bug (a `Date.now()` value where an event id belongs)
   was app-side tray handling, not the ES.
+- A zone's `Coords` are pixels or percent of the frame, and the zone's own
+  `Units` field (`Pixels` / `Percent`) says which. 1.39.18 writes `Percent`
+  for every zone, so a full-frame zone reads `0,0 100,0 100,100 0,100` with
+  `Area: 10000` regardless of the monitor's resolution; older servers wrote
+  pixels and may omit `Units`, which means pixels. Percent values carry two
+  decimals, so parse them as floats. Anything drawing zone coordinates scales
+  by `Units` first, and rotation is applied after, in pixel space.
 
 ## Streaming and media
 

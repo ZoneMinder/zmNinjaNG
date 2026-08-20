@@ -5,6 +5,7 @@
  */
 
 import type { ZoneType } from '../../api/types';
+import { ZM_ZONE_UNITS } from '../zm/zm-constants';
 import type { MonitorRotation } from './monitor-rotation';
 
 /**
@@ -59,8 +60,10 @@ export function parseZoneCoords(coords: string): Point[] {
 
   for (const pair of pairs) {
     const [xStr, yStr] = pair.split(',');
-    const x = parseInt(xStr, 10);
-    const y = parseInt(yStr, 10);
+    // Percent coords carry two decimals; parseInt would floor each vertex to a
+    // whole percent of the frame, which on a 2560-wide monitor is 25 pixels.
+    const x = parseFloat(xStr);
+    const y = parseFloat(yStr);
 
     if (Number.isFinite(x) && Number.isFinite(y)) {
       points.push({ x, y });
@@ -155,16 +158,35 @@ export function transformPoint(point: Point, transform: ZoneTransform): Point {
 /**
  * Converts zone coordinates to SVG polygon points string with optional rotation transformation.
  *
+ * The overlay's viewBox is the monitor's pixel space, so percent coords are
+ * scaled into it first: drawn raw they would land inside a 100x100 box in the
+ * top-left corner of the frame. Scaling happens before the rotation transform,
+ * which works in pixels because it reflects points across the frame's own
+ * width and height.
+ *
  * @param coords - The coordinate string from ZoneMinder
  * @param transform - Optional transformation to apply (rotation)
+ * @param units - The zone's Units field; percent coords are scaled to pixels.
+ *   An absent value means pixels, which is what servers without the field send.
  * @returns SVG points string (e.g., "0,0 100,0 100,100 0,100")
  */
-export function coordsToSvgPointsWithTransform(coords: string, transform?: ZoneTransform): string {
-  const points = parseZoneCoords(coords);
+export function coordsToSvgPointsWithTransform(
+  coords: string,
+  transform?: ZoneTransform,
+  units?: string
+): string {
+  const parsed = parseZoneCoords(coords);
 
   if (!transform) {
-    return points.map(p => `${p.x},${p.y}`).join(' ');
+    return parsed.map(p => `${p.x},${p.y}`).join(' ');
   }
+
+  const points = units === ZM_ZONE_UNITS.percent
+    ? parsed.map(p => ({
+        x: (p.x / 100) * transform.originalWidth,
+        y: (p.y / 100) * transform.originalHeight,
+      }))
+    : parsed;
 
   const transformedPoints = points.map(p => transformPoint(p, transform));
   return transformedPoints.map(p => `${p.x},${p.y}`).join(' ');

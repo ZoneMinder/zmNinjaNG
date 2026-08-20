@@ -8,6 +8,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Zone } from '../../api/types';
+import type { MonitorFeedFit } from '../../stores/settings';
 import type { MonitorRotation } from '../../lib/monitor/monitor-rotation';
 import {
   getZoneColor,
@@ -30,7 +31,33 @@ interface ZoneOverlayProps {
   monitorId: string;
   /** Whether the overlay is visible */
   visible: boolean;
+  /**
+   * The object-fit the feed underneath is drawn with, so the overlay is
+   * letterboxed or cropped exactly as the picture is. Defaults to contain.
+   */
+  objectFit?: MonitorFeedFit;
 }
+
+/**
+ * The SVG equivalent of the feed's object-fit.
+ *
+ * contain and cover map exactly onto meet and slice, and fill onto none, which
+ * stretches the viewBox the way object-fit: fill stretches the picture.
+ *
+ * ponytail: scale-down and none have no SVG equivalent and take the nearest
+ * behavior for a camera feed, which is always larger than the box it is drawn
+ * in: scale-down is contain until the picture is smaller than the box, and
+ * none is a centered crop at natural size, which slice matches in framing but
+ * not in scale. Give the overlay a measured transform instead of a
+ * preserveAspectRatio if either of those ever needs to be exact.
+ */
+const FIT_TO_ASPECT: Record<MonitorFeedFit, string> = {
+  contain: 'xMidYMid meet',
+  cover: 'xMidYMid slice',
+  fill: 'none',
+  'scale-down': 'xMidYMid meet',
+  none: 'xMidYMid slice',
+};
 
 /**
  * ZoneOverlay component.
@@ -43,6 +70,7 @@ export function ZoneOverlay({
   rotation,
   monitorId,
   visible,
+  objectFit = 'contain',
 }: ZoneOverlayProps) {
   const { t } = useTranslation();
   const [hoveredZoneId, setHoveredZoneId] = useState<number | null>(null);
@@ -78,14 +106,20 @@ export function ZoneOverlay({
     const measure = () => {
       const rect = el.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        setPxPerUnit(Math.min(rect.width / viewBoxWidth, rect.height / viewBoxHeight));
+        // Match how the viewBox is fitted: meet scales to the smaller ratio,
+        // slice to the larger, and a stretched viewBox has no single scale, so
+        // the smaller ratio keeps the label from overflowing.
+        const scale = FIT_TO_ASPECT[objectFit] === 'xMidYMid slice'
+          ? Math.max(rect.width / viewBoxWidth, rect.height / viewBoxHeight)
+          : Math.min(rect.width / viewBoxWidth, rect.height / viewBoxHeight);
+        setPxPerUnit(scale);
       }
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [viewBoxWidth, viewBoxHeight, visible]);
+  }, [viewBoxWidth, viewBoxHeight, visible, objectFit]);
 
   if (!visible || filteredZones.length === 0) {
     return null;
@@ -96,11 +130,11 @@ export function ZoneOverlay({
       ref={svgRef}
       className="absolute inset-0 w-full h-full"
       viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio={FIT_TO_ASPECT[objectFit]}
       data-testid="zone-overlay"
     >
       {filteredZones.map((zone) => {
-        const points = coordsToSvgPointsWithTransform(zone.Coords, transform);
+        const points = coordsToSvgPointsWithTransform(zone.Coords, transform, zone.Units);
         const color = getZoneColor(zone.Type);
         const isHovered = hoveredZoneId === zone.Id;
 
