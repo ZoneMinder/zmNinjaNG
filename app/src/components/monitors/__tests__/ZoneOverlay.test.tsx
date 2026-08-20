@@ -46,6 +46,44 @@ describe('ZoneOverlay', () => {
     expect(screen.getByText('monitor_detail.zone_type.preclusive')).toBeInTheDocument();
   });
 
+  /**
+   * ZoneMinder 1.39 stores zones in percent of the frame and says so in the
+   * zone's Units field. Drawn into the pixel viewBox without scaling, a
+   * full-frame zone on a 2560x1920 monitor covered the top-left four percent
+   * of the picture instead of all of it.
+   */
+  it('scales a percent zone across the whole frame', () => {
+    render(
+      <ZoneOverlay
+        {...base}
+        monitorWidth={2560}
+        monitorHeight={1920}
+        zones={[zone({ Id: 9, Units: 'Percent', Coords: '0,0 100,0 100,100 0,100' })]}
+      />
+    );
+
+    expect(screen.getByTestId('zone-polygon-9')).toHaveAttribute(
+      'points',
+      '0,0 2560,0 2560,1920 0,1920'
+    );
+  });
+
+  it('leaves a pixel zone in its own coordinates', () => {
+    render(
+      <ZoneOverlay
+        {...base}
+        monitorWidth={2560}
+        monitorHeight={1920}
+        zones={[zone({ Id: 10, Units: 'Pixels', Coords: '0,0 2560,0 2560,1920 0,1920' })]}
+      />
+    );
+
+    expect(screen.getByTestId('zone-polygon-10')).toHaveAttribute(
+      'points',
+      '0,0 2560,0 2560,1920 0,1920'
+    );
+  });
+
   it('renders nothing when not visible', () => {
     render(<ZoneOverlay {...base} visible={false} zones={[zone({ Id: 1 })]} />);
     expect(screen.queryByTestId('zone-overlay')).not.toBeInTheDocument();

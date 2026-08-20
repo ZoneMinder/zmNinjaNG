@@ -100,7 +100,7 @@ export function ZoneOverlay({
       data-testid="zone-overlay"
     >
       {filteredZones.map((zone) => {
-        const points = coordsToSvgPointsWithTransform(zone.Coords, transform);
+        const points = coordsToSvgPointsWithTransform(zone.Coords, transform, zone.Units);
         const color = getZoneColor(zone.Type);
         const isHovered = hoveredZoneId === zone.Id;
 

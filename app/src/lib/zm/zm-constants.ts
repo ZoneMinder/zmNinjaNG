@@ -169,3 +169,19 @@ export const TAGS_BATCH_SIZE = 100;
  * `formatForServer` and `lib/assistant/event-range.ts`'s `resolveEventRange`).
  */
 export const ZM_API_DATETIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';
+
+/**
+ * Zone Coordinate Units
+ *
+ * A zone's `Coords` are stored either in capture pixels or in percent of the
+ * frame, and the zone's `Units` field says which. ZoneMinder 1.39 writes
+ * `Percent` for new zones so a zone survives a resolution change; older
+ * servers wrote pixels and may omit the field entirely, which means pixels.
+ * Anything drawing zone coordinates has to check this before scaling.
+ */
+export const ZM_ZONE_UNITS = {
+  pixels: 'Pixels',
+  percent: 'Percent',
+} as const;
+
+export type ZmZoneUnits = typeof ZM_ZONE_UNITS[keyof typeof ZM_ZONE_UNITS];
