@@ -189,6 +189,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # The browser e2e suite drives a real ZoneMinder, so without those
+      # secrets there is nothing to run against. The job still has to end
+      # green or it would block every PR on a fork and on any clone that has
+      # no server, which is why it is not a required check: a green tick here
+      # means "ran, or had nothing to run", and only the summary below tells
+      # the two apart. Rule M2: read what a gate measured, not its exit code.
       - name: Check E2E secrets
         id: e2e-secrets
         run: |
@@ -197,6 +203,18 @@ jobs:
           else
             echo "has_secrets=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Report that no E2E test ran
+        if: steps.e2e-secrets.outputs.has_secrets != 'true'
+        run: |
+          echo "::warning title=E2E skipped::No ZM_HOST_1/ZM_USER_1/ZM_PASSWORD_1 secret is configured, so no browser e2e test ran. This job is green because it had nothing to run, not because the suite passed."
+          {
+            echo "### Browser e2e did not run"
+            echo
+            echo "No \`ZM_HOST_1\` / \`ZM_USER_1\` / \`ZM_PASSWORD_1\` secret is configured."
+            echo "The suite drives a real ZoneMinder, so it had nothing to run against."
+            echo "This job is green because it was skipped, **not** because the tests passed."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Setup Node.js
         if: steps.e2e-secrets.outputs.has_secrets == 'true'
