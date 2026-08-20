@@ -84,6 +84,28 @@ describe('ZoneOverlay', () => {
     );
   });
 
+  /**
+   * The overlay sits on top of the feed and must be letterboxed or cropped the
+   * same way the picture is. The feed's object-fit comes from a user setting,
+   * so a hardcoded 'meet' put the zones at contain scale over a picture the
+   * user had set to cover or fill.
+   */
+  it.each([
+    ['contain', 'xMidYMid meet'],
+    ['cover', 'xMidYMid slice'],
+    ['fill', 'none'],
+    ['scale-down', 'xMidYMid meet'],
+    ['none', 'xMidYMid slice'],
+  ] as const)('matches the feed fit %s with preserveAspectRatio %s', (fit, expected) => {
+    render(<ZoneOverlay {...base} objectFit={fit} zones={[zone({ Id: 11 })]} />);
+    expect(screen.getByTestId('zone-overlay')).toHaveAttribute('preserveAspectRatio', expected);
+  });
+
+  it('letterboxes like contain when the caller names no fit', () => {
+    render(<ZoneOverlay {...base} zones={[zone({ Id: 12 })]} />);
+    expect(screen.getByTestId('zone-overlay')).toHaveAttribute('preserveAspectRatio', 'xMidYMid meet');
+  });
+
   it('renders nothing when not visible', () => {
     render(<ZoneOverlay {...base} visible={false} zones={[zone({ Id: 1 })]} />);
     expect(screen.queryByTestId('zone-overlay')).not.toBeInTheDocument();
