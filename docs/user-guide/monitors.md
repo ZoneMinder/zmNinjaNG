@@ -98,6 +98,8 @@ Three things to expect. It works on MJPEG streams only, so a monitor served over
 
 If the monitor has PTZ (Pan-Tilt-Zoom) configured in ZoneMinder, directional controls appear below the live view. Use these to pan, tilt, and zoom the camera.
 
+The pad shows only the directions the camera's control definition claims. A mount that pans but cannot tilt gets the left and right arrows without up and down, and the diagonals need both axes, so the arrows you see are the ones the camera will act on.
+
 ### Recent Events
 
 A list of recent events for this specific monitor, with thumbnails and timestamps. You can select and delete multiple events from this list the same way as on the main Events screen, see {doc}`events`.
