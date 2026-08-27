@@ -177,9 +177,11 @@ waiting on the network.
 #. **Fetch the server's shape.** Still in the background, ``performBootstrap``
    runs ``bootstrapServerMap`` (multi-server routing), ``bootstrapTimezone``,
    ``bootstrapZmsPath``, ``bootstrapGo2RTCPath``, and
-   ``bootstrapMultiPortStreaming``, each wrapped on its own so one failure does
-   not sink the rest, then clears ``isBootstrapping``. These resolve the streaming
-   and routing details the monitor and montage views rely on.
+   ``bootstrapMultiPortStreaming``, and finally ``bootstrapViewMode``, each
+   wrapped on its own so one failure does not sink the rest, then clears
+   ``isBootstrapping``. These resolve the streaming and routing details the
+   monitor and montage views rely on, down to which Streaming Mode a first-time
+   profile opens in.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L303>`__
    · → :doc:`13-network-endpoints`
 

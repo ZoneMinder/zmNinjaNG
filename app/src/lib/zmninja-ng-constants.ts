@@ -295,6 +295,17 @@ export const MONITOR_DETAIL_RECENT_EVENTS = {
 } as const;
 
 /**
+ * The most monitors a server can have before continuous MJPEG streaming stops
+ * being a sane default. Browsers and WebViews keep only about six connections
+ * open to one host, and streaming holds one per tile; the count stops at five
+ * so one connection is left for the app's ordinary API calls, which would
+ * otherwise queue behind the streams. Multi-port streaming spreads tiles
+ * across ports and lifts the limit entirely, so it overrides this count
+ * (lib/monitor/view-mode-recommendation.ts).
+ */
+export const STREAMING_MONITOR_LIMIT = 5;
+
+/**
  * The app shell's single scroll container (AppLayout's <main>). Pages without
  * their own overflow container scroll this element, so scroll restoration for
  * those pages targets it.

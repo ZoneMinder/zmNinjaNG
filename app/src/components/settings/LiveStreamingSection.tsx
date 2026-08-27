@@ -7,6 +7,7 @@
 
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 import { Image, Video as VideoIcon, Zap, Gauge, Leaf, ChevronDown } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Switch } from '../ui/switch';
@@ -17,8 +18,20 @@ import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { CollapsibleSection, SettingsCard, SettingsRow, RowLabel } from './SettingsLayout';
 import { getBandwidthSettings, type BandwidthMode } from '../../lib/zmninja-ng-constants';
+import { getMonitors } from '../../api/monitors';
+import { getSession } from '../../services/sessions';
+import { queryKeys } from '../../lib/query/query-keys';
+import { resolveMinStreamingPort } from '../../lib/monitor/multiport';
+import { recommendViewMode } from '../../lib/monitor/view-mode-recommendation';
 import type { Profile } from '../../api/types';
 import type { ProfileSettings, WebRTCProtocol } from '../../stores/settings';
+
+// Streaming Mode hint text, one key per reason recommendViewMode can give.
+const VIEW_MODE_REASON_KEYS = {
+  'few-monitors': 'settings.view_mode_reason_few_monitors',
+  'multi-port': 'settings.view_mode_reason_multi_port',
+  'many-monitors': 'settings.view_mode_reason_many_monitors',
+} as const;
 
 // ---- Protocol config ----
 const PROTOCOLS: { id: WebRTCProtocol; label: string; descKey: string }[] = [
@@ -42,6 +55,19 @@ export function LiveStreamingSection({
 }: LiveStreamingSectionProps) {
   const { t } = useTranslation();
   const [protocolsExpanded, setProtocolsExpanded] = useState(false);
+
+  // Streaming Mode hint: how many monitors compete for this server's live
+  // connections. Same query key the monitor views use, so this reuses their
+  // cache rather than adding a fetch of its own.
+  const { data: monitorData } = useQuery({
+    queryKey: queryKeys.monitors(currentProfile?.id),
+    queryFn: () => getMonitors(getSession(currentProfile!.id).client, currentProfile!.id),
+    enabled: !!currentProfile,
+  });
+  const recommendation = recommendViewMode(
+    monitorData ? monitorData.monitors.length : null,
+    resolveMinStreamingPort(currentProfile?.minStreamingPort, settings.forceDisableMultiPort),
+  );
 
   // Bandwidth mode changes also reset related settings to defaults
   const handleBandwidthModeChange = (isLow: boolean) => {
@@ -115,7 +141,7 @@ export function LiveStreamingSection({
             }
           />
           <div className="flex items-center gap-2 flex-shrink-0">
-            {settings.viewMode === 'snapshot' && (
+            {recommendation.mode === 'snapshot' && (
               <Badge variant="secondary" className="text-xs">
                 {t('settings.recommended')}
               </Badge>
@@ -134,8 +160,26 @@ export function LiveStreamingSection({
               <VideoIcon className="h-3.5 w-3.5" />
               <span>{t('settings.streaming')}</span>
             </div>
+            {recommendation.mode === 'streaming' && (
+              <Badge variant="secondary" className="text-xs">
+                {t('settings.recommended')}
+              </Badge>
+            )}
           </div>
         </SettingsRow>
+
+        {/* Why that mode is recommended. The toggle above still wins; this only
+            explains what this server's size and multi-port support imply. */}
+        {monitorData && (
+          <p
+            className="px-4 pb-3 -mt-2 text-xs text-muted-foreground"
+            data-testid="settings-view-mode-reason"
+          >
+            {t(VIEW_MODE_REASON_KEYS[recommendation.reason], {
+              monitorCount: monitorData.monitors.length,
+            })}
+          </p>
+        )}
 
         {/* Snapshot Refresh Interval (only in snapshot mode: child of Streaming Mode) */}
         {settings.viewMode === 'snapshot' && (

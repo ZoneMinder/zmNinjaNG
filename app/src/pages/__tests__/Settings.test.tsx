@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import Settings from '../Settings';
 import { createContext, useContext } from 'react';
@@ -117,6 +118,15 @@ vi.mock('../../components/settings/HiddenMonitorsSection', () => ({
   HiddenMonitorsSection: () => null,
 }));
 
+
+// LiveStreamingSection reads the monitor count through React Query to explain
+// its Streaming Mode recommendation (refs #385), so the page needs a client.
+const queryWrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    {children}
+  </QueryClientProvider>
+);
+
 describe('Settings Page', () => {
   beforeEach(() => {
     updateProfileSettings.mockClear();
@@ -126,7 +136,7 @@ describe('Settings Page', () => {
 
   it('updates view mode and event limit settings', async () => {
     const user = userEvent.setup();
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
 
     await user.click(screen.getByTestId('settings-view-mode-switch'));
     expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { viewMode: 'streaming' });
@@ -138,7 +148,7 @@ describe('Settings Page', () => {
 
   it('updates log redaction toggle', async () => {
     const user = userEvent.setup();
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
 
     // Advanced is collapsed by default; expand it to reach its controls.
     await user.click(screen.getByTestId('settings-section-advanced-toggle'));
@@ -148,7 +158,7 @@ describe('Settings Page', () => {
 
   it('changes language selection', async () => {
     const user = userEvent.setup();
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
 
     await user.click(screen.getByTestId('settings-language-select'));
     await user.click(screen.getByText('languages.es'));

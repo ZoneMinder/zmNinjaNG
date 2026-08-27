@@ -170,7 +170,7 @@ export async function bootstrapGo2RTCPath(
 export async function bootstrapMultiPortStreaming(
   profile: Profile,
   context: BootstrapContext
-): Promise<void> {
+): Promise<number | null> {
   try {
     log.profileService('Fetching server configuration for multi-port streaming', LogLevel.INFO);
     const { fetchMinStreamingPort } = await import('../api/server');
@@ -178,7 +178,7 @@ export async function bootstrapMultiPortStreaming(
 
     if (minPort === null) {
       log.profileService('Multi-port streaming not configured on server', LogLevel.DEBUG);
-      return;
+      return null;
     }
 
     // Multi-port is published by the server; the per-profile
@@ -203,28 +203,66 @@ export async function bootstrapMultiPortStreaming(
       await context.updateProfile(profile.id, { minStreamingPort: minPort });
     }
 
-    // For NEW profiles (no existing settings), default to streaming mode
-    // For existing profiles, respect user's current settings
-    try {
-      const hasExistingSettings = settingsStore.profileSettings[profile.id] !== undefined;
-
-      if (!hasExistingSettings) {
-        log.profileService('New profile with multi-port: defaulting to streaming mode', LogLevel.INFO);
-        settingsStore.updateProfileSettings(profile.id, { viewMode: 'streaming' });
-      } else {
-        log.profileService('Existing profile: preserving current viewMode setting', LogLevel.DEBUG);
-      }
-    } catch (settingsError) {
-      log.profileService('Failed to configure view mode', LogLevel.WARN, {
-        error: settingsError,
-      });
-    }
+    return minPort;
   } catch (configError) {
     log.profileService(
       'Failed to fetch MIN_STREAMING_PORT - multi-port may be unavailable',
       LogLevel.WARN,
       { error: configError }
     );
+    return null;
+  }
+}
+
+/**
+ * Pick the Streaming Mode a new profile starts in.
+ *
+ * Only a profile with no settings bucket of its own is decided here: once the
+ * bucket exists the stored viewMode is the user's, whether they set it or an
+ * earlier bootstrap did. The recommendation itself lives in
+ * lib/monitor/view-mode-recommendation.ts, which Settings also shows as a hint.
+ *
+ * @param minStreamingPort The multi-port base bootstrapMultiPortStreaming just
+ *   fetched, since the passed profile still carries the pre-update value.
+ */
+export async function bootstrapViewMode(
+  profile: Profile,
+  minStreamingPort: number | null,
+): Promise<void> {
+  try {
+    const { useSettingsStore } = await import('../stores/settings');
+    const settingsStore = useSettingsStore.getState();
+
+    if (settingsStore.profileSettings[profile.id] !== undefined) {
+      log.profileService('Existing profile: preserving current viewMode setting', LogLevel.DEBUG);
+      return;
+    }
+
+    let monitorCount: number | null = null;
+    try {
+      const { getMonitors } = await import('../api/monitors');
+      const { monitors } = await getMonitors(getSession(profile.id).client, profile.id);
+      monitorCount = monitors.length;
+    } catch (monitorError) {
+      log.profileService('Failed to count monitors for Streaming Mode default', LogLevel.WARN, {
+        error: monitorError,
+      });
+    }
+
+    const { recommendViewMode } = await import('../lib/monitor/view-mode-recommendation');
+    const { mode, reason } = recommendViewMode(monitorCount, minStreamingPort ?? undefined);
+
+    log.profileService('New profile: choosing Streaming Mode', LogLevel.INFO, {
+      mode,
+      reason,
+      monitorCount,
+      minStreamingPort,
+    });
+    settingsStore.updateProfileSettings(profile.id, { viewMode: mode });
+  } catch (settingsError) {
+    log.profileService('Failed to configure view mode', LogLevel.WARN, {
+      error: settingsError,
+    });
   }
 }
 
@@ -319,5 +357,6 @@ export async function performBootstrap(
   await bootstrapTimezone(profile, context);
   await bootstrapZmsPath(profile, context);
   await bootstrapGo2RTCPath(profile, context);
-  await bootstrapMultiPortStreaming(profile, context);
+  const minStreamingPort = await bootstrapMultiPortStreaming(profile, context);
+  await bootstrapViewMode(profile, minStreamingPort);
 }

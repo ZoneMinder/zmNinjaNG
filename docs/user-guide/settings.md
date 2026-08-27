@@ -108,14 +108,15 @@ The Streaming Mode toggle picks how live MJPEG feeds are fetched:
 
 Streaming Mode interacts with the streaming protocol layer. When a monitor uses Go2RTC (WebRTC/MSE/HLS), it always delivers continuous video, the Streaming Mode setting is ignored for that monitor. The setting only changes behavior on the MJPEG path: either when Go2RTC is disabled globally, when it is disabled per-monitor, or when Go2RTC fails and the app falls back to MJPEG.
 
-#### Default per device
+#### What a new profile starts with
 
-A new profile picks a default based on the platform:
+A new profile picks its Streaming Mode from the server it just connected to:
 
-- **Phone, tablet, and web app**: default is **Snapshot**. The browser or app webview holds only about 6 live connections open to one server at a time, so a montage full of Streaming tiles stalls after the first few. Snapshot mode fetches a still on an interval instead of holding a connection, so every tile keeps updating no matter how many cameras are on screen.
-- **Desktop app**: default is **Streaming**. The desktop app reads each MJPEG feed natively rather than through the webview, so the per-server connection limit does not apply and a montage can stream many cameras at once.
+- **5 or fewer monitors**: **Streaming**. A browser or app webview keeps only about 6 connections open to one server, so up to 5 live feeds fit with one connection left for the app's other requests.
+- **Multi-port streaming configured** (`ZM_MIN_STREAMING_PORT`): **Streaming**, whatever the monitor count. Each camera streams on its own port, so the per-server connection limit no longer applies.
+- **6 or more monitors and no multi-port streaming**: **Snapshot**. Streaming that many feeds would stall after the first few; snapshot mode fetches a still on an interval instead of holding a connection, so every tile keeps updating.
 
-Changing the Streaming Mode toggle overrides the default for that profile.
+The row shows which mode is recommended for the server and a line explaining why. The recommendation is only the starting value: changing the toggle overrides it for that profile, and no later connection changes it back.
 
 #### While aggregating
 
@@ -135,7 +136,7 @@ How a live MJPEG feed reaches the screen differs by platform, and that decides w
 | Desktop (Windows, macOS, Linux) | Read natively by the app, not through the webview | No limit |
 
 :::{note}
-On **iOS, Android, and the web app**, a ZoneMinder server keeps only about 6 live streams open at a time, so a montage with more than ~6 live tiles stalls after the first few. To show more than 6 live feeds at once, either keep **Snapshot** mode (the default on these platforms, which fetches a still on an interval instead of holding a connection) or enable multi-port streaming on the server by setting `ZM_MIN_STREAMING_PORT`. That spreads each camera across a different port, so the limit no longer applies. On **desktop** the app reads feeds natively, so this limit never applies. See [Multi-Server](#multi-server).
+On **iOS, Android, and the web app**, a ZoneMinder server keeps only about 6 live streams open at a time, so a montage with more than ~6 live tiles stalls after the first few. To show more than 6 live feeds at once, either keep **Snapshot** mode (which fetches a still on an interval instead of holding a connection) or enable multi-port streaming on the server by setting `ZM_MIN_STREAMING_PORT`. That spreads each camera across a different port, so the limit no longer applies. On **desktop** the app reads feeds natively, so this limit never applies. See [Multi-Server](#multi-server).
 :::
 
 #### Where Streaming Mode applies

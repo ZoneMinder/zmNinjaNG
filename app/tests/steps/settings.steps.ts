@@ -24,6 +24,25 @@ Then('I should see settings interface elements', async ({ page }) => {
   expect(hasThemeControls || hasLanguageControls || hasSwitches).toBeTruthy();
 });
 
+Then('the Streaming Mode row explains which mode it recommends', async ({ page }) => {
+  const reason = page.getByTestId('settings-view-mode-reason');
+  await expect(reason).toBeVisible({ timeout: testConfig.timeouts.element });
+
+  // The line names the mode this server should start in, and the badge sits
+  // beside that same mode's label - Streaming's label comes before the badge,
+  // Snapshot's after it.
+  const text = (await reason.textContent()) ?? '';
+  const match = text.match(/^Recommended: (Streaming|Snapshot)\./);
+  expect(match, `unexpected reason line: ${text}`).not.toBeNull();
+
+  const badge = page.getByText('Recommended', { exact: true }).first();
+  const neighbor = await badge.evaluate((el) =>
+    (el.previousElementSibling?.textContent ?? '') + '|' + (el.nextElementSibling?.textContent ?? '')
+  );
+  const [before, after] = neighbor.split('|');
+  expect(match![1] === 'Streaming' ? before : after).toContain(match![1]);
+});
+
 Then('I should see theme selector', async ({ page }) => {
   // Wait for settings page content to load
   await expect(page.getByRole('heading', { name: /settings/i })).toBeVisible({

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import Settings from '../Settings';
@@ -85,6 +86,15 @@ const baseSettings = {
   hoverPreviewPlaybackRate: 200,
 };
 
+
+// LiveStreamingSection reads the monitor count through React Query to explain
+// its Streaming Mode recommendation (refs #385), so the page needs a client.
+const queryWrapper = ({ children }: { children: React.ReactNode }) => (
+  <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    {children}
+  </QueryClientProvider>
+);
+
 describe('Settings page - All mode two-tier picker (refs #337)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -105,7 +115,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   });
 
   it('AppearanceSection (view-level) writes to the ALL bucket, not a real profile', async () => {
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
 
     await screen.findByTestId('settings-tv-mode');
     fireEvent.click(screen.getByTestId('settings-tv-mode'));
@@ -124,7 +134,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
     });
 
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
 
     await screen.findByTestId('settings-tv-mode');
     fireEvent.click(screen.getByTestId('settings-tv-mode'));
@@ -133,7 +143,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   });
 
   it('shows the picker above the server-scoped block, defaulted to the first profile', () => {
-    render(<Settings />);
+    render(<Settings />, { wrapper: queryWrapper });
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
   });
 
@@ -142,7 +152,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   // anything but "follow each server" (refs #337).
   describe('All Servers Streaming Mode', () => {
     it('imposes streaming on every server when picked', () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
 
@@ -152,7 +162,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     });
 
     it('imposes snapshot on every server when picked', () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-snapshot'));
 
@@ -163,7 +173,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
 
     it('hands every server back its own mode when "Per server" is picked', () => {
       allModeViewMode = 'streaming';
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-per-server'));
 
@@ -175,14 +185,14 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     // The row's description is what tells the user which state they are in;
     // the trigger's own label comes from Radix, which is stubbed here.
     it('describes the current state, defaulting to per-server', () => {
-      const { unmount } = render(<Settings />);
+      const { unmount } = render(<Settings />, { wrapper: queryWrapper });
       expect(
         screen.getByText('settings.all_mode_streaming_per_server_desc')
       ).toBeInTheDocument();
       unmount();
 
       allModeViewMode = 'snapshot';
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
       expect(
         screen.getByText('settings.all_mode_streaming_snapshot_desc')
       ).toBeInTheDocument();
@@ -192,7 +202,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     // no stored name, so this arm covers a pre-migration frame. The live case
     // is "names the group in both aggregate section headers" below (refs #337).
     it('names All Servers in its label', () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       expect(
         screen.getByText('settings.all_mode_streaming_label:{"name":"profiles.all_servers"}')
@@ -208,7 +218,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
         mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
       });
 
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       expect(screen.queryByTestId('all-mode-streaming-select')).not.toBeInTheDocument();
     });
@@ -223,7 +233,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
         currentProfile: null, isAllMode: true, hasProfile: false,
         settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
       }));
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
 
@@ -241,7 +251,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
         mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
       });
 
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       expect(screen.queryByTestId('all-mode-max-streams-input')).not.toBeInTheDocument();
     });
@@ -261,7 +271,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     });
 
     it('writes a view-level setting to the group bucket', async () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       await screen.findByTestId('settings-tv-mode');
       fireEvent.click(screen.getByTestId('settings-tv-mode'));
@@ -270,7 +280,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     });
 
     it('writes the imposed Streaming Mode to the group bucket', () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
 
@@ -282,7 +292,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     // Both aggregate sections are titled after the aggregate they govern, so
     // "every tile" reads as the group's tiles rather than every server's.
     it('names the group in both aggregate section headers', () => {
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       expect(
         screen.getByText('settings.all_mode_streaming_label:{"name":"Backyard"}')
@@ -297,7 +307,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
         currentProfile: null, isAllMode: true, hasProfile: false,
         settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
       }));
-      render(<Settings />);
+      render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
 
