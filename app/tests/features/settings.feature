@@ -17,6 +17,11 @@ Feature: Application Settings
     Then the theme selection should persist
 
   @all
+  Scenario: Streaming Mode says why it recommends a mode
+    When I navigate to the "Settings" page
+    Then the Streaming Mode row explains which mode it recommends
+
+  @all
   Scenario: Change language and verify visible text updates
     When I navigate to the "Settings" page
     Then I should see language selector

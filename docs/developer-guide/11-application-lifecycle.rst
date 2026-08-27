@@ -77,9 +77,20 @@ responsive. It runs in order:
 4. ``bootstrapTimezone`` fetches the server's timezone.
 5. ``bootstrapZmsPath`` derives the CGI URL from the server's ZMS path.
 6. ``bootstrapGo2RTCPath`` picks up the go2rtc path if the server publishes one.
-7. ``bootstrapMultiPortStreaming`` reads ``MIN_STREAMING_PORT``.
+7. ``bootstrapMultiPortStreaming`` reads ``MIN_STREAMING_PORT`` and returns it.
+8. ``bootstrapViewMode`` picks the Streaming Mode a brand-new profile starts in,
+   from that port and the server's monitor count.
 
-Every one of those seven wraps its own body in ``try``/``catch`` and logs a
+Step 8 only runs for a profile with no settings bucket yet. Once the bucket
+exists the stored ``viewMode`` belongs to the user, so a later bootstrap leaves
+it alone even if the server has grown since. The rule itself is
+``recommendViewMode`` (``lib/monitor/view-mode-recommendation.ts``): five or
+fewer monitors, or multi-port streaming at any count, means streaming; anything
+else means snapshot. Settings shows the same call's answer as a hint under the
+Streaming Mode row, which is why the rule lives in a pure function rather than
+inside the bootstrap step.
+
+Every one of those eight wraps its own body in ``try``/``catch`` and logs a
 warning on failure. None of them rethrows, so a step that fails does not stop
 the next one, and the app finishes bootstrapping in a degraded state rather
 than not at all. That includes authentication: a login failure is logged as
