@@ -128,6 +128,13 @@ export const DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: EventMontageGroupLayout = {
 
 export interface ProfileSettings {
   viewMode: ViewMode;
+  /**
+   * Set once viewMode has been chosen, by the user's toggle or by
+   * bootstrapViewMode. Deliberately absent from DEFAULT_SETTINGS: any write
+   * to a fresh bucket copies the defaults in, so viewMode itself can never
+   * tell "chosen" from "defaulted" (refs #385).
+   */
+  viewModeChosen?: boolean;
   displayMode: DisplayMode;
   theme: ThemePreference;
   logLevel: LogLevel;

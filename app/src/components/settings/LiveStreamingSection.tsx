@@ -142,7 +142,11 @@ export function LiveStreamingSection({
           />
           <div className="flex items-center gap-2 flex-shrink-0">
             {recommendation.mode === 'snapshot' && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge
+                variant="secondary"
+                className="text-xs"
+                data-testid="settings-view-mode-recommended-snapshot"
+              >
                 {t('settings.recommended')}
               </Badge>
             )}
@@ -153,7 +157,13 @@ export function LiveStreamingSection({
             <Switch
               id="view-mode"
               checked={settings.viewMode === 'streaming'}
-              onCheckedChange={(checked) => update('viewMode', checked ? 'streaming' : 'snapshot')}
+              onCheckedChange={(checked) =>
+                currentProfile &&
+                updateSettings(currentProfile.id, {
+                  viewMode: checked ? 'streaming' : 'snapshot',
+                  viewModeChosen: true,
+                })
+              }
               data-testid="settings-view-mode-switch"
             />
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -161,7 +171,11 @@ export function LiveStreamingSection({
               <span>{t('settings.streaming')}</span>
             </div>
             {recommendation.mode === 'streaming' && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge
+                variant="secondary"
+                className="text-xs"
+                data-testid="settings-view-mode-recommended-streaming"
+              >
                 {t('settings.recommended')}
               </Badge>
             )}

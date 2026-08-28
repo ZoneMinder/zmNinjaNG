@@ -342,11 +342,31 @@ Enforcement lives in ``app/src/tests/`` and the CI workflows. Covering
 gates run before every commit; the full battery runs before a push or PR
 (rule P3), as one command: ``npm run gates``.
 
+Two gates check the tests themselves rather than the code. The proven-red
+job (`proven-red.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/proven-red.mjs>`__)
+takes the test files a PR changed, runs them in a throwaway worktree that
+holds the pre-change code, and fails when they pass there: a test that is
+green on the code it claims to guard cannot catch the bug, which is rule
+P2 stated as a command. It skips ranges whose commit type carries no
+behavior change (``docs``, ``chore``, ``refactor`` and the like) and says
+so. The quality ratchet
+(`quality-ratchet.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/scripts/quality-ratchet.mjs>`__,
+gated by ``quality-ratchet.test.ts``) records three counts in
+``app/.quality-baseline.json`` and fails when any grows: test files that
+mock the app's own stores, hooks, services, or components instead of
+testing through them; assertions that only prove an element exists (rule
+C6); and occurrences in agent and developer prose of terms the
+`glossary <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/glossary.md>`__
+lists under ``_Avoid_``. Each number may fall or hold; raising one needs a
+reason in the commit message, the same bargain as the lint ratchet.
+
 Review still happens on every change, done by agents rather than the
 maintainer. The workflow in
 `claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__
 pairs an implementing agent with an independent reviewing agent for work
-that involves judgment, and one whole-branch review runs before every PR.
+that involves judgment, and one whole-branch review runs before every PR
+on two axes in separate contexts: standards (the contracts and playbooks)
+and spec (the acceptance lines the PR body quotes from its issue).
 CI runs the full gate suite on every push. The
 `claude.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/claude.yml>`__
 workflow lets the maintainer bring an agent into any issue or PR by

@@ -28,19 +28,14 @@ Then('the Streaming Mode row explains which mode it recommends', async ({ page }
   const reason = page.getByTestId('settings-view-mode-reason');
   await expect(reason).toBeVisible({ timeout: testConfig.timeouts.element });
 
-  // The line names the mode this server should start in, and the badge sits
-  // beside that same mode's label - Streaming's label comes before the badge,
-  // Snapshot's after it.
+  // The line names the mode this server should start in; the badge with the
+  // matching testid sits beside that mode's label.
   const text = (await reason.textContent()) ?? '';
   const match = text.match(/^Recommended: (Streaming|Snapshot)\./);
   expect(match, `unexpected reason line: ${text}`).not.toBeNull();
-
-  const badge = page.getByText('Recommended', { exact: true }).first();
-  const neighbor = await badge.evaluate((el) =>
-    (el.previousElementSibling?.textContent ?? '') + '|' + (el.nextElementSibling?.textContent ?? '')
-  );
-  const [before, after] = neighbor.split('|');
-  expect(match![1] === 'Streaming' ? before : after).toContain(match![1]);
+  await expect(
+    page.getByTestId(`settings-view-mode-recommended-${match![1].toLowerCase()}`)
+  ).toBeVisible();
 });
 
 Then('I should see theme selector', async ({ page }) => {

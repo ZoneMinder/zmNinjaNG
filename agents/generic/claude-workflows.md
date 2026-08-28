@@ -16,7 +16,14 @@ reviews of mechanical
 transcription tasks found zero defects; reviews of judgment work (doc
 remapping, whole-branch review) found every real one. Review where judgment
 lives; skip where the gate already proves the result. The final whole-branch
-review before a PR is the one step never skipped. Agent count is a cost,
+review before a PR is the one step never skipped, and it runs on two axes in
+two separate contexts: a Standards agent judging the diff against the
+contracts and playbooks (skipping anything a gate enforces), and a Spec agent
+judging the diff against the issue's acceptance lines (missing, unrequested,
+looks-implemented-but-wrong, each quoting the issue). Findings stay under
+their own heading, never merged or reranked: a change can pass one axis and
+fail the other, and the fix chains of 2026-08 (#375 then #377 eleven minutes
+later, #379 then #380) passed every gate while missing what the issue asked. Agent count is a cost,
 never a quality signal: prefer the fewest dispatches that produce the
 evidence, and let the harness parallelize instead of choreographing a
 named fleet.

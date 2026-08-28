@@ -139,7 +139,7 @@ describe('Settings Page', () => {
     render(<Settings />, { wrapper: queryWrapper });
 
     await user.click(screen.getByTestId('settings-view-mode-switch'));
-    expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { viewMode: 'streaming' });
+    expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { viewMode: 'streaming', viewModeChosen: true });
 
     const eventLimitInput = screen.getByTestId('settings-event-limit');
     fireEvent.change(eventLimitInput, { target: { value: '400' } });

@@ -117,7 +117,11 @@ describe('AGENTS.md stays portable', () => {
     // 2000 -> 2050 (refs #337): the assistant tool-loop contract gained the
     // multi-server path, and the entry was already compressed to pay for most
     // of it. A contract nobody can find is worse than 50 words.
-    const WORD_BUDGET = 2050;
+    // 2050 -> 2100 (refs #385 follow-up): P2 and C6 gained the gates M1
+    // demands (proven-red job, quality ratchet), P1 the out-of-scope ledger
+    // and acceptance lines; the verification section was compressed to pay
+    // for half of it.
+    const WORD_BUDGET = 2100;
     const words = (f: string) =>
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
     const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');
@@ -130,7 +134,23 @@ describe('knowledge files stay evidence-backed and private-data-free (M5)', () =
     'agents/project/domain-context.md',
     'agents/project/llm-models.md',
     'agents/generic/claude-workflows.md',
+    'agents/project/glossary.md',
+    'agents/project/out-of-scope.md',
   ];
+
+  it('the PR template carries the Acceptance section the Spec review axis reads', () => {
+    const template = fs.readFileSync(path.join(repoRoot, '.github/pull_request_template.md'), 'utf8');
+    expect(template).toMatch(/^## Acceptance$/m);
+  });
+
+  it('every issue cited in out-of-scope has a reason line', () => {
+    const md = fs.readFileSync(path.join(repoRoot, 'agents/project/out-of-scope.md'), 'utf8');
+    const entries = md.split('\n- ').slice(1);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.split(/\s+/).length, `entry too short to carry a reason: ${entry.slice(0, 60)}`).toBeGreaterThan(12);
+    }
+  });
 
   it('every commit hash cited in domain-context exists in this repo', () => {
     const md = fs.readFileSync(path.join(repoRoot, 'agents/project/domain-context.md'), 'utf8');

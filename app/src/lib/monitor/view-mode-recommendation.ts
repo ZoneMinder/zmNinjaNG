@@ -24,7 +24,10 @@ export interface ViewModeRecommendation {
 }
 
 /**
- * @param monitorCount Monitors on the server, or null when not known yet.
+ * @param monitorCount Monitors the app shows for this server (deleted and
+ *   per-profile excluded ones already dropped by getMonitors), or null when
+ *   not known yet. Disabled monitors still count: they get a tile, and a tile
+ *   on the MJPEG path holds a connection whether or not the camera is up.
  * @param minStreamingPort The effective multi-port base
  *   (`resolveMinStreamingPort`), undefined when multi-port is off.
  */

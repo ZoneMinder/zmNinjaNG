@@ -42,7 +42,11 @@ const profile = (minStreamingPort?: number): Profile => ({
   minStreamingPort,
 });
 
-async function renderSection(monitorCount: number, minStreamingPort?: number) {
+async function renderSection(
+  monitorCount: number,
+  minStreamingPort?: number,
+  settings: Partial<typeof DEFAULT_SETTINGS> = {},
+) {
   vi.mocked(getMonitors).mockResolvedValue({
     monitors: Array.from({ length: monitorCount }, (_, i) => ({ id: String(i + 1) })),
   } as never);
@@ -50,7 +54,7 @@ async function renderSection(monitorCount: number, minStreamingPort?: number) {
   render(
     <QueryClientProvider client={client}>
       <LiveStreamingSection
-        settings={DEFAULT_SETTINGS}
+        settings={{ ...DEFAULT_SETTINGS, ...settings }}
         update={vi.fn()}
         currentProfile={profile(minStreamingPort)}
         updateSettings={vi.fn()}
@@ -66,11 +70,13 @@ describe('LiveStreamingSection Streaming Mode recommendation', () => {
     localStorage.clear();
   });
 
-  it('explains streaming for a server small enough to stream every feed', async () => {
+  it('explains streaming for a small server and badges the streaming side', async () => {
     const reason = await renderSection(3);
     expect(reason.textContent).toBe(
       'settings.view_mode_reason_few_monitors:{"monitorCount":3}'
     );
+    expect(screen.getByTestId('settings-view-mode-recommended-streaming')).toBeInTheDocument();
+    expect(screen.queryByTestId('settings-view-mode-recommended-snapshot')).toBeNull();
   });
 
   it('explains streaming for a big server with multi-port', async () => {
@@ -80,18 +86,12 @@ describe('LiveStreamingSection Streaming Mode recommendation', () => {
     );
   });
 
-  it('explains snapshot for a big server without multi-port', async () => {
-    const reason = await renderSection(20);
+  it('drops back to snapshot when the profile force-disables multi-port', async () => {
+    const reason = await renderSection(20, 31000, { forceDisableMultiPort: true });
     expect(reason.textContent).toBe(
       'settings.view_mode_reason_many_monitors:{"monitorCount":20}'
     );
-  });
-
-  it('badges the mode it recommends, not a fixed one', async () => {
-    await renderSection(3);
-    const badge = screen.getByText('settings.recommended');
-    // The badge follows the label of the mode being recommended: streaming's
-    // label is the sibling before it, snapshot's the one after.
-    expect(badge.previousElementSibling?.textContent).toBe('settings.streaming');
+    expect(screen.getByTestId('settings-view-mode-recommended-snapshot')).toBeInTheDocument();
+    expect(screen.queryByTestId('settings-view-mode-recommended-streaming')).toBeNull();
   });
 });

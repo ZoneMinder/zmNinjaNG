@@ -8,8 +8,15 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { getMonitors } from '../../api/monitors';
 
 const updateProfileSettings = vi.fn();
+
+vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
+vi.mock('../../services/sessions', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../services/sessions')>()),
+  getSession: () => ({ client: {} }) as never,
+}));
 
 vi.mock('../../hooks/useCurrentProfile', () => ({
   useCurrentProfile: vi.fn(),
@@ -112,6 +119,21 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     vi.mocked(useProfileScope).mockReturnValue({
       mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
     });
+  });
+
+  it('Streaming Mode reason follows the picked server, not the aggregate (refs #385)', async () => {
+    vi.mocked(getMonitors).mockImplementation(async (_client, profileId) => ({
+      monitors: Array.from({ length: profileId === profileA.id ? 3 : 20 }, (_, i) => ({ id: String(i + 1) })),
+    }) as never);
+    render(<Settings />, { wrapper: queryWrapper });
+
+    expect((await screen.findByTestId('settings-view-mode-reason')).textContent).toBe(
+      'settings.view_mode_reason_few_monitors:{"monitorCount":3}'
+    );
+
+    fireEvent.click(screen.getByTestId(`page-profile-picker-option-${profileB.id}`));
+
+    await screen.findByText('settings.view_mode_reason_many_monitors:{"monitorCount":20}');
   });
 
   it('AppearanceSection (view-level) writes to the ALL bucket, not a real profile', async () => {

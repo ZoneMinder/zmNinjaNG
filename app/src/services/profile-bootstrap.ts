@@ -217,10 +217,19 @@ export async function bootstrapMultiPortStreaming(
 /**
  * Pick the Streaming Mode a new profile starts in.
  *
- * Only a profile with no settings bucket of its own is decided here: once the
- * bucket exists the stored viewMode is the user's, whether they set it or an
- * earlier bootstrap did. The recommendation itself lives in
- * lib/monitor/view-mode-recommendation.ts, which Settings also shows as a hint.
+ * Decided only while the profile's viewModeChosen flag is unset. Neither the
+ * bucket nor viewMode itself is the signal: lastRoute, theme, or the
+ * self-signed certificate flag can land in the bucket before the first
+ * bootstrap ever runs, and every write copies DEFAULT_SETTINGS.viewMode in
+ * with it. An earlier version gated on the bucket and so never fired for the
+ * first profile or for self-signed ones. Once chosen, the mode belongs to the
+ * user, whether they set it or an earlier bootstrap did.
+ *
+ * When the monitor count cannot be fetched and multi-port is off there is
+ * nothing to decide from, so nothing is written: the merge default applies
+ * for now and the next bootstrap tries again. The recommendation itself
+ * lives in lib/monitor/view-mode-recommendation.ts, which Settings also shows
+ * as a hint.
  *
  * @param minStreamingPort The multi-port base bootstrapMultiPortStreaming just
  *   fetched, since the passed profile still carries the pre-update value.
@@ -232,8 +241,9 @@ export async function bootstrapViewMode(
   try {
     const { useSettingsStore } = await import('../stores/settings');
     const settingsStore = useSettingsStore.getState();
+    const bucket = settingsStore.profileSettings[profile.id];
 
-    if (settingsStore.profileSettings[profile.id] !== undefined) {
+    if (bucket?.viewModeChosen) {
       log.profileService('Existing profile: preserving current viewMode setting', LogLevel.DEBUG);
       return;
     }
@@ -249,16 +259,24 @@ export async function bootstrapViewMode(
       });
     }
 
+    const { resolveMinStreamingPort } = await import('../lib/monitor/multiport');
+    const effectivePort = resolveMinStreamingPort(minStreamingPort, bucket?.forceDisableMultiPort);
+
+    if (monitorCount === null && effectivePort === undefined) {
+      log.profileService('Streaming Mode left undecided until the monitor count is known', LogLevel.INFO);
+      return;
+    }
+
     const { recommendViewMode } = await import('../lib/monitor/view-mode-recommendation');
-    const { mode, reason } = recommendViewMode(monitorCount, minStreamingPort ?? undefined);
+    const { mode, reason } = recommendViewMode(monitorCount, effectivePort);
 
     log.profileService('New profile: choosing Streaming Mode', LogLevel.INFO, {
       mode,
       reason,
       monitorCount,
-      minStreamingPort,
+      minStreamingPort: effectivePort ?? null,
     });
-    settingsStore.updateProfileSettings(profile.id, { viewMode: mode });
+    settingsStore.updateProfileSettings(profile.id, { viewMode: mode, viewModeChosen: true });
   } catch (settingsError) {
     log.profileService('Failed to configure view mode', LogLevel.WARN, {
       error: settingsError,

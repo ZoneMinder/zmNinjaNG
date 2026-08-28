@@ -26,15 +26,17 @@ tier; docs reference IDs, never copied text.
 
 ## Process
 
-- P1. Create or use an issue before feature or bug work; land through an
-  issue-linked PR. Commits reference the issue; closing keywords only after
-  the user confirms. If instructed to push directly to the default branch,
+- P1. Create or use an issue before feature or bug work, after checking the
+  out-of-scope ledger; land through an issue-linked PR whose body quotes the
+  issue's acceptance lines. Commits reference the issue; closing keywords
+  only after the user confirms. If instructed to push directly to the default branch,
   do so and verify the issue timeline. Typo-level fixes and doc
   corrections with no behavior change need no issue.
 - P2. Test first: a failing test precedes the implementation of every
   feature and bugfix. A test that has never failed does not demonstrate it
   can catch the bug. Changes an existing gate already covers fully rely on
-  that gate instead of a bespoke new test.
+  that gate instead of a bespoke new test. Gate: the proven-red CI job runs
+  each change's tests against the pre-change code and fails when they pass.
 - P3. Run the gates covering the change before every commit; run the full
   suite before push or PR. Never commit after a failed or unrun gate.
 - P4. Read failures and fix the cause. Never blindly retry.
@@ -62,7 +64,8 @@ tier; docs reference IDs, never copied text.
   modules.
 - C5. New modules live in domain folders. No one-file folders.
 - C6. Test assertions must be able to fail: assert fetched values or
-  user-visible outcomes, never element existence or child count.
+  user-visible outcomes, never element existence or child count. Gate: the
+  quality ratchet.
 - C7. The lint ratchet baseline shrinks or holds, never grows. Raising a
   number by hand needs a reason in the commit message.
 

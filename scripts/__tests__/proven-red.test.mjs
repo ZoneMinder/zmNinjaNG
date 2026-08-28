@@ -1,0 +1,89 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { classify, skipReason, proveRed } from '../proven-red.mjs';
+
+test('classify separates unit tests, test support, source, and non-code', () => {
+  const split = classify([
+    'app/src/lib/foo.ts',
+    'app/src/lib/__tests__/foo.test.ts',
+    'app/src/tests/setup.ts',
+    'app/tests/steps/settings.steps.ts',
+    'app/tests/features/settings.feature',
+    'docs/user-guide/settings.md',
+    'app/src/locales/en/translation.json',
+  ]);
+  assert.deepEqual(split.unitTests, ['app/src/lib/__tests__/foo.test.ts']);
+  assert.deepEqual(split.testSupport, ['app/src/tests/setup.ts', 'app/tests/steps/settings.steps.ts']);
+  assert.deepEqual(split.source, ['app/src/lib/foo.ts']);
+});
+
+test('skipReason honors no-behavior commit types and source-less ranges', () => {
+  const change = { unitTests: [], testSupport: [], source: ['app/src/a.ts'] };
+  assert.match(skipReason('docs: tidy', change), /docs/);
+  assert.match(skipReason('refactor(zones): split file', change), /refactor/);
+  assert.equal(skipReason('fix(zones): scale coords', change), null);
+  assert.equal(skipReason('feat!: breaking', change), null);
+  assert.match(skipReason('fix: x', { unitTests: [], testSupport: [], source: [] }), /no source/);
+  assert.match(
+    skipReason('fix: x', { unitTests: [], testSupport: ['app/tests/steps/a.steps.ts'], source: ['app/src/a.ts'] }),
+    /e2e/,
+  );
+});
+
+function repo() {
+  const dir = mkdtempSync(join(tmpdir(), 'proven-red-repo-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim();
+  git('init', '-q');
+  git('config', 'user.email', 't@example.com');
+  git('config', 'user.name', 't');
+  mkdirSync(join(dir, 'app/src/lib/__tests__'), { recursive: true });
+  writeFileSync(join(dir, 'app/src/lib/sum.ts'), 'export const sum = (a, b) => a - b;\n');
+  git('add', '.');
+  git('commit', '-qm', 'chore: seed');
+  const base = git('rev-parse', 'HEAD');
+  writeFileSync(join(dir, 'app/src/lib/sum.ts'), 'export const sum = (a, b) => a + b;\n');
+  writeFileSync(join(dir, 'app/src/lib/__tests__/sum.test.ts'), 'expect(sum(1, 2)).toBe(3)\n');
+  git('add', '.');
+  git('commit', '-qm', 'fix(sum): add, not subtract');
+  const head = git('rev-parse', 'HEAD');
+  return { dir, base, head, git };
+}
+
+test('proveRed fails when the changed test passes on the base code, and passes when it fails there', () => {
+  const { dir, base, head } = repo();
+  const seen = [];
+  const runTests = (appDir, files) => {
+    seen.push(files);
+    // The worktree must hold the BASE source and the HEAD test.
+    assert.equal(readFileSync(join(appDir, 'src/lib/sum.ts'), 'utf8'), 'export const sum = (a, b) => a - b;\n');
+    assert.equal(readFileSync(join(appDir, 'src/lib/__tests__/sum.test.ts'), 'utf8'), 'expect(sum(1, 2)).toBe(3)\n');
+    return 1; // vitest went red on the old code
+  };
+  try {
+    const log = () => {};
+    assert.equal(proveRed({ base, head, repo: dir, title: 'fix(sum): add', runTests, log }), 0);
+    assert.deepEqual(seen, [['src/lib/__tests__/sum.test.ts']]);
+    assert.equal(proveRed({ base, head, repo: dir, title: 'fix(sum): add', runTests: () => 0, log }), 1);
+    assert.equal(proveRed({ base, head, repo: dir, title: 'docs: x', runTests: () => 0, log }), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('proveRed fails a behavior change that brings no unit test', () => {
+  const { dir, base, git } = repo();
+  try {
+    writeFileSync(join(dir, 'app/src/lib/sum.ts'), 'export const sum = (a, b) => a + b + 0;\n');
+    git('commit', '-qam', 'fix(sum): again');
+    const head = git('rev-parse', 'HEAD');
+    // base..head now spans two commits; the test file was added in the first, so use the second only.
+    assert.equal(proveRed({ base: `${head}^`, head, repo: dir, title: 'fix(sum): again', runTests: () => 1, log: () => {} }), 1);
+    assert.equal(proveRed({ base, head, repo: dir, title: 'fix(sum): again', runTests: () => 1, log: () => {} }), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

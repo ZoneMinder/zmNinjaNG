@@ -133,13 +133,13 @@ npm run gates            # vitest run, build (includes tsc -b), three lints
 npm run test:e2e -- <feature>.feature
 ```
 
-Per commit, run what the change touches (docs-only edits: the doc gates in
-`src/tests/`; code: its unit tests). `npm run gates` runs the full set
-before push or PR; `npm run build` already type-checks, so no separate
-`tsc -b` pass. The three lint configs (`lint:a11y`, `lint:correctness`,
-`lint:ratchet`) are the blocking ones; `npm run lint` stays advisory.
-The ratchet baseline lives at `app/.lint-baseline.json`; lower it with
-`npm run lint:ratchet -- --update`. State completed checks in handoff.
+Per commit, run what the change touches; `npm run gates` before push or PR
+(build already type-checks). Blocking lints: `lint:a11y`, `lint:correctness`,
+`lint:ratchet`; `npm run lint` is advisory. Baselines `app/.lint-baseline.json`
+and `app/.quality-baseline.json` lower with `npm run lint:ratchet -- --update`
+and `node scripts/quality-ratchet.mjs --update`. CI also runs
+`scripts/proven-red.mjs` (P2) and `npm run test:scripts`. State completed
+checks in handoff.
 
 ## Playbooks
 
@@ -147,6 +147,7 @@ Read each listed playbook before work in that area.
 
 | Work | Read first |
 |---|---|
+| Naming, briefs, docs, proposing work | `agents/project/glossary.md`, `agents/project/out-of-scope.md` |
 | Tests, UI, navigation, or platform checks | `agents/project/testing.md` |
 | Developer or user documentation | `agents/project/documentation.md` |
 | Capacitor, TLS, Electron, downloads, or native paths | `agents/project/native.md` |

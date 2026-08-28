@@ -5,7 +5,6 @@ import {
   bootstrapZmsPath,
   bootstrapGo2RTCPath,
   bootstrapMultiPortStreaming,
-  bootstrapViewMode,
   performBootstrap,
   type BootstrapContext,
 } from '../../services/profile-bootstrap';
@@ -318,84 +317,6 @@ describe('Profile Bootstrap', () => {
         expect.anything(),
         expect.anything(),
       );
-    });
-  });
-
-  describe('bootstrapViewMode', () => {
-    const settingsWith = (profileSettings: Record<string, unknown>) => {
-      const updateProfileSettings = vi.fn();
-      return { profileSettings, updateProfileSettings };
-    };
-
-    const mockMonitorCount = async (count: number) => {
-      const { getMonitors } = await import('../../api/monitors');
-      vi.mocked(getMonitors).mockResolvedValue({
-        monitors: Array.from({ length: count }, (_, i) => ({ id: String(i + 1) })),
-      } as never);
-    };
-
-    it('starts a small server in streaming mode', async () => {
-      const { useSettingsStore } = await import('../settings');
-      const store = settingsWith({});
-      vi.mocked(useSettingsStore.getState).mockReturnValue(store as never);
-      await mockMonitorCount(5);
-
-      await bootstrapViewMode(mockProfile, null);
-
-      expect(store.updateProfileSettings).toHaveBeenCalledWith('test-profile', {
-        viewMode: 'streaming',
-      });
-    });
-
-    it('starts a big server without multi-port in snapshot mode', async () => {
-      const { useSettingsStore } = await import('../settings');
-      const store = settingsWith({});
-      vi.mocked(useSettingsStore.getState).mockReturnValue(store as never);
-      await mockMonitorCount(6);
-
-      await bootstrapViewMode(mockProfile, null);
-
-      expect(store.updateProfileSettings).toHaveBeenCalledWith('test-profile', {
-        viewMode: 'snapshot',
-      });
-    });
-
-    it('starts a big server with multi-port in streaming mode', async () => {
-      const { useSettingsStore } = await import('../settings');
-      const store = settingsWith({});
-      vi.mocked(useSettingsStore.getState).mockReturnValue(store as never);
-      await mockMonitorCount(20);
-
-      await bootstrapViewMode(mockProfile, 31000);
-
-      expect(store.updateProfileSettings).toHaveBeenCalledWith('test-profile', {
-        viewMode: 'streaming',
-      });
-    });
-
-    it("leaves an existing profile's stored mode alone", async () => {
-      const { useSettingsStore } = await import('../settings');
-      const store = settingsWith({ 'test-profile': { viewMode: 'snapshot' } });
-      vi.mocked(useSettingsStore.getState).mockReturnValue(store as never);
-      await mockMonitorCount(2);
-
-      await bootstrapViewMode(mockProfile, null);
-
-      expect(store.updateProfileSettings).not.toHaveBeenCalled();
-    });
-
-    it('falls back to snapshot when the monitor count cannot be fetched', async () => {
-      const { useSettingsStore } = await import('../settings');
-      const store = settingsWith({});
-      vi.mocked(useSettingsStore.getState).mockReturnValue(store as never);
-      const { getMonitors } = await import('../../api/monitors');
-      vi.mocked(getMonitors).mockRejectedValue(new Error('Network error'));
-
-      await bootstrapViewMode(mockProfile, null);
-
-      expect(store.updateProfileSettings).toHaveBeenCalledWith('test-profile', {
-        viewMode: 'snapshot',
-      });
     });
   });
 

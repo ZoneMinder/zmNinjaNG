@@ -81,9 +81,19 @@ responsive. It runs in order:
 8. ``bootstrapViewMode`` picks the Streaming Mode a brand-new profile starts in,
    from that port and the server's monitor count.
 
-Step 8 only runs for a profile with no settings bucket yet. Once the bucket
-exists the stored ``viewMode`` belongs to the user, so a later bootstrap leaves
-it alone even if the server has grown since. The rule itself is
+Step 8 only runs while the profile's ``viewModeChosen`` flag is unset. Neither
+the bucket nor ``viewMode`` itself is the signal: ``lastRoute``, the theme, or
+the self-signed certificate flag can create the bucket before the first
+bootstrap ever runs (the first profile is only bootstrapped on the next
+launch, and ``ProfileForm`` writes the certificate flag before switching to a
+self-signed profile), and every bucket write copies ``DEFAULT_SETTINGS`` in, so
+``viewMode`` is present from the first write. An earlier bucket-existence
+check never fired on either path. The user's toggle and the bootstrap both set
+``viewModeChosen`` alongside ``viewMode``; from then on the mode belongs to the
+user, so a later bootstrap leaves it alone even if the server has grown since. The step honors the profile's
+``forceDisableMultiPort`` override the same way Settings does, and when the
+monitor count cannot be fetched and multi-port is off it writes nothing, so the
+merge default applies until the next bootstrap can decide. The rule itself is
 ``recommendViewMode`` (``lib/monitor/view-mode-recommendation.ts``): five or
 fewer monitors, or multi-port streaming at any count, means streaming; anything
 else means snapshot. Settings shows the same call's answer as a hint under the
