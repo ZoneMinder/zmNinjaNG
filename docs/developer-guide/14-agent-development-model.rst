@@ -12,8 +12,7 @@ deliberately.
 
 .. admonition:: Proving it out
 
-   **Does this actually work?** Read these as a follow-up once you have
-   read the guide. The
+   Two documents test this chapter's claims; read them after the guide. The
    `all-profiles retrospective
    <https://github.com/ZoneMinder/zmNinjaNg/blob/main/docs/superpowers/analysis/2026-08-04-all-profiles-retrospective.md>`_
    is a commit-by-commit validation of this model over one four-day
@@ -93,7 +92,8 @@ Every workflow, and what fires it:
    * - ``ci.yml``
      - every PR, push to main
      - version guard, lints, build, unit tests (full-history checkout for
-       the evidence gate), and web e2e when the ZM secrets are set
+       the evidence gate), the proven-red check and script tests, and web
+       e2e when the ZM secrets are set
    * - ``claude.yml``
      - @claude mention on issues and PRs
      - summons an agent into the thread
@@ -185,7 +185,7 @@ to delete events in bulk" into a design doc in
 what the user sees, what is out of scope, which existing pieces get
 reused. The maintainer reads and approves that half page. This is the
 moment human judgment is cheapest, and the only moment the direction can
-be wrong for free; fourteen specs live there now.
+be wrong for free; seventeen specs live there now.
 
 An approved spec becomes an implementation plan in
 `docs/superpowers/plans/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers/plans>`__.
@@ -228,10 +228,10 @@ The PR itself is mostly ceremony by this point: branch protection holds
 the merge until every required check passes, and the merge is queued with
 GitHub auto-merge rather than polled for. What the gates cannot prove,
 the maintainer checks by hand where it matters: UI work gets a real
-device pass (PiP, biometrics, rotation, and their friends never trust a
+device pass (PiP, biometrics, and rotation are not trusted from a
 simulator), and anything native waits for that verification before merge.
-Then rule P10 collects the toll: the user guide gains the feature, this
-guide gains the components, and the call flow gets traced. The docs are
+Then rule P10 applies: the user guide gains the feature, this guide
+gains the components, and the call flow gets traced. The docs are
 how the maintainer finds out what actually got built.
 
 Not every change earns this ceremony. A typo-level fix needs no issue,
@@ -261,17 +261,19 @@ always bugs, and the gate that checks it.
 A **gate** is a script that enforces a rule. Rule M1 requires one for any
 rule a script could check, added in the same change as the rule; an audit
 here once found every ungated rule violated while every gated rule held,
-which is the entire argument. Current gates: the unit suite, three
-blocking lints, the ratcheted lint baseline, and
+which is the reason for the rule. Current gates: the unit suite, three
+blocking lints, the ratcheted lint baseline, the quality ratchet and
+proven-red check described under "How the pieces fit", and
 `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__,
 which checks the instruction files themselves: symbols named in contracts
 exist in the code, the core file contains no project names, the
 instruction files stay under a word budget, commit hashes cited as
 evidence exist in history, the knowledge files contain no emails or IP
 addresses, and rule IDs cited in this guide resolve. Branch protection on
-``main`` requires every one of these checks, so a PR cannot merge before
-they pass; merges queue with GitHub auto-merge and land when the checks
-go green. Rule M2 covers the gates' own blind spot: a number a gate
+``main`` requires these checks, so a PR cannot merge before they pass;
+merges queue with GitHub auto-merge and land when the checks go green.
+The proven-red job is the newest and is not yet in the required list,
+so until it is added there a red result warns rather than blocks. Rule M2 covers the gates' own blind spot: a number a gate
 reports has to describe the thing it claims to measure, because a gate
 that measures the wrong input passes forever.
 
@@ -300,16 +302,16 @@ How the pieces fit
 
    graph TD
      CL["CLAUDE.md<br/>(Claude Code shim)"] --> AG["AGENTS.md<br/>rules I / P / C / M"]
-     CL --> AP["AGENTS.project.md<br/>14 contracts + project rules"]
+     CL --> AP["AGENTS.project.md<br/>18 contracts + project rules"]
      AG -. "read before any work" .-> AP
-     AP -- "table: read for your area" --> PP["agents/project/<br/>testing, docs, native,<br/>data-integrity, llm-models,<br/>domain-context"]
+     AP -- "table: read for your area" --> PP["agents/project/<br/>testing, docs, native,<br/>data-integrity, llm-models,<br/>domain-context, glossary,<br/>out-of-scope"]
      CL -- "multi-agent work" --> GP["agents/generic/<br/>claude-workflows.md"]
      AG === GATE["agents-contracts.test.ts<br/>symbols exist, purity, word budget,<br/>evidence hashes, privacy, doc refs, headings"]
      AP === GATE
      PP === GATE
      GP === GATE
      CL === GATE
-     PR["every PR"] === CI["ci.yml<br/>tests, lints, build"]
+     PR["every PR"] === CI["ci.yml<br/>tests, lints, build,<br/>proven-red"]
      GATE --> CI
      FAIL["breakage or review finding"] -- "fix PR proposes rule + gate<br/>(self-improvement protocol)" --> AG
      FAIL -- "durable fact (M5)" --> PP
@@ -322,15 +324,18 @@ enforcement; the bottom edges are the feedback loop that grows the files.
 at the repo root is the portable core; it contains nothing specific to
 zmNinjaNg.
 `AGENTS.project.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/AGENTS.project.md>`__
-carries the fourteen architecture contracts and the project rules. The
+carries the eighteen architecture contracts and the project rules. The
 point of the contracts is that an agent changing, say, settings behavior
 reads the Settings contract instead of rediscovering the design from
 source.
 
 `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__
 holds the area playbooks (testing, documentation, native, data integrity,
-LLM models) and ``domain-context.md``, the verified project facts: API
-quirks, platform behavior, approaches that were tried and reverted.
+LLM models), ``domain-context.md`` with the verified project facts (API
+quirks, platform behavior, approaches that were tried and reverted),
+``glossary.md`` with one name per concept and the words to stop using for
+it, and ``out-of-scope.md``, the requests the maintainer has declined and
+why, read before anyone proposes work.
 `agents/generic/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/generic>`__
 holds workflow guidance that is not project-specific. Playbooks are read
 when the work touches their area, so they can afford detail that the
@@ -342,14 +347,16 @@ Enforcement lives in ``app/src/tests/`` and the CI workflows. Covering
 gates run before every commit; the full battery runs before a push or PR
 (rule P3), as one command: ``npm run gates``.
 
-Two gates check the tests themselves rather than the code. The proven-red
-job (`proven-red.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/proven-red.mjs>`__)
+Two gates check the tests rather than the code. The proven-red job
+(`proven-red.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/proven-red.mjs>`__)
 takes the test files a PR changed, runs them in a throwaway worktree that
-holds the pre-change code, and fails when they pass there: a test that is
-green on the code it claims to guard cannot catch the bug, which is rule
-P2 stated as a command. It skips ranges whose commit type carries no
-behavior change (``docs``, ``chore``, ``refactor`` and the like) and says
-so. The quality ratchet
+holds the pre-change code, and fails when they pass there. A test that is
+green on the code it claims to guard cannot catch the bug; this is rule
+P2 as a command. Three such tests had passed review here before the job
+existed, each found only by stashing the fix and re-running by hand. The
+job skips ranges whose commit type carries no behavior change (``docs``,
+``chore``, ``refactor`` and the like) and prints the reason. The quality
+ratchet
 (`quality-ratchet.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/scripts/quality-ratchet.mjs>`__,
 gated by ``quality-ratchet.test.ts``) records three counts in
 ``app/.quality-baseline.json`` and fails when any grows: test files that
@@ -358,15 +365,20 @@ testing through them; assertions that only prove an element exists (rule
 C6); and occurrences in agent and developer prose of terms the
 `glossary <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/glossary.md>`__
 lists under ``_Avoid_``. Each number may fall or hold; raising one needs a
-reason in the commit message, the same bargain as the lint ratchet.
+reason in the commit message, the same rule as the lint ratchet. The
+baseline started at 121 files, 302 assertions, and 115 terms.
 
 Review still happens on every change, done by agents rather than the
 maintainer. The workflow in
 `claude-workflows.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/generic/claude-workflows.md>`__
 pairs an implementing agent with an independent reviewing agent for work
-that involves judgment, and one whole-branch review runs before every PR
-on two axes in separate contexts: standards (the contracts and playbooks)
-and spec (the acceptance lines the PR body quotes from its issue).
+that involves judgment, and one whole-branch review runs before every PR.
+That review has two parts in separate contexts: one agent checks the diff
+against the contracts and playbooks, another checks it against the
+acceptance lines the PR body quotes from its issue. The two reports stay
+separate, because a change can follow every convention and still not do
+what the issue asked; two same-day fix pairs in August 2026 (#375 and
+#377, #379 and #380) passed every gate that way.
 CI runs the full gate suite on every push. The
 `claude.yml <https://github.com/ZoneMinder/zmNinjaNg/blob/main/.github/workflows/claude.yml>`__
 workflow lets the maintainer bring an agent into any issue or PR by
@@ -493,7 +505,7 @@ Token spend is treated as a design constraint, and most of the savings
 here are structural rather than tooling:
 
 - Always-loaded context is capped: the instruction files sit under a
-  word budget enforced by the gate (currently 2000 words, about 2.6k
+  word budget enforced by the gate (currently 2100 words, about 2.7k
   tokens per session), while detailed knowledge lives in playbooks that
   load only when the work touches their area.
 
@@ -502,10 +514,10 @@ here are structural rather than tooling:
   the combined count over it fails the suite, and the choice is to trim
   wording or raise the constant, where a raise is a deliberate edit to
   the gate with the reason in the commit message. Lowering is always
-  welcome. This is not hypothetical: the gate has tripped mid-edit twice
+  welcome. The gate has tripped mid-edit twice
   (1504 against a 1500 budget, then 1664 against 1650) and forced real
-  trims before the change could land, and the one raise to 2000 was a
-  recorded maintainer decision, not a silent bump.
+  trims before the change could land, and each raise since (to 2000,
+  2050, and 2100) is recorded in the gate's own comment with its reason.
 - Ceremony is priced: implementation delegates to subagents on the
   cheapest model that fits the task, trivial gate-covered edits skip the
   dispatch entirely, and independent review runs only where judgment is
@@ -523,7 +535,7 @@ and reading files), and context-mode (runs analysis in a sandbox so raw
 bytes stay out of the context window). None of it is required to work on
 this repo; it shapes the maintainer's sessions, not the repository.
 
-Two honest observations from using the stack on this project. Ponytail's
+Two observations from using the stack on this project. Ponytail's
 bias shows up in decisions that are visible in the history: two
 instruction files instead of a template hierarchy, and one gate file
 instead of a test per rule. And output compression is the reason rule P6
@@ -579,6 +591,8 @@ Where everything lives
 - `agents/project/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/agents/project>`__, area playbooks and `domain-context.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/domain-context.md>`__
 - `docs/superpowers/ <https://github.com/ZoneMinder/zmNinjaNg/tree/main/docs/superpowers>`__, approved specs and implementation plans
 - `agents-contracts.test.ts <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/tests/agents-contracts.test.ts>`__, the instruction-system gate
+- `quality-ratchet.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/scripts/quality-ratchet.mjs>`__ and `proven-red.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/proven-red.mjs>`__, the gates on the tests themselves
+- `glossary.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/glossary.md>`__ and `out-of-scope.md <https://github.com/ZoneMinder/zmNinjaNg/blob/main/agents/project/out-of-scope.md>`__, vocabulary and declined requests
 - `mine-history <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/mine-history>`__, the history mining skill
 - `fable-review <https://github.com/ZoneMinder/zmNinjaNg/tree/main/.claude/skills/fable-review>`__, the scored codebase review skill
 
