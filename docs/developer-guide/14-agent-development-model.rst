@@ -505,8 +505,8 @@ Token spend is treated as a design constraint, and most of the savings
 here are structural rather than tooling:
 
 - Always-loaded context is capped: the instruction files sit under a
-  word budget enforced by the gate (currently 2100 words, about 2.7k
-  tokens per session), while detailed knowledge lives in playbooks that
+  word budget enforced by the gate (about 2k words, under 3k tokens per
+  session), while detailed knowledge lives in playbooks that
   load only when the work touches their area.
 
   The budget works like the lint ratchet. The number is a constant in
@@ -514,10 +514,7 @@ here are structural rather than tooling:
   the combined count over it fails the suite, and the choice is to trim
   wording or raise the constant, where a raise is a deliberate edit to
   the gate with the reason in the commit message. Lowering is always
-  welcome. The gate has tripped mid-edit twice
-  (1504 against a 1500 budget, then 1664 against 1650) and forced real
-  trims before the change could land, and each raise since (to 2000,
-  2050, and 2100) is recorded in the gate's own comment with its reason.
+  welcome.
 - Ceremony is priced: implementation delegates to subagents on the
   cheapest model that fits the task, trivial gate-covered edits skip the
   dispatch entirely, and independent review runs only where judgment is
