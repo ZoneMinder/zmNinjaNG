@@ -21,7 +21,7 @@ import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers, Video, Eye, Disc } from 'lucide-react';
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { downloadSnapshotFromElement } from '../services/download';
@@ -153,6 +153,16 @@ export default function MonitorDetail() {
     onSwipeLeft,
     onSwipeRight,
   });
+
+  // Zoom belongs to the picture the user zoomed into, not to the page. Stepping
+  // to another monitor keeps this component mounted (the route element is not
+  // keyed on the id), so without this the next monitor arrived still magnified
+  // and panned to the previous one's framing (refs #382). Covers every path
+  // that changes the id in place: keyboard jump, prev/next, swipe, auto-cycle.
+  const resetZoom = zoomPan.reset;
+  useEffect(() => {
+    resetZoom();
+  }, [id, resetZoom]);
 
   // Remembered per profile: the video owns every drag that lands on it, so a
   // tablet wants the pad for good rather than once per visit.
