@@ -419,6 +419,67 @@ describe('Sessions contract', () => {
  * an Android 17 device: the toggle shows up default-denied, the app never asks
  * for it, and every LAN server times out (#350).
  */
+/**
+ * Native logging never passes through the Logging contract's sanitizer, which
+ * lives on the JS side. `agents/project/native.md` said of it "Nothing gates
+ * it, so it is on you", and M1 predicts what happens next: the rule has now
+ * been broken on both platforms (#307 on Android, the iOS extension since).
+ *
+ * The check is a heuristic, deliberately. It strips string literals so a
+ * static message mentioning "URL" is not a hit, then looks for a risky
+ * identifier among what is left, which is the arguments. It will occasionally
+ * flag something harmless. That is the point: every hit has to carry a written
+ * `// log-safe:` reason, so the decision is recorded next to the code instead
+ * of being rediscovered by the next review.
+ */
+describe('Native contract: no bridge URL or raw error in a native log', () => {
+  const NATIVE_ROOTS = ['app/ios/App', 'app/android/app/src/main/java'];
+  const SKIP_DIRS = ['DerivedData', 'Pods', 'build'];
+  const LOG_CALL = /(NSLog|os_log|CAPLog\.print|Log\.[dewiv])\s*\(/;
+  const RISKY = /\b(url|uri|absoluteString|getMessage\(\)|localizedDescription)\b/i;
+  const STRING_LITERAL = /"(?:[^"\\]|\\.)*"/g;
+  const EXCUSED = /\/\/\s*log-safe:/;
+
+  const nativeSources = (): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (SKIP_DIRS.includes(entry.name)) continue;
+          walk(path.join(dir, entry.name));
+        } else if (/\.(swift|java)$/.test(entry.name)) {
+          out.push(path.join(dir, entry.name));
+        }
+      }
+    };
+    for (const root of NATIVE_ROOTS) walk(path.join(repoRoot, root));
+    return out;
+  };
+
+  it('finds native sources to scan at all', () => {
+    // Without this the suite passes by scanning nothing after any path move.
+    expect(nativeSources().length).toBeGreaterThan(5);
+  });
+
+  it('every logged URL or raw error carries a written log-safe reason', () => {
+    const offenders: string[] = [];
+    for (const file of nativeSources()) {
+      const lines = read(file).split('\n');
+      lines.forEach((line, i) => {
+        if (!LOG_CALL.test(line)) return;
+        if (!RISKY.test(line.replace(STRING_LITERAL, '""'))) return;
+        if (EXCUSED.test(line) || (i > 0 && EXCUSED.test(lines[i - 1]))) return;
+        offenders.push(`${path.relative(repoRoot, file)}:${i + 1} ${line.trim().slice(0, 90)}`);
+      });
+    }
+    expect(
+      offenders,
+      `native log of a URL or raw error with no // log-safe: reason:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
 describe('Native contract: Android local network permission', () => {
   it('declares ACCESS_LOCAL_NETWORK only once targetSdk requires it', () => {
     const androidDir = path.join(repoRoot, 'app/android');

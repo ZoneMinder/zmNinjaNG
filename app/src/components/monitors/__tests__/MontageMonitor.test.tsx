@@ -609,7 +609,7 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
   it('announces the alarm to a screen reader, not only as a tint', async () => {
     seedEvent(Date.now() - 60_000); // pre-existing: seeds lastSeen, no pulse
     const { rerender } = renderTile();
-    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).toBeNull();
 
     seedEvent(Date.now()); // fresh alarm
     rerender(

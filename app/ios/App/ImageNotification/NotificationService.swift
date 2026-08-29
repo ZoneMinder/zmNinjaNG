@@ -57,6 +57,7 @@ class NotificationService: UNNotificationServiceExtension {
             return
         }
 
+        // log-safe: the maintainer keeps the full tokenized URL here to debug rich-push image fetches; the extension log is device-local (out-of-scope.md, refs #392 P7-1).
         os_log("Downloading image from %{public}@ (scheme: %{public}@)", log: logger, type: .info, url.absoluteString, url.scheme ?? "nil")
 
         downloadImage(from: url) { attachment in
@@ -80,6 +81,7 @@ class NotificationService: UNNotificationServiceExtension {
     private func downloadImage(from url: URL, completion: @escaping @Sendable (UNNotificationAttachment?) -> Void) {
         let task = URLSession.shared.downloadTask(with: url) { localUrl, response, error in
             if let error = error {
+                // log-safe: a URLSession error quotes the failing URL, token included, and that is the point of this line (out-of-scope.md, refs #392 P7-1).
                 os_log("Download error: %{public}@", log: logger, type: .error, error.localizedDescription)
                 completion(nil)
                 return
@@ -111,6 +113,7 @@ class NotificationService: UNNotificationServiceExtension {
                 let attachment = try UNNotificationAttachment(identifier: "image", url: tmpFile, options: nil)
                 completion(attachment)
             } catch {
+                // log-safe: attachment errors name the local temp file, not the server URL, and the message is needed to tell a sandbox failure from a decode failure.
                 os_log("Failed to create attachment: %{public}@", log: logger, type: .error, error.localizedDescription)
                 completion(nil)
             }

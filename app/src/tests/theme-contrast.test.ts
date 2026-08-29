@@ -94,8 +94,10 @@ describe('theme tokens meet WCAG AA for normal text', () => {
       const tokens = readTheme(css, theme);
       for (const [fg, bg] of PAIRS) {
         it(`${fg} on ${bg}`, () => {
-          expect(tokens[fg], `${theme} is missing ${fg}`).toBeDefined();
-          expect(tokens[bg], `${theme} is missing ${bg}`).toBeDefined();
+          // Assert the parsed value, not merely that a key exists: a token
+          // that is present but unparseable would otherwise sail through.
+          expect(tokens[fg] ?? '', `${theme} is missing ${fg}`).toMatch(/^[\d.]+ [\d.]+% [\d.]+%$/);
+          expect(tokens[bg] ?? '', `${theme} is missing ${bg}`).toMatch(/^[\d.]+ [\d.]+% [\d.]+%$/);
           const ratio = contrast(tokens[fg], tokens[bg]);
           expect(
             Number(ratio.toFixed(2)),

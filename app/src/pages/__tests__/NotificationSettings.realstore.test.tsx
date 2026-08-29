@@ -142,8 +142,9 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
     renderPage();
-    expect(screen.getByText('notifications.status.direct_not_registered')).toBeInTheDocument();
-    expect(screen.queryByText('notifications.status.direct_active')).not.toBeInTheDocument();
+    expect(screen.getByText('notifications.status.direct_not_registered').textContent)
+      .toBe('notifications.status.direct_not_registered');
+    expect(screen.queryByText('notifications.status.direct_active')).toBeNull();
   });
 
   it('says active once the server has returned a registration id', () => {
@@ -151,6 +152,7 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: 42,
     });
     renderPage();
-    expect(screen.getByText('notifications.status.direct_active')).toBeInTheDocument();
+    expect(screen.getByText('notifications.status.direct_active').textContent)
+      .toBe('notifications.status.direct_active');
   });
 });
