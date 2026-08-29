@@ -210,8 +210,7 @@ describe('prose stays in developer voice (P10)', () => {
 describe('developer docs cite symbols, not line numbers', () => {
   it('no rst file carries a file.ts:NN citation', () => {
     // Line numbers rot silently as code moves; symbol names are greppable
-    // and survive edits. GitHub source links pin lines with #LNN, which
-    // this pattern does not match.
+    // and survive edits. GitHub #LNN anchors are covered by the next case.
     const offenders: string[] = [];
     const guideDir = path.join(repoRoot, 'docs/developer-guide');
     for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
@@ -259,6 +258,24 @@ describe('developer docs cite symbols, not line numbers', () => {
         });
     }
     expect(offenders, `developer guide teaches symbols that do not exist:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('no source link pins a line number', () => {
+    // A #LNN anchor is a line number wearing a URL. All 246 of them had
+    // rotted: call-flows cited Monitors.tsx#L66 for the monitor-list query,
+    // which by then was a group-filter comment, and the reader lands
+    // confidently in the wrong place. The bare file link stays useful as the
+    // code moves; the prose names the symbol.
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      fs.readFileSync(path.join(guideDir, file), 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          if (/blob\/[^\s>`]*#L\d+/.test(line)) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+        });
+    }
+    expect(offenders, `source links pinned to a line number:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it('no mermaid block contains a semicolon', () => {

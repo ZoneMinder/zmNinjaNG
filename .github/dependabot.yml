@@ -1,0 +1,33 @@
+# The audit backlog grew from 22 to 37 in app/ (19 more at the root) between
+# two reviews with nothing watching it. Dependabot opens the PRs; CI decides
+# whether they land. Grouped so a week of patch bumps is one PR to review
+# rather than thirty.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /app
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      patch-and-minor:
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      patch-and-minor:
+        update-types: [minor, patch]
+    labels: [dependencies]
+
+  # Third-party actions are pinned to mutable major tags in several workflows;
+  # this at least surfaces when one moves.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [dependencies]

@@ -113,7 +113,7 @@ waiting on the network.
    ``<html>`` element as native vs web, and starts the iOS safe-area bootstrap,
    then renders ``<App/>``. The reason this is first: nothing that happens later
    should be invisible.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/main.tsx#L12>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/main.tsx>`__
    · → :doc:`11-application-lifecycle`
 
 #. **The stores wake up and read the disk.** Importing the app pulls in the
@@ -121,7 +121,7 @@ waiting on the network.
    moment it loads it reads your saved profiles from local storage. ``App.tsx``
    also builds the single React Query ``queryClient`` and registers it with
    ``setQueryClient()`` so non-React code can reach the same cache later.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L68>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Rehydration decides what kind of start this is.** Once persist finishes
@@ -130,14 +130,14 @@ waiting on the network.
    saved profile sends you to the Profiles screen and stops; a valid one
    continues. Any error still flips ``isInitialized: true``, which guarantees the
    splash can never hang forever.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L182>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Throw away last session's leftovers.** ``clearStaleState`` calls ``logout()``
    on the auth store and ``clearQueryCache()``. A persisted token or cached
    monitor list from a previous run must not be shown before we have
    re-authenticated this run, especially after switching servers.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L92>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Make sure this server has a session.** ``initializeApiClient`` calls
@@ -147,7 +147,7 @@ waiting on the network.
    which server was selected last. Building the session also registers this
    profile's credentials re-login with the auth store, which is what lets the
    client quietly re-authenticate a lapsed token.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L108>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Let the user in (the important bit).** ``setInitializationState(true)``
@@ -155,7 +155,7 @@ waiting on the network.
    becomes usable: the splash hides, routing renders, and the slow network setup
    is kicked off **without** being awaited, so it runs in the background. The app
    is interactive even while it is still logging in.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L78>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Background setup, SSL trust first.** ``performBootstrap`` runs
@@ -166,7 +166,7 @@ waiting on the network.
    per-profile: the function reads every profile's setting and applies the
    union, so one self-signed server turns trust on for all of them. If trust were applied after the login
    call, a self-signed server would reject it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L266>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Log in.** ``bootstrapAuth`` decrypts the stored password and calls the auth
@@ -175,7 +175,7 @@ waiting on the network.
    and refresh tokens and sets ``isAuthenticated: true``. A failure here is only
    a warning, since some servers do not require auth. This is the step that
    produces the authenticated session.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L21>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Fetch the server's shape.** Still in the background, ``performBootstrap``
@@ -186,21 +186,27 @@ waiting on the network.
    ``isBootstrapping``. These resolve the streaming and routing details the
    monitor and montage views rely on, down to which Streaming Mode a first-time
    profile opens in.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L303>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Hide the splash, land on a page.** An effect in ``App.tsx`` hides the native
    splash once ``isInitialized`` is set, and ``AppRoutes`` navigates to your last
    route (or ``/monitors``) and starts the periodic token refresh
    (``useTokenRefresh``).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L147>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx>`__
    · → :doc:`04-pages-and-views`
 
-#. **First real data.** ``pages/Monitors.tsx`` runs a React Query for the monitor
-   list, keyed by profile and **gated on ``isAuthenticated``**, so it only fires
-   after step 8 set the token. It polls at the bandwidth-profile interval. The
-   rendered monitor list is what you finally see.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L66>`__
+#. **First real data.** ``pages/Monitors.tsx`` calls ``useScopedMonitors``,
+   which fans one React Query out over every profile in scope through
+   ``useQueries`` and combines the results. In single mode the scope is a
+   one-element array, so it is still one query. It is **not** gated on
+   ``isAuthenticated``: a profile in scope always gets an enabled query,
+   because the client self-heals through its own ``proactiveLogin`` path and a
+   real auth failure surfaces as that profile's ``ProfileError``. Gating on
+   auth is what made an aggregate render blank for any profile that had not
+   bootstrapped yet, and the hook carries a comment saying so. It polls at the
+   bandwidth-profile interval, staggered across profiles.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 Switching profiles at runtime (``stores/profile.ts`` ``switchProfile``) converges
@@ -245,21 +251,21 @@ collide on the server and never leak a zombie process when they go away.
    serving that key for 15 seconds and a remount during a network blip re-uses
    it. The ``refetchInterval`` above is untouched by that: the grid still polls
    on the bandwidth cadence.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L65>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Do not render until the filter is ready.** The page holds rendering behind
    ``isLoading || !isFilterReady``. This guard matters because mounting a tile
    starts a stream, so flashing the full monitor set for even one frame before
    the group/hidden filter narrows it would briefly open *every* stream at once.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx#L284>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Montage.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **One tile per monitor.** Each monitor becomes a grid cell wrapping an error
    boundary and ``MontageMonitor`` (memoized), keyed by ``Monitor.Id``. ``memo``
    keeps grid re-renders (drag, resize) from tearing the stream down and back up,
    and the boundary isolates a crashing tile.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MontageMonitor.tsx#L55>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MontageMonitor.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Pick a streaming method.** ``LiveMonitorPlayer`` computes
@@ -267,21 +273,21 @@ collide on the server and never leak a zombie process when they go away.
    ``monitor.Go2RTCEnabled``, and ``profile.go2rtcUrl``; a go2rtc failure falls
    back to MJPEG. For a plain MJPEG monitor this is ``'mjpeg'`` and the rest of
    this flow follows the ``<img>`` path.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L151>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`go2rtc-integration`
 
 #. **The hook that owns the stream.** ``LiveMonitorPlayer`` calls
    ``useMonitorStream``, which resolves the profile, a fresh access token, the
    per-server URLs, the view mode, and the multi-port base. It assembles
    everything needed to build a valid stream URL and the matching CMD_QUIT URL.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts#L74>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **Mint a connection key.** ``useMonitorStream`` delegates the connkey
    lifecycle to ``useStreamLifecycle``, whose mount effect calls
    ``regenerateConnKey(monitorId)`` and sets ``connKey``. Each concurrent stream
    needs a unique key so ZoneMinder's ``nph-zms`` processes do not collide.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useStreamLifecycle.ts#L148>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useStreamLifecycle.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The key is stored, not just held.** ``stores/monitors.ts``
@@ -289,7 +295,7 @@ collide on the server and never leak a zombie process when they go away.
    persisted ``connKeys[monitorId]`` map. Keeping it in the store is what lets
    teardown later compare-and-clear *exactly* the key it owns, never a newer
    concurrent one.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/monitors.ts#L15>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/monitors.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Build the stream URL (only when safe).** Once ``connKey !== 0`` and the
@@ -298,7 +304,7 @@ collide on the server and never leak a zombie process when they go away.
    mirrors it into ``imageSrc``. The double gate prevents minting a zombie stream
    before a key exists. :doc:`05-component-architecture` walks the connkey
    lifecycle this gate protects.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L296>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The browser opens the feed.** ``LiveMonitorPlayer`` binds
@@ -312,7 +318,7 @@ collide on the server and never leak a zombie process when they go away.
    connkey is not a frame: nothing has been decoded yet, and after a mobile
    suspend the element is still holding the dead connection's last picture (refs
    #352).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts#L198>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **When the feed drops, reconnect with backoff.** An ``<img onError>`` calls
@@ -322,7 +328,7 @@ collide on the server and never leak a zombie process when they go away.
    ``releaseConnection()`` instead. The error cannot tell a dead server process
    from a dropped-but-alive one, so it must CMD_QUIT the old key before minting a
    new one.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts#L170>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorStream.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Quit cleanly on every mint and unmount.** ``forceRegenerate`` (and the
@@ -330,7 +336,7 @@ collide on the server and never leak a zombie process when they go away.
    and clear it from the store with a compare-and-clear, then the ``<img>`` src is
    removed to abort the in-flight connection. This is what prevents leaked
    ``nph-zms`` processes when a tile reconnects or leaves the grid.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useStreamLifecycle.ts#L315>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useStreamLifecycle.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **A profile switch tears down all streams first.** Each lifecycle registers a
@@ -339,7 +345,7 @@ collide on the server and never leak a zombie process when they go away.
    SSL-trust flip, while the old profile's trust and token are still in effect.
    Relying on React unmount alone races the switch and can orphan an ``nph-zms``
    process on a self-signed server.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/active-streams.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/active-streams.ts>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 3: A push notification, from registration to tap
@@ -374,7 +380,7 @@ a token on startup, and reacting when a push arrives.
    ``<NotificationHandler/>`` once. It renders no UI of its own (only the
    cross-profile switch dialog) and exists purely to wire the notification side
    effects through three hooks.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Set up push for the active profile.** ``useNotificationPushSetup`` runs an
@@ -382,20 +388,20 @@ a token on startup, and reacting when a push arrives.
    token against the current profile and the chosen backend: re-register if the
    push service is already running, otherwise ``initialize()`` for the first
    time.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationPushSetup.ts#L25>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationPushSetup.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **One push service for the whole app.** ``services/pushNotifications.ts``
    exposes ``getPushService``, a module-level singleton holding ``currentToken``
    and init state, so token state survives re-renders and profile switches
    instead of being recreated.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L629>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Ask permission.** ``initialize`` imports ``FirebaseMessaging`` and calls
    ``requestPermissions()``, continuing only if granted. No token can be obtained
    without OS push permission.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L104>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Create the Android channel.** ``_createNotificationChannel`` (Android only)
@@ -403,34 +409,34 @@ a token on startup, and reacting when a push arrives.
    Android needs a high-importance channel for heads-up banners, and the
    manifest's ``default_notification_channel_id`` routes channel-less server
    pushes here so they alert instead of landing silently.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L354>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Listen before fetching the token.** ``_setupListeners`` registers
    ``tokenReceived``, ``notificationReceived``, and ``notificationActionPerformed``
    *before* ``getToken`` so a token refresh is never missed.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L370>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Get the FCM token.** Back in ``initialize``, ``FirebaseMessaging.getToken()``
    requests the token, stores it in ``currentToken``, and retries once after 5s on
    a transient failure. The service's own ``getToken()`` is only an accessor for
    that stored value.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L127>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Register the token with the server.** ``_registerWithServer`` forks on
    ``settings.notificationMode``: direct mode calls ``api/notifications``
    ``registerToken``; ES mode registers over the websocket, deferring until
    connected.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L415>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The actual REST call.** ``api/notifications.ts`` ``registerToken`` POSTs a
    form-encoded ``Notification[...]`` body to ``/notifications.json`` via
    ``client.postForm``. ZoneMinder's notifications endpoint expects form fields,
    not JSON.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/notifications.ts#L35>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/notifications.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **A push arrives while the app is open.** ``notificationReceived`` →
@@ -438,26 +444,26 @@ a token on startup, and reacting when a push arrives.
    server (the same event also arrives over the websocket), otherwise it builds a
    snapshot URL for the current profile and adds the event to the notification
    store.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L479>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The user taps the notification.** ``notificationActionPerformed`` →
    ``_handleNotificationAction`` resolves the target profile and stores the event
    under it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts#L545>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/pushNotifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Same profile or switch?** ``resolveProfileForNotification`` matches the
    payload's profile name to a stored profile. Same profile navigates directly; a
    different one calls ``requestProfileSwitch`` to ask first (the dialog lives in
    ``NotificationHandler``).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Navigate to the event.** A service cannot use React Router's hook, so it
    calls ``navigationService.navigateToEvent``; ``NotificationHandler``'s listener
    catches that event and calls ``navigate``, landing on ``/events/:id``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts#L46>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Reconcile pushes you missed.** ``useNotificationDelivered`` covers pushes
@@ -469,7 +475,7 @@ a token on startup, and reacting when a push arrives.
    never invents an id from ``Date.now()``: a fabricated id would drive a
    ``view=image&eid=<timestamp>`` request ZoneMinder logs as "Event not found"
    (issue #242). The same rule holds for the two live handlers above.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationDelivered.ts#L62>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationDelivered.ts>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 4: Adding a server profile
@@ -501,13 +507,13 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 #. **The form.** ``ProfileForm`` holds state for the portal URL, credentials, the
    self-signed switch, manual-URL mode, and the trust-dialog. The same screen
    serves first-time setup and adding another profile.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx#L31>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **One method runs the whole thing.** ``handleTestConnection`` (the Connect
    button) sets up an ``AbortController``, validates the inputs, then drives
    discovery → trust → login → save → switch in order.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx#L132>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Trust the cert before probing.** When self-signed is on,
@@ -515,50 +521,50 @@ time, logs in to confirm the details, then saves the profile and switches to it.
    so the upcoming discovery calls can reach a self-signed host instead of
    failing the handshake. The profile is not saved yet, so it is passed as the
    ``candidate`` argument to be folded into the trust set.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/security/ssl-trust.ts#L18>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/security/ssl-trust.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Find the real URLs.** ``discoverUrls`` wraps ``discoverZoneminder`` with one
    retry (to absorb the iOS local-network permission prompt) and installs the API
    client once a candidate answers.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L330>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Probe candidates.** ``discoverZoneminder`` crosses ``https``/``http`` with
    ``/api`` and ``/zm/api``, probing ``host/getVersion.json``, then derives the
    portal URL and CGI URL from whichever responds.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L250>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Read the server's ZMS path.** With credentials, ``fetchCgiUrl`` logs in and
    reads ``ZM_PATH_ZMS`` from config, so the streaming URL matches the server's
    real setup rather than a guess.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts#L170>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/discovery.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Trust on first use.** On native with self-signed enabled,
    ``getServerCertFingerprint`` fetches the cert; ``CertTrustDialog`` shows it and
    waits. Accepting pins the fingerprint (``applyTrustedCertificates({ urls,
    fingerprint, enabled: true })``); rejecting aborts.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CertTrustDialog.tsx#L13>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CertTrustDialog.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Confirm with a login.** After a fresh ``logout()``, the auth store's
    ``login()`` authenticates against the confirmed server; failure is surfaced as
    a localized error.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L246>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Save it.** ``addProfile`` validates the name, generates a UUID, writes the
    password to secure storage (never to Zustand), appends the profile, and makes
    it current if it is the first.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L96>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Switch to it.** For a non-first profile, ``switchProfile`` quits the old
    profile's streams, resets the client, and runs ``performBootstrap`` (the same
    bootstrap as Flow 1) before navigating away.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L250>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 5: Browse events and play a video
@@ -591,74 +597,76 @@ MJPEG player.
 #. **Assemble the filters.** ``Events`` reads monitor, date, tag, and favorite
    filters from ``useEventFilters`` and computes the effective monitor set that
    drives the query.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L90>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx>`__
    · → :doc:`04-pages-and-views`
 
-#. **Run the events query.** A React Query keyed by
-   ``queryKeys.eventsList(...)`` calls ``getEvents``, keeping the previous page
-   visible during pagination (``placeholderData: keepPreviousData``), gated on
-   auth. Its error wall is guarded by ``error && !eventsData``: once a page of
+#. **Run the events query.** ``pages/Events.tsx`` calls ``useScopedEvents``,
+   which runs one query per profile in scope and combines them, keeping the
+   previous page visible during pagination
+   (``placeholderData: keepPreviousData``). As with the monitor list it is not
+   gated on auth, for the same reason and with the same warning in the hook.
+   Its error wall is guarded by ``error && !eventsData``: once a page of
    events is cached, a failed background refetch leaves the stale list on screen
    rather than replacing it. Only a cold start with nothing cached renders
    ``ErrorBanner`` with ``resolveQueryError(error, t)``, which folds a 401 into
    the localized ``common.auth_required`` message instead of leaking the raw
    error text. ``pages/Montage.tsx`` and ``pages/Monitors.tsx`` guard the same way.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L208>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Build the ZM filter path and paginate.** ``getEvents`` turns filters into
    CakePHP-style URL segments, fetches up to ten pages of 100, dedupes by id,
    drops excluded monitors, and returns a synthesized pagination block.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Render thumbnail cards.** ``EventListView`` maps each event to an
    ``EventCard``, each showing a representative still built from a fallback chain
    of frame ids (snapshot/objdetect/alarm).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventListView.tsx#L90>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventListView.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Open one.** Tapping a card navigates to ``/events/:id``, carrying the
    referrer and active filters in router state so the detail page can do
    next/prev within the same filtered set.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx#L93>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Load the event.** ``EventDetail`` fetches the full event (``getEvent``) and
    its monitor, and resolves the monitor's portal URL and streaming port for
    multi-server support.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L73>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Pick the player.** ``isHlsEvent`` (an ``.m3u8`` ``DefaultVideo``) chooses HLS;
    otherwise MP4. JPEG-only events, TV devices, and any MP4 error flip
    ``useZmsFallback`` to the ZMS player; it is seeded from ``isTvMode`` at the top
    of the component so a Fire Stick never even attempts the MP4 path.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L201>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Build the video URL (stably).** ``videoUrl`` is memoized so its identity does
    not change mid-playback (re-issuing the source resets iOS WKWebView); it calls
    ``getEventVideoUrl`` with the token, port, and HLS flag.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L209>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The URL shape.** ``url-builder.ts`` ``getEventVideoUrl`` emits the HLS
    (``view_event_hls``) or MP4 (``view_video``) ``/index.php`` URL, appends the
    token, and rewrites the port when multi-port streaming is on.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L285>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts>`__
    · → :doc:`10-key-libraries`
 
 #. **MP4/HLS playback.** ``Mp4EventPlayer`` creates a Video.js player, wires alarm
    markers and PiP, and bubbles a playback ``error`` up to ``EventDetail``, which
    switches to ZMS.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/Mp4EventPlayer.tsx#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/Mp4EventPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The ZMS fallback.** ``ZmsEventPlayer`` streams MJPEG from ``/cgi-bin/nph-zms``
    into an ``<img>`` and sends play/pause/seek/speed as ZMS commands over the same
    connkey, quitting on unmount, just like a live stream.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/ZmsEventPlayer.tsx#L51>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/ZmsEventPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The still frames above the player.** ``EventFrameCarousel`` renders the
@@ -668,7 +676,7 @@ MJPEG player.
    ``onViewerOpenChange``, and ``EventDetail`` pauses the Video.js player it kept
    from ``onReady`` (or passes ``suspended`` to ``ZmsEventPlayer``), resuming on
    close only if playback was running.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventFrameCarousel.tsx#L45>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventFrameCarousel.tsx>`__
    · → :doc:`05-component-architecture`
 
 Flow 6: The access-token lifecycle
@@ -701,49 +709,49 @@ a 401 triggers recovery, all behind module-level single-flight gates.
 #. **A minute timer watches expiry.** ``useTokenRefresh`` mounts once, arms a
    one-minute interval and a ``visibilitychange`` listener so it re-checks the
    moment the app returns from background.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts#L26>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Refresh before it lapses.** ``checkAndRefresh`` refreshes when the time to
    expiry drops below the leeway window, covering both "expiring soon" and
    "already expired while backgrounded".
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts#L35>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTokenRefresh.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **One shared entry point.** ``getFreshAccessToken`` returns the current token if
    still fresh, else attaches to (or installs) the module-level ``pendingFreshToken``
    gate, so concurrent callers share one outcome.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L388>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The deduped refresh POST.** ``refreshAccessToken`` runs the network refresh
    behind its own ``pendingRefresh`` gate and logs out if the refresh token is
    already expired, so a proactive refresh and a 401 recovery collapse to one POST.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L305>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **New tokens land.** ``setTokens`` converts the relative expiry seconds to
    absolute timestamps and stores them (access in memory, refresh in secure
    storage); updating the expiry is what re-arms the timer.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L342>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Every request reads the token through a gate.** The API client's ``request``
    pulls the token via the injected ``AuthGate`` rather than importing the store;
    login and ``skipAuth`` requests bypass it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L128>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Just-in-time refresh.** If the token is already expired when a request is
    about to fire, the client calls ``getFreshAccessToken`` (the same gate) and
    attaches the new token, catching tokens that died between timer ticks.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L169>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **401 recovery, single-flight.** A 401 triggers ``recoverFromAuthFailure``,
    which refreshes, falls back to re-login, logs out once if both fail, never
    rejects, and on success retries the original request exactly once.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L228>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The gate that breaks the import cycle.** ``makeProfileGates(profileId)``
@@ -751,7 +759,7 @@ a 401 triggers recovery, all behind module-level single-flight gates.
    client, so the client never imports the store directly; the single-flight
    dedup stays in the store and the client stays mockable.
    ``createStoreApiClient`` is the only caller of ``createApiClient``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/store-gates.ts#L20>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/store-gates.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **A switch clears the gates.** ``dropSession(profileId)`` evicts the cached
@@ -759,7 +767,7 @@ a 401 triggers recovery, all behind module-level single-flight gates.
    pending gates so a rebuilt session never attaches to the dropped one's
    in-flight login or refresh. ``dropAllSessions`` does the same for every
    profile at once.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L213>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 Flow 7: Live notifications over the Event Server websocket
@@ -790,19 +798,19 @@ alive, and turns each live alarm into an event in the store and a toast on scree
 #. **The handler wires the hook.** ``NotificationHandler`` hands the store's
    ``connect``/``disconnect``/``reconnect`` and the current profile to
    ``useNotificationAutoConnect``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Choose the ES path.** The auto-connect effect reads ``notificationMode``; for
    ``es`` it proceeds only when a host is set and nothing is connected, guarded
    against re-entry.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L82>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Decrypt and connect (race-checked).** ``attemptConnect`` decrypts the
    password, re-reads the connection state right before connecting (the await
    could have changed it), then calls the store's ``connect``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts#L120>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAutoConnect.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Store builds the config and listeners.** ``connect`` gets its own service
@@ -810,35 +818,35 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    listeners, and awaits the service connect - it no longer disconnects any
    other profile, since an aggregate needs more than one profile connected
    at once (refs #337; see Flow 23).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Inject store-derived providers.** ``_buildServiceProviders`` hands the
    import-free service its token getter, image-URL builder, and bandwidth-derived
    keepalive interval.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L674>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Open the socket.** The service ``connect`` builds the ``ws(s)://host:port``
    URL, opens the websocket with stale-socket guards on every handler, and waits
    for auth.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L68>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Send credentials on open.** ``_handleOpen`` sends the ``auth`` message and a
    20-second timer rejects (and reconnects) if no response comes back.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L387>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Handle the auth reply.** ``_handleMessage`` resolves the pending auth on
    ``Success`` (starts keepalive, state ``connected``) or disconnects without
    reconnect on bad credentials.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L407>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Keep it alive.** ``_startPingInterval`` sends a periodic version request at the
    bandwidth-derived interval; the same request backs the liveness check on resume.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L583>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Reconnect with backoff.** On an unintended close, ``_scheduleReconnect`` waits
@@ -850,19 +858,19 @@ alive, and turns each live alarm into an event in the store and a toast on scree
    (refs #274). ``reconnectNow`` jumps the queue on network-restored and on app
    resume; ``reconnectNow(true)`` additionally replaces a socket that still reads
    as open but failed its liveness ping.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts#L518>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/notifications.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Bridge events into the store.** ``_initialize`` subscribes to the service's
    state and event streams, mirroring connection state and calling ``addEvent`` per
    alarm.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L473>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Record the alarm.** ``addEvent`` wraps it as a notification, dedupes and caps
    the history, recomputes the unread badge, and pushes the count back to the
    server. A toast then shows for the latest event.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L350>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 Flow 8: A go2rtc WebRTC live stream
@@ -892,34 +900,34 @@ element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
 #. **Choose WebRTC.** ``streamingMethod`` resolves ``webrtc`` only when the user
    setting allows it, the monitor has go2rtc enabled, and the profile has a go2rtc
    URL.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L104>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Skip known-broken monitors.** A module-level failure cache (5-minute TTL)
    makes a monitor that recently failed go2rtc go straight to MJPEG, so montage
    tiles do not each re-attempt a broken stream.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L36>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **MJPEG-first placeholder.** ``effectiveStreamingMethod`` shows the MJPEG stream
    as a placeholder while WebRTC establishes, swapping to ``<video>`` once decoded
    frames appear, so the tile is never blank.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L151>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Call the hook.** ``useGo2RTCStream`` is invoked with the go2rtc URL, channel,
    protocols, and a host guard against leaking the token to the wrong origin.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L167>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Connect lifecycle.** The hook waits a short delay (to survive Strict-Mode
    double-invoke) then connects, and tears down on unmount or disable.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L297>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Build the websocket URL.** ``getGo2RTCWebSocketUrl`` converts http(s) to
    ws(s), appends ``/ws``, and sets ``src={monitorId}_{channel}`` plus the token.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L449>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Create the element.** ``connect`` instantiates ``VideoRTC``, wraps its
@@ -930,31 +938,31 @@ element, with a ladder of watchdogs that fall back to MJPEG if anything stalls.
    LAN and VPN clients reach go2rtc on host candidates). The override has to
    happen here rather than during negotiation: ``onwebrtc()`` reads ``pcConfig``
    only when it builds the peer connection, after the websocket has opened.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts#L164>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useGo2RTCStream.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Negotiate protocols.** On open, the vendored element starts MSE (or HLS) and
    WebRTC in parallel; whichever delivers video first wins and becomes the active
    protocol.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/vendor/go2rtc/video-rtc.js#L334>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/vendor/go2rtc/video-rtc.js>`__
    · → :doc:`go2rtc-integration`
 
 #. **Watchdog: connected but no frames.** A 15-second timer checks for actual video
    dimensions; if none, it records the failure and falls back to MJPEG (a faster
    poll swaps to ``<video>`` the instant frames appear).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L201>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Watchdog: freeze after playing.** A 3-second liveness check watches
    ``currentTime`` advance; a stall past the threshold retries up to twice, then
    demotes to MJPEG. Healthy playback for a minute clears the retry count.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L281>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Resume after background.** ``useVisibilityResume`` resets freeze counters,
    clears any latched MJPEG fallback, and nudges a retry, recovering tiles the
    browser suspended.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L377>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 9: The Timeline view
@@ -984,63 +992,63 @@ injected the instant they arrive.
 #. **The page and its range.** ``Timeline`` reads filters, defaults to the last 24
    hours, and restores the scrubber from session storage so the playhead survives
    a round-trip to an event page.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Timeline.tsx#L27>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Timeline.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Fetch monitors and events.** ``useTimelineData`` runs a monitors query and a
    range-bounded events query, using "now" as the end in live mode.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L41>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Fan out per monitor when filtered.** With a cause filter active, it issues one
    capped ``getEvents`` per monitor at limited concurrency and merges them, so one
    busy camera cannot eat the whole page budget.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L92>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Inject live events.** In live mode it subscribes to the notification store and
    adds a synthetic bar immediately on a new alarm, then debounces a refetch and
    prunes the synthetic once the real event lands.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L154>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Transform to bars.** ``allTimelineEvents`` maps each event to a
    ``TimelineEvent`` (start/end ms, alarm ratio, pulse timestamp), merging live
    synthetics with the API winning on id collisions.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts#L217>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useTimelineData.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **The canvas orchestrator.** ``TimelineCanvas`` wires the viewport, gestures,
    render loop, and hit-testing, translating one-shot actions (reset, zoom, go-to-now)
    into animated viewport changes.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineCanvas.tsx#L62>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineCanvas.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Viewport math.** ``useTimelineViewport`` holds the visible range and does pan,
    zoom (clamped between one minute and 90 days), and eased animations.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineViewport.ts#L32>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineViewport.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **Input gestures.** ``useTimelineGestures`` normalizes mouse, touch, wheel, and
    pinch into pan/zoom/hover/click/brush callbacks.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineGestures.ts#L27>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/useTimelineGestures.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **Hit-testing.** ``hitTest`` maps a canvas point to a monitor row and event,
    expanding thin bars to a minimum width so they stay clickable.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-hit-test.ts#L13>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-hit-test.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Paint the canvas.** ``renderTimeline`` layers swimlanes, a collision-pruned
    time axis, rounded per-monitor event bars (with a pulse halo for live arrivals),
    the dashed "NOW" pill, and the scrubber playhead.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-renderer.ts#L640>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/timeline-renderer.ts>`__
    · → :doc:`10-key-libraries`
 
 #. **Scrub and preview.** ``TimelineScrubber`` drags the playhead and shows
    thumbnail buttons for the events under it; a canvas click opens
    ``EventPreviewPopover``, whose Play button navigates to the event.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineScrubber.tsx#L144>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/timeline/TimelineScrubber.tsx>`__
    · → :doc:`05-component-architecture`
 
 Flow 10: Downloading an event
@@ -1070,59 +1078,59 @@ streams a Blob with real progress. The drawer shows progress and a cancel button
 
 #. **The trigger.** The "Download video" button calls ``downloadEventVideo`` with
    the URL inputs and returns immediately; the drawer surfaces progress.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx#L379>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/EventDetail.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Orchestrate and register a task.** ``downloadEventVideo`` builds the URL,
    sanitizes the filename, creates an ``AbortController``, registers a background
    task with a cancel function, and kicks off the work asynchronously.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L379>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The task store.** ``addTask`` creates the task, trims old finished ones, and
    auto-expands the drawer. Using ``.getState()`` is what lets a non-React service
    drive the store.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts#L75>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Platform dispatch.** ``downloadFile`` picks the native or web handler from the
    platform; this is the split point.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L121>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Mobile: base64, never a Blob.** ``downloadFileNative`` fetches with
    ``responseType: 'base64'`` and uses the string directly, explicitly avoiding a
    Blob to prevent out-of-memory on large videos.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L135>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The native HTTP adapter.** ``nativeHttpRequest`` uses CapacitorHttp and returns
    base64; it has no abort support, so a timeout race stands in.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/http/adapter-native.ts#L14>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/http/adapter-native.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Mobile save.** The base64 is written to Documents, then added to the Photo or
    Video library by extension; a media-library failure is non-fatal because the
    file is already saved.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L169>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Web: streaming Blob.** ``downloadFileWeb`` fetches a Blob with streaming
    progress and triggers a browser download via a temporary anchor, falling back to
    a direct link if the fetch fails.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L198>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Progress feeds the store.** Each tick calls ``updateProgress`` (web has real
    streaming progress; native emits a single 100% tick), then ``completeTask`` /
    ``failTask`` on finish.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts#L93>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/backgroundTasks.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The drawer.** ``BackgroundTaskDrawer`` (mounted globally) renders progress bars
    and a cancel button that calls the task's cancel function, which aborts the
    request.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/BackgroundTaskDrawer.tsx#L143>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/BackgroundTaskDrawer.tsx>`__
    · → :doc:`05-component-architecture`
 
 Flow 11: A bandwidth setting becomes polling cadence
@@ -1145,46 +1153,46 @@ from that one place, so flipping low mode re-cadences the whole app at once.
 #. **The contract.** ``BandwidthSettings`` declares the shape: every interval and
    quality knob the app polls on (monitor status, alarm status, snapshot refresh,
    keepalive, and more).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L499>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The two presets.** ``BANDWIDTH_SETTINGS`` holds the ``normal`` and ``low``
    objects; ``low`` roughly doubles every interval and halves image scale and fps.
    This is the source of every cadence number.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L536>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The non-React getter.** ``getBandwidthSettings(mode)`` is the one sanctioned
    way for services and stores (outside React) to read a preset.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts#L574>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zmninja-ng-constants.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The user's knob.** ``bandwidthMode`` is a profile-scoped setting in the
    settings store, so switching profiles can switch cadence.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts#L148>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The React hook.** ``useBandwidthSettings`` reads ``bandwidthMode`` from the
    current profile and memoizes the matching preset, so components get a live,
    profile-correct settings object.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBandwidthSettings.ts#L28>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBandwidthSettings.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **A typical consumer.** ``useMonitors`` feeds ``bandwidth.monitorStatusInterval``
    straight into the React Query ``refetchInterval`` (overridable by the caller).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitors.ts#L57>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitors.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The seeded path.** Toggling low mode in ``LiveStreamingSection`` copies the
    preset's stream knobs (scale, fps, snapshot refresh) into the profile settings,
    which is why ``useMonitorStream`` reads them as ``settings.*``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/LiveStreamingSection.tsx#L47>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/LiveStreamingSection.tsx>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The non-React consumers.** Outside React, the notification keepalive and the
    direct-mode poller call ``getBandwidthSettings`` directly for their intervals,
    the same presets without a hardcoded number anywhere.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L682>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 Flow 12: A Dashboard widget
@@ -1214,63 +1222,63 @@ id, and each widget fetches its own live data.
 #. **The page reads the saved list.** ``Dashboard`` resolves the current profile
    and pulls that profile's widgets from the dashboard store, falling back to an
    empty array.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Dashboard.tsx#L23>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Dashboard.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **A dedicated persisted store.** ``useDashboardStore`` keeps
    ``widgets: Record<profileId, DashboardWidget[]>`` plus an editing flag, persisted
    under its own key with versioned migrations. It is profile-scoped by keying on
    profile id, not by ``getProfileSettings``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L49>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The grid.** ``DashboardLayout`` maps each widget's stored geometry into a
    react-grid-layout and packs widgets upward, showing an empty state when there
    are none.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L31>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Card chrome per cell.** ``DashboardWidget`` wraps each cell in a card with the
    drag handle and, in edit mode, the per-widget edit and delete buttons; the live
    content is passed in by type.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardWidget.tsx#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardWidget.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Add a widget.** ``DashboardConfig`` opens the Add Widget dialog with four type
    tiles (monitor, events, timeline, heatmap) and the per-type options (monitor
    multi-select, feed fit, and so on).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardConfig.tsx#L40>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardConfig.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The store appends and auto-places it.** ``addWidget`` generates a UUID,
    computes a ``y`` below the existing widgets so it stacks, and persists
    immediately so it survives a reload.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L55>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **A widget fetches its own data.** ``EventsWidget`` runs a React Query against
    ``getEvents`` with its ``refetchInterval`` drawn from the widget override or
    ``bandwidth.eventsWidgetInterval`` (never a hardcoded interval), then renders a
    clickable list.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/widgets/EventsWidget.tsx#L41>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/widgets/EventsWidget.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Drag and resize persist.** ``handleLayoutChange`` fires on every move, and only
    while editing (guarded against a store→state→store feedback loop) writes the new
    geometry back. For the subscription rules that keep that loop from re-arming,
    see :doc:`05-component-architecture`.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx#L97>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/dashboard/DashboardLayout.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Per-breakpoint layout write.** ``updateLayouts`` merges the new geometry per
    breakpoint and recomputes the primary layout, so a resized widget keeps its size
    across reloads.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L111>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Remove a widget.** The edit-mode X button calls ``removeWidget``, which filters
    it out of that profile's array and re-renders the grid.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts#L93>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/dashboard.ts>`__
    · → :doc:`03-state-management-zustand`
 
 Flow 13: Kiosk lock and biometric unlock
@@ -1301,61 +1309,61 @@ idle timeout and no auto-lock on backgrounding.
 
 #. **Set the PIN.** ``AdvancedSection`` hosts setting, changing, and clearing the
    global kiosk PIN, each gated behind biometric-then-PIN re-verification.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AdvancedSection.tsx#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AdvancedSection.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **The PIN secret.** ``kioskPin.ts`` stores a salted SHA-256 of the PIN in secure
    storage and verifies against it; this is the single source of truth for whether a
    PIN is configured.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/kioskPin.ts#L27>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/kioskPin.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The lock-state store.** ``useKioskStore`` holds ``isLocked``, the failed-attempt
    count, and a cooldown timestamp. It is not persisted, so locking does not survive
    a restart.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/kioskStore.ts#L26>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/kioskStore.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Activating the lock.** ``useKioskLock`` is the shared logic behind the lock
    buttons: with no PIN it opens first-time setup, otherwise it locks and force-enables
    screen keep-awake (restoring the prior value on unlock).
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useKioskLock.ts#L22>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useKioskLock.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **The trigger.** The sidebar lock button calls that hook to lock, or signals the
    overlay to begin unlock when already locked. The fullscreen montage controls
    expose the same button.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx#L406>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **The gate.** ``KioskOverlay`` renders nothing until locked, then mounts a
    full-screen overlay that captures pointer events, swallows keyboard shortcuts, and
    blocks browser and Android hardware back. The live view keeps updating underneath.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L26>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Unlock: biometric first.** ``handleUnlockTap`` checks the cooldown, tries
    biometrics, and unlocks on success; if biometrics are unavailable or cancelled it
    falls through to the PIN pad.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx#L99>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/KioskOverlay.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **The native prompt and its web fallback.** ``useBiometricAuth`` dynamically
    imports the biometric plugin inside try/catch, so on web or desktop the import
    throws and the flow degrades to PIN. Cancelling routes to the PIN pad, not the OS
    passcode.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBiometricAuth.ts#L19>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useBiometricAuth.ts>`__
    · → :doc:`16-platform-surfaces`
 
 #. **PIN entry.** ``PinPad`` (in unlock mode) verifies the entry; a miss records a
    failed attempt and, after five, surfaces a 30-second cooldown. The same component
    serves first-time set and PIN change.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/PinPad.tsx#L26>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/kiosk/PinPad.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Mount and restore.** ``AppLayout`` mounts the overlay and, on unlock, restores
    the pre-lock keep-awake state, closing the lock lifecycle.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/AppLayout.tsx#L111>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/AppLayout.tsx>`__
    · → :doc:`11-application-lifecycle`
 
 Flow 14: Capturing a snapshot
@@ -1387,20 +1395,20 @@ platform, base64 on mobile and an anchor download on web.
 #. **The button.** ``handleDownloadSnapshot`` on a monitor card reads the live media
    ref and shows a success or failure toast; ``MonitorDetail`` has the same button.
    Snapshots show a toast and are not tracked as background tasks.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L83>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **What the ref points at.** ``LiveMonitorPlayer`` syncs the external media ref to
    the ``<img>`` for MJPEG or the ``<video>`` for WebRTC, which is what makes the
    downstream branch real.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx#L440>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/LiveMonitorPlayer.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Capture dispatch.** ``downloadSnapshotFromElement`` builds a timestamped
    filename, then for a ``<video>`` draws the current frame to a canvas and reads a
    JPEG data URL; for an ``<img>`` it reuses a data URL or sends the stream URL on to
    be re-fetched.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L286>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Rewriting a stream to one frame.** ``convertToSnapshotUrl`` unwraps any image
@@ -1408,31 +1416,31 @@ platform, base64 on mobile and an anchor download on web.
    returns a single still instead of a live multipart stream. What happens when a
    stream URL reaches the downloader unrewritten is covered in
    :doc:`12-shared-services-and-components`.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L51>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Data-URL dispatch.** ``downloadSnapshot`` builds the ``.jpg`` filename and picks
    the platform-specific data-URL handler, or falls back to fetching a converted
    still.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L268>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Mobile save (no Blob).** ``downloadDataUrlNative`` splits the base64 off the data
    URL and writes it straight to Documents via Capacitor Filesystem, then adds it to
    the photo library. It never builds a Blob, per the OOM rule.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L324>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Web save.** ``downloadFromDataUrlWeb`` creates a temporary ``<a download>`` with
    the data URL as its href, clicks it, and removes it, triggering the browser's
    native download.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L353>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The MJPEG-still fetch path.** When an ``<img>`` carries a stream URL rather than a
    data URL, the same ``downloadFile`` split from Flow 10 fetches the ``mode=single``
    still: base64 on mobile, Blob on web.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts#L121>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/download.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 Flow 15: Changing the ZoneMinder run state
@@ -1476,7 +1484,7 @@ states at all.
    and renders ``pages/Server.tsx``. The run-state control is the last card on
    that page, "ZoneMinder Control"; everything above it is read-only health and
    storage reporting.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx#L114>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/layout/SidebarContent.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **The state list arrives first, and quietly.** ``pages/Server.tsx`` runs a
@@ -1486,7 +1494,7 @@ states at all.
    it never polls. A failed fetch leaves the Current State badge reading
    ``common.unknown`` and the dropdown holding only the three literal actions
    from step 4.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The active state is derived, then copied into local state.** ``activeState``
@@ -1495,7 +1503,7 @@ states at all.
    the render that scheduled it, so the dropdown paints empty for one frame and
    fills on the next; the ``&& !selectedAction`` half of the guard is what stops
    that effect from later stomping on a choice the user made by hand.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L134>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`02-react-fundamentals`
 
 #. **The dropdown mixes two unlike things.** ``Select`` (``server-state-select``)
@@ -1504,7 +1512,7 @@ states at all.
    active. Both kinds collapse to the same ``selectedAction`` string, and both
    travel the identical write path below. ZoneMinder's endpoint accepts the daemon
    verbs in the slot where a state name goes.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L536>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Apply is the only trigger.** The ``server-apply-button`` calls
@@ -1513,7 +1521,7 @@ states at all.
    and swaps its icon for a spinner. There is no confirm dialog, and the UI never
    flips optimistically: the badge above it stays on the old state until the
    server has been re-asked.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L573>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **What a mutation is.** ``useMutation`` is React Query's wrapper for a write.
@@ -1521,14 +1529,14 @@ states at all.
    you call ``mutate()`` and it runs ``mutationFn`` once. What it hands back is
    lifecycle, ``isPending`` while the request is open plus ``onSuccess`` and
    ``onError`` callbacks, which is exactly the surface step 5's button binds to.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L110>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The API call is one line.** ``changeState`` logs the intent and POSTs to
    ``/states/change/{stateName}.json`` with no body. Note what is missing next to
    ``getStates`` directly above it: no ``validateApiResponse``, no Zod schema. The
    response carries nothing worth parsing, so the only signal is the HTTP status.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/states.ts#L44>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/states.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The write rides the same client as every read.** ``client.post`` is a thin
@@ -1536,7 +1544,7 @@ states at all.
    the auth gate, the just-in-time token refresh, and the single 401 recovery
    retry that Flow 6 traces. A token that lapsed while the Server page sat open
    therefore refreshes and re-sends the POST rather than failing the state change.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L289>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **A failed write is never retried.** ``App.tsx`` passes ``retry:
@@ -1545,7 +1553,7 @@ states at all.
    That asymmetry is deliberate. Re-issuing a GET is free; silently re-issuing
    ``restart`` means the app bounces a server the user already watched fail to
    bounce.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L63>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Success invalidates the key rather than editing the cache.** ``onSuccess``
@@ -1556,7 +1564,7 @@ states at all.
    when the user picked ``start`` there is no matching entry in that array to
    patch at all: the daemon verbs are not states. Refetching is the only answer
    the app can actually justify.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L117>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The invalidated key comes from the factory.** ``queryKeys.states`` returns
@@ -1568,7 +1576,7 @@ states at all.
    updating. The ``profileId`` is a branded ``ProfileId``, minted once by
    ``asProfileId`` when ``addProfile`` generates the UUID back in Flow 4, and it
    is what keeps one profile's states out of another's cache.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L138>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The refetch is the only thing that can update the badge.** Invalidating marks
@@ -1578,7 +1586,7 @@ states at all.
    keep showing the old state until the page remounted. The 15-second
    ``staleTime`` from Flow 2 does not hold the refetch back either: freshness
    governs whether a refetch is *needed*, invalidation declares that it is.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L89>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`02-react-fundamentals`
 
 #. **The user hears about it through a toast.** ``onSuccess`` and ``onError`` raise
@@ -1586,7 +1594,7 @@ states at all.
    being ``destructive``, and each writes a ``log.server`` line. There is no
    navigation and no modal; the page you changed the state from is the page you
    stay on.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx#L112>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Server.tsx>`__
    · → :doc:`05-component-architecture`
 
 The Server page holds the app's only ``useMutation`` and its only write to the
@@ -1640,7 +1648,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    ``ProfileForm``, which is why Flow 4 traces a different file. Discovery, the
    trust-on-first-use dialog and the confirming login all belong to that other
    screen, so an edit never re-probes the server the way an add does.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L331>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Opening the edit dialog decrypts the password.** ``handleOpenEditDialog``
@@ -1649,7 +1657,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    secret, then drops the plaintext into ``formData.password``. For as long as the
    dialog is open, the password lives in ordinary React component state. It has to:
    the field has to show a value the user can edit, and the store cannot supply one.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L79>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **The store is read, not subscribed to.** That handler calls
@@ -1658,7 +1666,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    Zustand once with no subscription, so the dialog does not re-render every time
    any other field of the profile store changes. Using the hook here would buy a
    reactive binding for a function that never changes.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L423>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Where the secret actually was.** ``getDecryptedPassword`` delegates to
@@ -1668,7 +1676,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    sitting in local storage beside it, which ``lib/security/crypto.ts`` states
    plainly is obfuscation and not confidentiality against anyone who can read the
    store.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile.ts#L23>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The self-signed toggle is not part of the profile.** The dialog seeds it
@@ -1676,7 +1684,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    trust is a profile-scoped setting, not a field on the ``Profile`` object. Saving
    writes it back through ``updateProfileSettings``. Anything you add to this
    dialog has to pick one of these two homes on purpose.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L111>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Saving applies trust before it probes.** ``handleUpdateProfile`` validates
@@ -1686,7 +1694,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    applied after discovery, a self-signed host would fail the handshake and the
    probe would report the server as unreachable. This is the same ordering
    constraint as step 3 of Flow 4.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L135>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`13-network-endpoints`
 
 #. **The store swaps the secret back out.** ``updateProfile`` writes any supplied
@@ -1694,7 +1702,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    it with the ``'stored-securely'`` sentinel before the ``set()`` call. Zustand
    persists the whole profile state to local storage with no ``partialize``, so
    the sentinel is the only thing keeping the plaintext out of the persisted blob.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L157>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The client is rebuilt narrowly, and nothing else is torn down.** Still in
@@ -1703,7 +1711,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    ``logout()``, no ``clearQueryCache()``, no ``quitAllActiveStreams()``, none of
    the six-step sequence ``switchProfile`` runs. Change a username here and the
    auth store still holds a token minted with the old one.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L180>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`11-application-lifecycle`
 
 #. **The reload is what re-authenticates.** Back in the page,
@@ -1713,7 +1721,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    ``onRehydrateStorage`` and the whole of Flow 1, and that bootstrap is where the
    new credentials produce a new token. Editing a profile that is not current
    skips the reload entirely and touches nothing but the stored record.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L191>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`11-application-lifecycle`
 
 #. **Deleting captures the answer before it destroys the question.**
@@ -1723,7 +1731,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    rather than trusting the ``profiles`` value captured by its closure: that value
    was frozen when the render that created this handler ran, and it still contains
    the profile just deleted.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L208>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`02-react-fundamentals`
 
 #. **The store does three things and stops.** ``deleteProfile`` removes the
@@ -1731,7 +1739,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    deleted profile was current, auto-selects ``profiles[0]`` and points the API
    client at its ``apiUrl``. The session belonging to the deleted server is still
    live in the auth store and its monitor list is still in the query cache.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L193>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Which is why the page reloads, or leaves.** ``handleDeleteProfile`` ends in
@@ -1740,7 +1748,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    which is the only thing that discards the dead session and cache for the
    auto-selected replacement. Some other profile was deleted: nothing happens
    beyond the list re-rendering, and nothing needs to.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L234>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Delete-all is the exception that calls the reset.**
@@ -1749,7 +1757,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
    which clears the whole session registry and every profile's auth
    single-flight gates. Its caller navigates to ``/profiles/new``
    without a reload, since there is no server left to talk to.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L223>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 Switching between two profiles that both exist is the third verb, and the only
@@ -1795,7 +1803,7 @@ being destroyed.
    ``RouteErrorBoundary``. The id arrives through ``useParams``, which means the
    page has a monitor id and nothing else: every fact about the monitor has to be
    fetched.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx#L239>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/App.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **The monitor record comes first, and it decides everything after it.** A
@@ -1804,7 +1812,7 @@ being destroyed.
    ``MonitorDataSchema``. The two fields that drive this flow are ``Controllable``,
    a string ``'1'`` or ``'0'``, and ``ControlId``, a pointer into a table the
    monitor record does not contain.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L82>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Capabilities are a second query, gated on the first.** ``getControl`` hits
@@ -1814,7 +1822,7 @@ being destroyed.
    which is exactly what is wanted on the first render: ``ControlId`` is
    ``undefined`` until the monitor lands, and firing ``/controls/undefined.json``
    would be a guaranteed 404 for every non-PTZ camera in the system.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L89>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **What the control record says.** ``ZMControlSchema`` coerces every field to a
@@ -1823,7 +1831,7 @@ being destroyed.
    ``CanZoomCon`` and ``CanZoomRel``, ``CanReset``, and ``HasPresets`` with
    ``NumPresets``. There is no field that says "this camera can pan", only fields
    that say how.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L82>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The stream ignores your snapshot setting.** ``LiveMonitorPlayer`` renders
@@ -1832,7 +1840,7 @@ being destroyed.
    get a live feed. Its ``key={monitor.Monitor.Id}`` forces a full remount when the
    id changes, rather than letting a stream from the previous monitor limp along
    inside a reused component.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L364>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The pad mounts on the monitor's word, then waits for the control record.**
@@ -1842,7 +1850,7 @@ being destroyed.
    for that undefined case, so the panel appears one render after the monitor does.
    Fullscreen is CSS, not the browser Fullscreen API, and it hides the pad because
    there is nowhere to put it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx#L480>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/MonitorDetail.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The driver picks the verb.** ``PTZControls`` computes
@@ -1850,7 +1858,7 @@ being destroyed.
    and appends a direction, producing ``moveConUp`` or ``moveRelUp``. Diagonal
    buttons are rendered but ``invisible`` without ``CanMoveDiag``, which keeps the
    3x3 grid from collapsing. Zoom does the same with ``zoomCon`` and ``zoomRel``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L149>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Press and hold has two implementations.** ``moveRepeatMs`` is ``undefined``
@@ -1861,7 +1869,7 @@ being destroyed.
    drivers, so a stream of discrete steps is the only way to get hold-to-move on
    them. On release, both paths send ``moveStop``: the continuous camera needs it,
    the stepping camera ignores it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L155>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Unmounting while held is the interesting failure.** ``pointerup`` never
@@ -1873,7 +1881,7 @@ being destroyed.
    render, because a cleanup function closes over the values from the render that
    created it, and a guard on ``activePointerRef`` makes the whole thing a no-op on
    the throwaway mount React StrictMode performs in development.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx#L98>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/PTZControls.tsx>`__
    · → :doc:`02-react-fundamentals`
 
 #. **One handler, one API call, no state.** Every button calls the ``onCommand``
@@ -1881,7 +1889,7 @@ being destroyed.
    ``controlMonitor`` and, on failure, shows a toast. There is no mutation, no
    optimistic update, no query invalidation and no read-back: the app never asks
    the camera where it ended up pointing, because the live stream already shows it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/hooks/usePTZControl.ts#L33>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/hooks/usePTZControl.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The control endpoint is the classic web UI, not the API.**
@@ -1890,7 +1898,7 @@ being destroyed.
    ``Skip-Auth`` header. Skipping the auth gate is correct here precisely because
    the access token is already baked into the query string by the URL builder, the
    same way the streaming URLs in Flow 2 carry theirs.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts#L328>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/monitors.ts>`__
    · → :doc:`13-network-endpoints`
 
 #. **Two server quirks live in the URL builder.** ``getMonitorControlUrl`` matches
@@ -1901,7 +1909,7 @@ being destroyed.
    ``moveConUp``. The server uses the presence of those two parameters to decide it
    is parsing a movement command; send them with ``moveStop`` or ``presetHome`` and
    it logs "Invalid control parameter" and does nothing.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts#L174>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/zm/url-builder.ts>`__
    · → :doc:`13-network-endpoints`
 
 This page is the only place in the app that sends a control command. The PTZ badge
@@ -1956,7 +1964,7 @@ the next poll.
    fetches monitors of its own: it rides on the list the page already loaded, so a
    monitor the user has hidden is gone from this array before any count query is
    built.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L90>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **The hook reads a watermark for each monitor from the store.**
@@ -1965,7 +1973,7 @@ the next poll.
    store is persisted under ``zmng-monitor-seen`` in local storage, so the
    watermark lives on this device and this browser only: open the same server on a
    second phone and its badges start from that phone's own blank slate.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts#L35>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **One query per monitor, not one query for all of them.** ``useMonitorNewEvents``
@@ -1974,7 +1982,7 @@ the next poll.
    (60000 ms normal, 120000 ms low). A single request OR-ing every ``MonitorId``
    would starve: ZoneMinder ORs repeated ``MonitorId`` segments, so one busy camera
    would eat the whole page limit and every other monitor would read zero.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts#L40>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The filter operator is strict ``>``, not ``>=``.** ``getMonitorEventsSince``
@@ -1984,7 +1992,7 @@ the next poll.
    permanent "1 new" for the event whose timestamp is the watermark. A ``since`` of
    ``null`` means no watermark yet, and the ``StartDateTime`` segment is dropped so
    every event counts.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L303>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **One response answers both questions.** The request asks for ``limit=1``,
@@ -1994,7 +2002,7 @@ the next poll.
    ``{ count, newest }``. Counting with a separate request from fetching the newest
    row would double the request load for a number the first response already
    carried.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts#L324>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/events.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Seeding happens in an effect, and reports zero for the monitor it seeds.**
@@ -2005,7 +2013,7 @@ the next poll.
    response that seeds a fresh install is the one that would otherwise show the
    monitor's entire history as new. An absent watermark seeds silently rather than
    greeting the user with a week of backlog.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts#L54>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useMonitorNewEvents.ts>`__
    · → :doc:`02-react-fundamentals`
 
 #. **The badge renders only for a positive, resolved count.** ``MonitorCard``
@@ -2014,7 +2022,7 @@ the next poll.
    ``formatEventCount``. ``counts[id]`` is absent until the query resolves, so the
    ``undefined`` guard keeps a zero-width flicker off the button between mount and
    first response, distinct from a resolved count of 0 that means "nothing new".
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L214>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **Opening the events stamps the watermark and filters the list to the new window.**
@@ -2032,7 +2040,7 @@ the next poll.
    and does cost exactly one refetch of that monitor's count, the next step.
    ``markSeen`` with a ``null`` newest is a no-op, so opening a monitor that has never
    recorded an event does not overwrite a real watermark with nothing.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts#L34>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **The montage tiles carry the same badge and the same click.** ``pages/Montage.tsx``
@@ -2042,7 +2050,7 @@ the next poll.
    runs the same ``useOpenMonitorEvents`` hook with ``from: '/montage'``. The tile's
    red alarm pulse is a separate signal, driven by the notification store, and is
    unchanged. Only the counted number is now shared with ``MonitorCard``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MontageMonitor.tsx#L213>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MontageMonitor.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The detail page clears the badge only when the list was actually shown.**
@@ -2052,7 +2060,7 @@ the next poll.
    list, so stamping then would clear a badge for events the user did not look at.
    The guard keys the stamp to the list being on screen, not to the page being
    open.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorRecentEvents.tsx#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorRecentEvents.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **The watermark sits inside the query key, so clearing invalidates one monitor.**
@@ -2062,7 +2070,7 @@ the next poll.
    leaving every other monitor's cached count untouched. This is also why a
    freshly-seeded monitor issues two requests: once with ``since=null``, then again
    once the seed lands and the key carries the real watermark.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts#L109>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/query/query-keys.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **A notification refreshes one monitor's badge before the next poll.**
@@ -2075,7 +2083,7 @@ the next poll.
    mounting with a backlog does not fire a burst of invalidations. It moves the badge
    only while the Monitors or Montage page holds the query; otherwise the next mount
    refetches anyway.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationBadgeNudge.ts#L25>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationBadgeNudge.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 The badge decorates the Events button, and tapping that button lands the user in
@@ -2129,7 +2137,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    palette's Ask item (``components/CommandPalette.tsx``) is the second entry
    point, same store call. This branch has to be checked first: everything
    after it assumes the assistant, not the help overlay.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx#L134>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/KeyboardShortcuts.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **One widget owns the window states.** ``AssistantWidget``
@@ -2152,7 +2160,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    locale, ZM version, and the install's own detected-object labels. The
    monitor list is not copied into every prompt because ``list_monitors``
    resolves names when needed.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L349>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Triage classifies the request, and its verdict is advisory.**
@@ -2177,7 +2185,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    reply. There is no confirm step in this loop and nothing for one to guard:
    the file's own header explains that the read-only guarantee is structural,
    not a runtime decision.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L253>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts>`__
    · → :doc:`15-assistant`
 
 #. **The on-device provider constrains generation to the envelope.**
@@ -2325,7 +2333,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    ``chat``: freeing the loaded model out from under an in-flight generation
    is a use-after-free, so both reject with ``CHAT_BUSY`` while a reply is
    still generating instead of tearing down the model underneath it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts#L92>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/providers/native-llm.ts>`__
    · → :doc:`15-assistant`
 
 #. **A download failure carries its native reason into the settings toast.**
@@ -2342,7 +2350,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    re-download never touches a prior model file: the native side only
    writes the final destination on success, so an interrupted re-download
    leaves the previously downloaded model in place.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AssistantNativeSection.tsx#L129>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/settings/AssistantNativeSection.tsx>`__
    · → :doc:`15-assistant`
 
 #. **The remote provider uses native tools and stops teaching the fallback.**
@@ -2384,7 +2392,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    error result the model corrects from within the same turn, which is
    cheaper than a request that succeeds against the wrong data and gets
    answered confidently.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L430>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts>`__
    · → :doc:`15-assistant`
 
 #. **Three jobs, three owners: copy, interpret, compute.** The assistant
@@ -2479,7 +2487,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    produced select nothing, and an answer with no directive shows every
    card. Monitor cards render live previews (``LiveMonitorPlayer``), capped
    at ``ASSISTANT.maxLiveMonitorCards``.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx#L180>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Clear the context before it overflows.** ``AskPanel`` checks
@@ -2497,7 +2505,7 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    hides everything before the boundary from the model while the thread in
    ``stores/assistant.ts`` keeps rendering it: the user keeps their
    scrollback, the model gets its window back.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts#L189>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/agent.ts>`__
    · → :doc:`15-assistant`
 
 Typing text into the command palette without choosing the Ask item skips all
@@ -2548,7 +2556,7 @@ thrash ``nph-zms`` on the server, not just the display.
    it contradicts the Polling contract's "users tune bandwidth globally";
    routing it through this shared resolver instead of a raw literal is what
    keeps it inside that contract.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L78>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx>`__
    · → :doc:`11-application-lifecycle`
 
 #. **One query per watched monitor.** ``useAlarmStates`` calls
@@ -2562,7 +2570,7 @@ thrash ``nph-zms`` on the server, not just the display.
    returned object is identity-stable across renders; step 5 stamps
    ``Date.now()`` into its output, so a per-render identity here would loop
    the page forever.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useAlarmStates.ts#L64>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useAlarmStates.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Parse whatever ZoneMinder sent back.** ``parseAlarmState`` reads
@@ -2570,7 +2578,7 @@ thrash ``nph-zms`` on the server, not just the display.
    word-based value, and falls back to ``'unknown'`` for anything it does
    not recognize (including the API's own ``status: 'false'`` error
    marker) rather than guessing alarming.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/alarm-state.ts#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/alarm-state.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **A push notification promotes a monitor early.** Before the states
@@ -2579,7 +2587,7 @@ thrash ``nph-zms`` on the server, not just the display.
    ``'alarm'`` even though the last poll has not confirmed it yet. It only
    ever touches a monitor id already present in ``states``, so a hint for a
    page-ignored or profile-excluded monitor cannot resurrect it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L125>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The dwell reducer decides who stays.** ``reduceActiveMonitors`` runs in
@@ -2598,7 +2606,7 @@ thrash ``nph-zms`` on the server, not just the display.
    its next alarm starts a new episode and moves it back to the top. The sort
    runs before the identity check, so an order that did not actually change
    still hands back the previous array rather than re-rendering every tile.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L48>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **A cooling tile still expires with no new poll data.** A second effect
@@ -2610,7 +2618,7 @@ thrash ``nph-zms`` on the server, not just the display.
    list from a ref rather than from ``active``: a per-render identity, or
    ``active`` in this effect's deps, would clear and rearm the interval
    before its 1000ms ever elapsed and cooling tiles would never expire.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L134>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **A dismissed monitor is held out, not filtered at render time.** The
@@ -2622,14 +2630,14 @@ thrash ``nph-zms`` on the server, not just the display.
    drops a dismissal once that monitor has genuinely gone quiet, and the
    page calls it after the reduce rather than before, or a tile dismissed
    while already cooling would survive its own dismissal.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L215>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts>`__
    · → :doc:`04-pages-and-views`
 
 #. **Cap the grid, and say what got hidden.** ``capActiveMonitors`` slices
    the reduced list to ``liveActivityMaxTiles`` and reports the remainder as
    ``overflowCount``, rendered as the "+N more active" line rather than
    silently dropped.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts#L144>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/monitor/live-activity.ts>`__
    · → :doc:`04-pages-and-views`
 
 #. **A tile mount or exit is a real connection, not a repaint.** Each
@@ -2639,7 +2647,7 @@ thrash ``nph-zms`` on the server, not just the display.
    cleanup sends ``CMD_QUIT`` for that connkey. This is the fact the dwell
    window exists to protect: without it, a monitor alarming in short bursts
    would mint and quit a fresh ``nph-zms`` process on almost every poll.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx#L246>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/LiveActivity.tsx>`__
    · → :doc:`12-shared-services-and-components`
 
 Flow 21: Switching into a virtual profile group
@@ -2707,7 +2715,7 @@ this flow.
    way it points at any real profile id, which is what lets the rest of the
    store and every hook treat "these servers" as one more value rather than a
    mode flag threaded through every consumer.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/types.ts#L596>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/types.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Making a group needs a real second profile.** ``Profiles`` offers the new
@@ -2715,7 +2723,7 @@ this flow.
    nothing to aggregate, which is the ≥2 rule the user guide documents. The
    cards of groups that already exist stay, since editing and deleting them is
    the only way out of that state.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx#L364>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Profiles.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **Switching to an aggregate is the cheap branch of switchProfile.**
@@ -2726,7 +2734,7 @@ this flow.
    ``currentProfileId``, nothing else, because an id with no server has no
    session to build. A group id that no longer resolves to a stored group is
    rejected instead, the same way an unknown profile id is.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L280>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **One branch point resolves the scope for everyone.** ``useProfileScope``
@@ -2735,14 +2743,14 @@ this flow.
    of a one-element array. Every consumer below fans out over ``scope.profiles``
    identically in both modes, so this hook is the only place in the app that
    branches on the mode at all.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useProfileScope.ts#L66>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useProfileScope.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **useCurrentProfile keeps ``currentProfile`` null in All mode.** Its
    ``isAllMode`` flag is exposed alongside a ``currentProfile`` that stays
    null, since no single profile is "the" current one while aggregating - the
    fact the absence noted below traces back to.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useCurrentProfile.ts#L57>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useCurrentProfile.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **One ``useQueries`` call, one query per profile, the same cache key.**
@@ -2750,7 +2758,7 @@ this flow.
    per profile keyed by ``queryKeys.monitors(p.id)`` - the identical key
    ``useMonitors`` uses in single mode. A profile already cached from single
    mode is not refetched just because All mode also asked for it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L69>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **``combine`` tags every item with its owner and isolates failures.** The
@@ -2758,7 +2766,7 @@ this flow.
    and, separately, pushes any profile whose query errored into its own
    ``errors`` array - one unreachable server cannot fail the whole hook or
    blank the profiles that did answer.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts#L82>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedMonitors.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The grid keys each card by profile and monitor, not monitor alone.**
@@ -2767,7 +2775,7 @@ this flow.
    because two servers can and do reuse the same ZoneMinder monitor id. Each
    card then renders a ``monitor-profile-chip`` naming the server it came
    from.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L92>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **A failed profile gets its own strip, and only if it has nothing to
@@ -2777,7 +2785,7 @@ this flow.
    Each remaining entry renders a ``profile-error-strip-<id>`` with a retry
    button that refetches exactly that profile's query key, not the whole
    scope.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx#L207>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Monitors.tsx>`__
    · → :doc:`07-api-and-data-fetching`
 
 The Monitors page, the Events and Timeline pages, and the profile switcher
@@ -2848,7 +2856,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    event on a UTC server interleave in true chronological order instead of by
    the raw string, which Flow 21's monitor cards have no equivalent of - there
    is nothing to sort there.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/event/event-instant.ts#L22>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/event/event-instant.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **One query per profile, the SAME cache key single mode uses.**
@@ -2856,14 +2864,14 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    by ``queryKeys.eventsList(p.id, ...)`` - identical to the single-profile
    Events query, so switching between single and All mode for a profile
    already visited never refetches it.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L87>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **Each row carries its own chip, keyed like Monitors' cards.**
    ``EventCard`` renders an ``event-profile-chip`` whenever ``profileChip`` is
    set - only in All mode, wired the same way ``monitor-profile-chip`` is in
    Flow 21.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx#L253>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/events/EventCard.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **A monitor card's "Events" button navigates with the owning profile
@@ -2872,7 +2880,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    appends it as a ``profileId`` query param on the ``/events`` navigation,
    rather than assuming the globally-selected profile owns the monitor that
    was clicked.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts#L65>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useOpenMonitorEvents.ts>`__
    · → :doc:`05-component-architecture`
 
 #. **The Events page turns that param into a standing filter, once.** An
@@ -2881,7 +2889,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    the deep-linked id so a card click narrows the merged list down to just
    that server instead of leaving a colliding numeric event id ambiguous
    across two profiles.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx#L278>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/Events.tsx>`__
    · → :doc:`04-pages-and-views`
 
 #. **A monitor detail click never calls switchProfile at all.**
@@ -2891,7 +2899,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    resolves its session from the route param, so the profile switcher
    still names the group the whole time - the outcome the deep-link e2e scenario
    asserts.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx#L126>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/monitors/MonitorCard.tsx>`__
    · → :doc:`05-component-architecture`
 
 #. **A push notification resolves to a real profile even while an aggregate
@@ -2900,7 +2908,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    profile is known, it returns that profile as the target with
    ``isCrossProfile: false`` - no switch-confirmation dialog, because there is
    no "wrong" profile to switch away from while aggregating.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/profile/notification-profile.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **The tap lands on the same ``/all/`` deep route a card click would.**
@@ -2908,7 +2916,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    ``profileId`` is passed, so the notification handler and ``MonitorCard``
    converge on one routing convention rather than each inventing its own way
    to carry "which server".
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts#L49>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/navigation.ts>`__
    · → :doc:`12-shared-services-and-components`
 
 #. **Tags fan out per profile and are keyed by owner, not by event id.**
@@ -2918,7 +2926,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    is exactly what a row carries. A single map keyed by bare event id would
    hand one server's tags to the other server's row, the event-side twin of
    the ``monitorCacheKey`` collision.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L134>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The tag FILTER aggregates by name, because tag ids are per-server.**
@@ -2929,7 +2937,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    profile that has no tag by that name resolves to an empty list, which
    ``getEvents`` treats as "matches nothing" rather than falling through to an
    unfiltered query.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts#L52>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEventTags.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **A profile that owns none of the selected monitors contributes nothing.**
@@ -2940,7 +2948,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    the impossible ``eventIds: []`` filter instead, the same shape
    ``favoritesOnly`` uses for a profile with no favorites of its own, and the
    shape the tag filter above uses for a server without the selected tag.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts#L161>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useScopedEvents.ts>`__
    · → :doc:`07-api-and-data-fetching`
 
 #. **The command palette and the keyboard shortcuts fan out the same way.**
@@ -2949,7 +2957,7 @@ the same ``/all/...`` deep route, so the destination page never has to ask
    label each row with its owning profile, and navigate to
    ``/all/monitors/:profileId/:id``. Group entries are absent in All mode:
    groups are per-server and nothing aggregates them.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx#L70>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CommandPalette.tsx>`__
    · → :doc:`05-component-architecture`
 
 Timeline aggregates the same way through its own ``isAllMode`` branch, reusing
@@ -3001,7 +3009,7 @@ land in the wrong bucket.
    mobile keeps Flow 3's single anchor-profile connection since FCM already
    delivers every profile's events server-side regardless of which one is
    foregrounded.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx#L307>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/NotificationHandler.tsx>`__
    · → :doc:`16-platform-surfaces`
 
 #. **Mount is the fan-out, unmount is the teardown.** ``ProfileNotificationConnector``
@@ -3010,7 +3018,7 @@ land in the wrong bucket.
    scope (switch, disable, delete, or ``allModeNotifications`` flipping off)
    is the only fan-out and teardown mechanism, with an explicit cleanup that
    disconnects the socket and stops the poller on unmount.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/ProfileNotificationConnector.tsx#L27>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/ProfileNotificationConnector.tsx>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Each profile gets its own service instance.** The store's ``connect``
@@ -3018,21 +3026,21 @@ land in the wrong bucket.
    longer disconnects any other profile before connecting - Flow 7's old
    single-connection assumption doesn't hold once two connectors can be
    connecting at once.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L261>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Listeners bind their profile id at registration, not at read time.**
    ``_initialize`` wires each connector's own event/state callbacks, so an
    alarm from server B's websocket can only ever reach the handler closed
    over profile B's id.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L527>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **The write carries no ambiguity either.** ``addEvent(profileId, event)``
    stores the alarm under ``profileEvents[profileId]``; two servers reporting
    monitor id ``3`` write to two different buckets, never one overwriting the
    other.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts#L398>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/notifications.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Toast display is a separate seam from the store write.**
@@ -3040,14 +3048,14 @@ land in the wrong bucket.
    reads each one's own ``showToasts``/``playSound`` out of that profile's
    settings - there is no "current profile" to fall back on while
    aggregating.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L43>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Events landing close together coalesce.** ``flushBurst`` collapses every
    event collected within the burst window into one summary toast naming the
    event and server counts, and plays at most one sound per window, so
    several busy servers can't flood the screen with individual toasts.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx#L63>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/hooks/useNotificationAllModeToasts.tsx>`__
    · → :doc:`03-state-management-zustand`
 
 #. **``allModeNotifications`` is the kill switch upstream of all of it.**
@@ -3055,14 +3063,14 @@ land in the wrong bucket.
    sockets or pollers exist at all; ``'muted'`` still mounts every connector
    (badge and history keep updating) but the toasts hook's own check
    suppresses toast and sound display.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts#L23>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/settings.ts>`__
    · → :doc:`03-state-management-zustand`
 
 #. **Notification Settings reads the same state the connectors write.**
    ``NotificationOverview`` renders each profile's live connection status and
    stored settings straight from the store's ``connections`` map and
    ``profileSettings``, with no separate aggregation hook of its own.
-   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/NotificationOverview.tsx#L56>`__
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/notifications/NotificationOverview.tsx>`__
    · → :doc:`05-component-architecture`
 
 Flow 21 covers the scope these connectors fan out over; Flow 7 is the
