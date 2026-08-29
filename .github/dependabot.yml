@@ -1,45 +1,38 @@
-# The audit backlog grew from 22 to 37 in app/ (19 more at the root) between
-# two reviews with nothing watching it. Dependabot opens the PRs; CI decides
-# whether they land.
+# Security updates only.
 #
-# Tuned for a small number of PRs that are worth reading, not coverage: patch
-# and minor bumps arrive grouped, majors arrive one at a time, and the limits
-# cap how many can be open at once so they queue instead of flooding. A major
-# bump to an action used only by the release workflows is NOT exercised by
-# CI - those workflows run on a tag, never on a PR - so read those before
-# merging.
+# The audit backlog (37 in app/, 29 of them high or critical) is almost
+# entirely @wdio/* and @capacitor/assets: device-test and icon-generation
+# tooling that never ships to a device. Routine version bumps for that are
+# churn, and the first run proved it, opening five PRs that fixed none of the
+# 37.
+#
+# What is worth interrupting for is an advisory against something that does
+# ship. That comes from Dependabot security updates, a repo setting rather
+# than this file, and it is now on along with vulnerability alerts. Setting
+# every version-update limit to 0 leaves those running and stops the rest.
+#
+# To go back to routine bumps, raise a limit and add a `groups:` block so a
+# week of patches is one PR. Do not drop grouping; ungrouped, github-actions
+# alone opened four PRs in one morning.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /app
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
-    groups:
-      patch-and-minor:
-        update-types: [minor, patch]
+    open-pull-requests-limit: 0
     labels: [dependencies]
 
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 1
-    groups:
-      patch-and-minor:
-        update-types: [minor, patch]
+    open-pull-requests-limit: 0
     labels: [dependencies]
 
-  # Third-party actions are pinned to mutable major tags in several workflows;
-  # this at least surfaces when one moves. Grouped: ungrouped, the first run
-  # opened four separate PRs for four action bumps, which is noise nobody
-  # reads. One PR a month, or none.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 2
-    groups:
-      actions:
-        patterns: ['*']
+    open-pull-requests-limit: 0
     labels: [dependencies]
