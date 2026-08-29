@@ -138,9 +138,17 @@ describe('knowledge files stay evidence-backed and private-data-free (M5)', () =
     'agents/project/out-of-scope.md',
   ];
 
-  it('the PR template carries the Acceptance section the Spec review axis reads', () => {
+  it('the PR template offers the Acceptance heading the ci.yml job requires', () => {
+    // This asserts the template only. It is NOT the gate on P1's
+    // acceptance-lines clause and was read as one for a month, during which
+    // four consecutive PRs shipped with no Acceptance section: a file
+    // containing a heading says nothing about any PR body. The real gate is
+    // the pr-acceptance job in ci.yml, which reads the body.
     const template = fs.readFileSync(path.join(repoRoot, '.github/pull_request_template.md'), 'utf8');
     expect(template).toMatch(/^## Acceptance$/m);
+
+    const ci = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+    expect(ci, 'the pr-acceptance job is what actually enforces P1').toMatch(/pr-acceptance:/);
   });
 
   it('every issue cited in out-of-scope has a reason line', () => {
@@ -202,8 +210,7 @@ describe('prose stays in developer voice (P10)', () => {
 describe('developer docs cite symbols, not line numbers', () => {
   it('no rst file carries a file.ts:NN citation', () => {
     // Line numbers rot silently as code moves; symbol names are greppable
-    // and survive edits. GitHub source links pin lines with #LNN, which
-    // this pattern does not match.
+    // and survive edits. GitHub #LNN anchors are covered by the next case.
     const offenders: string[] = [];
     const guideDir = path.join(repoRoot, 'docs/developer-guide');
     for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
@@ -251,6 +258,24 @@ describe('developer docs cite symbols, not line numbers', () => {
         });
     }
     expect(offenders, `developer guide teaches symbols that do not exist:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
+  it('no source link pins a line number', () => {
+    // A #LNN anchor is a line number wearing a URL. All 246 of them had
+    // rotted: call-flows cited Monitors.tsx#L66 for the monitor-list query,
+    // which by then was a group-filter comment, and the reader lands
+    // confidently in the wrong place. The bare file link stays useful as the
+    // code moves; the prose names the symbol.
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      fs.readFileSync(path.join(guideDir, file), 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          if (/blob\/[^\s>`]*#L\d+/.test(line)) offenders.push(`${file}:${i + 1} ${line.trim()}`);
+        });
+    }
+    expect(offenders, `source links pinned to a line number:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it('no mermaid block contains a semicolon', () => {
@@ -411,6 +436,67 @@ describe('Sessions contract', () => {
  * an Android 17 device: the toggle shows up default-denied, the app never asks
  * for it, and every LAN server times out (#350).
  */
+/**
+ * Native logging never passes through the Logging contract's sanitizer, which
+ * lives on the JS side. `agents/project/native.md` said of it "Nothing gates
+ * it, so it is on you", and M1 predicts what happens next: the rule has now
+ * been broken on both platforms (#307 on Android, the iOS extension since).
+ *
+ * The check is a heuristic, deliberately. It strips string literals so a
+ * static message mentioning "URL" is not a hit, then looks for a risky
+ * identifier among what is left, which is the arguments. It will occasionally
+ * flag something harmless. That is the point: every hit has to carry a written
+ * `// log-safe:` reason, so the decision is recorded next to the code instead
+ * of being rediscovered by the next review.
+ */
+describe('Native contract: no bridge URL or raw error in a native log', () => {
+  const NATIVE_ROOTS = ['app/ios/App', 'app/android/app/src/main/java'];
+  const SKIP_DIRS = ['DerivedData', 'Pods', 'build'];
+  const LOG_CALL = /(NSLog|os_log|CAPLog\.print|Log\.[dewiv])\s*\(/;
+  const RISKY = /\b(url|uri|absoluteString|getMessage\(\)|localizedDescription)\b/i;
+  const STRING_LITERAL = /"(?:[^"\\]|\\.)*"/g;
+  const EXCUSED = /\/\/\s*log-safe:/;
+
+  const nativeSources = (): string[] => {
+    const out: string[] = [];
+    const walk = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (SKIP_DIRS.includes(entry.name)) continue;
+          walk(path.join(dir, entry.name));
+        } else if (/\.(swift|java)$/.test(entry.name)) {
+          out.push(path.join(dir, entry.name));
+        }
+      }
+    };
+    for (const root of NATIVE_ROOTS) walk(path.join(repoRoot, root));
+    return out;
+  };
+
+  it('finds native sources to scan at all', () => {
+    // Without this the suite passes by scanning nothing after any path move.
+    expect(nativeSources().length).toBeGreaterThan(5);
+  });
+
+  it('every logged URL or raw error carries a written log-safe reason', () => {
+    const offenders: string[] = [];
+    for (const file of nativeSources()) {
+      const lines = read(file).split('\n');
+      lines.forEach((line, i) => {
+        if (!LOG_CALL.test(line)) return;
+        if (!RISKY.test(line.replace(STRING_LITERAL, '""'))) return;
+        if (EXCUSED.test(line) || (i > 0 && EXCUSED.test(lines[i - 1]))) return;
+        offenders.push(`${path.relative(repoRoot, file)}:${i + 1} ${line.trim().slice(0, 90)}`);
+      });
+    }
+    expect(
+      offenders,
+      `native log of a URL or raw error with no // log-safe: reason:\n${offenders.join('\n')}`,
+    ).toEqual([]);
+  });
+});
+
 describe('Native contract: Android local network permission', () => {
   it('declares ACCESS_LOCAL_NETWORK only once targetSdk requires it', () => {
     const androidDir = path.join(repoRoot, 'app/android');

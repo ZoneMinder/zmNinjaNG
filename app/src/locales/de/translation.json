@@ -875,7 +875,8 @@
     "menu_more": "Mehr",
     "menu_refresh": "Aktualisieren",
     "menu_show_monitors": "Monitore",
-    "tile_error": "Kachelfehler"
+    "tile_error": "Kachelfehler",
+    "alarm_status": "Alarm bei {{monitor}}"
   },
   "notification_history": {
     "title": "Benachrichtigungen",
@@ -997,7 +998,8 @@
       "connected": "Verbunden",
       "disconnected": "Getrennt",
       "connecting": "Verbinde...",
-      "direct_active": "Direktmodus aktiv"
+      "direct_active": "Direktmodus aktiv",
+      "direct_not_registered": "Direktmodus nicht registriert"
     },
     "switch_profile_title": "Profil wechseln?",
     "switch_profile_desc": "Diese Benachrichtigung stammt von \"{{profile}}\". Zu diesem Profil wechseln, um das Ereignis anzuzeigen?",

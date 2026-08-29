@@ -875,7 +875,8 @@
     "menu_more": "Más",
     "menu_refresh": "Actualizar",
     "menu_show_monitors": "Monitores",
-    "tile_error": "Error de mosaico"
+    "tile_error": "Error de mosaico",
+    "alarm_status": "Alarma en {{monitor}}"
   },
   "notification_history": {
     "title": "Notificaciones",
@@ -997,7 +998,8 @@
       "connected": "Conectado",
       "disconnected": "Desconectado",
       "connecting": "Conectando...",
-      "direct_active": "Modo directo activo"
+      "direct_active": "Modo directo activo",
+      "direct_not_registered": "Modo directo no registrado"
     },
     "switch_profile_title": "Cambiar perfil?",
     "switch_profile_desc": "Esta notificacion es de \"{{profile}}\". Cambiar a este perfil para ver el evento?",

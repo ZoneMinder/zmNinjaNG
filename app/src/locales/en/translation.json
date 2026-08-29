@@ -875,7 +875,8 @@
     "menu_more": "More",
     "menu_refresh": "Refresh",
     "menu_show_monitors": "Show monitors",
-    "tile_error": "Tile failed"
+    "tile_error": "Tile failed",
+    "alarm_status": "Alarm on {{monitor}}"
   },
   "notification_history": {
     "title": "Notifications",
@@ -997,7 +998,8 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "connecting": "Connecting...",
-      "direct_active": "Direct mode active"
+      "direct_active": "Direct mode active",
+      "direct_not_registered": "Direct mode not registered"
     },
     "switch_profile_title": "Switch Profile?",
     "switch_profile_desc": "This notification is from \"{{profile}}\". Switch to this profile to view the event?",

@@ -22,6 +22,8 @@ import {
   GroupSchema,
   TagSchema,
   ZMControlSchema,
+  ZMNotificationSchema,
+  ZMNotificationResponseSchema,
 } from '../types';
 
 /** A ZM 1.38.3 Ffmpeg monitor, trimmed from the raw response in #247. */
@@ -295,6 +297,25 @@ describe('no declared field can fail any entity response', () => {
       sample: { Id: 1, Name: 'PTZ', Type: 'Pelco', Protocol: 'rs485' },
       identity: ['Id', 'Name'],
     },
+    {
+      name: 'ZMNotification',
+      schema: ZMNotificationSchema as unknown as z.ZodObject,
+      sample: {
+        Id: 7,
+        UserId: 1,
+        Token: 'tok',
+        Platform: 'android',
+        MonitorList: '1,2',
+        Interval: 30,
+        PushState: 'enabled',
+        AppVersion: '2.2.1',
+        BadgeCount: 0,
+        LastNotifiedAt: null,
+        CreatedOn: '2026-01-01 00:00:00',
+        UpdatedOn: '2026-01-01 00:00:00',
+      },
+      identity: ['Id'],
+    },
   ];
 
   for (const { name, schema, sample, identity } of cases) {
@@ -321,4 +342,33 @@ describe('no declared field can fail any entity response', () => {
       });
     });
   }
+});
+
+/**
+ * Direct-mode push registration reads `notification.Notification` straight off
+ * the response. A ZoneMinder without the endpoint (PR #4685), or a proxy
+ * answering 200 with an HTML error page, used to reach that property access
+ * and throw "Cannot read properties of undefined", which landed in a log-only
+ * catch and told the user nothing.
+ */
+describe('ZMNotificationResponseSchema rejects a body that is not a registration', () => {
+  const notRegistrations = [
+    { name: 'proxy HTML error page', body: '<html><body>502</body></html>' },
+    { name: 'server without the endpoint', body: { success: false } },
+    { name: 'envelope with no Notification', body: { notification: {} } },
+    { name: 'registration with no Id', body: { notification: { Notification: { Token: 't' } } } },
+  ];
+
+  for (const { name, body } of notRegistrations) {
+    it(`fails closed on ${name}`, () => {
+      expect(ZMNotificationResponseSchema.safeParse(body).success).toBe(false);
+    });
+  }
+
+  it('accepts a real registration and coerces the string id ZM sends', () => {
+    const parsed = ZMNotificationResponseSchema.parse({
+      notification: { Notification: { Id: '7', Token: 'tok', Platform: 'android' } },
+    });
+    expect(parsed.notification.Notification.Id).toBe(7);
+  });
 });

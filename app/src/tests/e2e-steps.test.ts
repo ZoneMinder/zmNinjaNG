@@ -201,6 +201,52 @@ describe('e2e step definitions', () => {
     ).toEqual([]);
   });
 
+  /**
+   * `agents/project/testing.md` says not to use fixed `waitForTimeout`, and
+   * nothing enforced it: the count sat unchanged through thirteen commits that
+   * touched these files. Each sleep is a latent flake and a third of a second
+   * per run, and a real timing regression turns into an intermittent red
+   * nobody trusts.
+   *
+   * A ratchet, not a ban: the existing sleeps are grandfathered per file and
+   * the numbers may only fall. Replace one with the condition it stands in for
+   * and lower its entry in the same commit. Pattern: .lint-baseline.json (C7).
+   */
+  const SLEEP_BUDGET: Record<string, number> = {
+    'common.steps.ts': 6,
+    'dashboard.steps.ts': 2,
+    'events.steps.ts': 12,
+    'group-filter.steps.ts': 3,
+    'hidden-monitors.steps.ts': 1,
+    'kiosk.steps.ts': 5,
+    'profiles.steps.ts': 2,
+    'settings.steps.ts': 6,
+    'timeline.steps.ts': 2,
+  };
+
+  it('the fixed-sleep budget only falls', () => {
+    const counts = new Map<string, number>();
+    for (const name of readdirSync(STEP_DIR).filter((n) => n.endsWith('.ts'))) {
+      const hits = readFileSync(join(STEP_DIR, name), 'utf8').match(/waitForTimeout\s*\(/g)?.length ?? 0;
+      if (hits > 0) counts.set(name, hits);
+    }
+
+    const grown = [...counts.entries()]
+      .filter(([file, n]) => n > (SLEEP_BUDGET[file] ?? 0))
+      .map(([file, n]) => `${file}: ${n} sleeps, budget ${SLEEP_BUDGET[file] ?? 0}`);
+    expect(
+      grown,
+      `fixed sleeps added; await the condition instead:\n${grown.join('\n')}`,
+    ).toEqual([]);
+
+    // A budget above reality is a number nobody lowered back, which is how a
+    // ratchet stops ratcheting (C7).
+    const slack = Object.entries(SLEEP_BUDGET)
+      .filter(([file, budget]) => budget > (counts.get(file) ?? 0))
+      .map(([file, budget]) => `${file}: budget ${budget}, actual ${counts.get(file) ?? 0}`);
+    expect(slack, `lower these budgets to match:\n${slack.join('\n')}`).toEqual([]);
+  });
+
   it('has no step definition that no feature references', () => {
     const orphans = steps
       .filter((s) => !patternToRegExp(s.pattern).test(featureText))

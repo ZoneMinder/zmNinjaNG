@@ -8,6 +8,8 @@
 
 import type { ApiClient } from './client';
 import { log, LogLevel } from '../lib/logger';
+import { validateApiResponse } from '../lib/zm/api-validator';
+import { ZMNotificationResponseSchema } from './types';
 
 export interface ZMNotification {
   Id: number;
@@ -59,7 +61,10 @@ export async function registerToken(
   if (params.profile) formData.append('Notification[Profile]', params.profile.slice(0, 128));
 
   const resp = await client.postForm<NotificationResponse>('/notifications.json', formData);
-  return resp.data.notification.Notification;
+  return validateApiResponse(ZMNotificationResponseSchema, resp.data, {
+    endpoint: '/notifications.json',
+    method: 'POST',
+  }).notification.Notification;
 }
 
 /**
@@ -85,7 +90,10 @@ export async function updateNotification(
   if (params.badgeCount !== undefined) formData.append('Notification[BadgeCount]', String(params.badgeCount));
 
   const resp = await client.putForm<NotificationResponse>(`/notifications/${id}.json`, formData);
-  return resp.data.notification.Notification;
+  return validateApiResponse(ZMNotificationResponseSchema, resp.data, {
+    endpoint: `/notifications/${id}.json`,
+    method: 'PUT',
+  }).notification.Notification;
 }
 
 /**

@@ -875,7 +875,8 @@
     "menu_more": "Plus",
     "menu_refresh": "Actualiser",
     "menu_show_monitors": "Moniteurs",
-    "tile_error": "Erreur de tuile"
+    "tile_error": "Erreur de tuile",
+    "alarm_status": "Alarme sur {{monitor}}"
   },
   "notification_history": {
     "title": "Notifications",
@@ -997,7 +998,8 @@
       "connected": "Connecté",
       "disconnected": "Déconnecté",
       "connecting": "Connexion...",
-      "direct_active": "Mode direct actif"
+      "direct_active": "Mode direct actif",
+      "direct_not_registered": "Mode direct non enregistré"
     },
     "switch_profile_title": "Changer de profil ?",
     "switch_profile_desc": "Cette notification provient de \"{{profile}}\". Passer a ce profil pour voir l'evenement ?",

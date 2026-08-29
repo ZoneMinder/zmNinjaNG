@@ -52,6 +52,7 @@ public class PipActivity extends Activity {
         // The URL is deliberately not logged. ZoneMinder stream URLs carry the
         // access token as a query parameter, and logcat is readable by anyone
         // with adb, so this line handed out a live session token (refs #307).
+        // log-safe: logs whether a URL was supplied, never the URL itself.
         Log.d(TAG, "onCreate hasUrl=" + (url != null) + " position=" + position);
 
         if (url == null) {

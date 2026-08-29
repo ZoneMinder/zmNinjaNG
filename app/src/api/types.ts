@@ -892,3 +892,31 @@ export type TagData = z.infer<typeof TagDataSchema>;
 export type TagEventMapping = z.infer<typeof TagEventMappingSchema>;
 export type TagsResponse = z.infer<typeof TagsResponseSchema>;
 export type EventTagsResponse = z.infer<typeof EventTagsResponseSchema>;
+
+// Notification registration (Direct ZM push mode; ZoneMinder PR #4685).
+// The endpoint is new enough that a server without it, or a proxy answering
+// 200 with HTML, is a realistic response here. Id stays strict: a fallback
+// there would invent a registration the server does not have, and
+// notificationId is what the settings store persists as proof of success.
+export const ZMNotificationSchema = z.object(
+  withFieldCatch({
+    Id: z.coerce.number(),
+    UserId: z.coerce.number().nullable(),
+    Token: z.string(),
+    Platform: z.enum(['android', 'ios', 'web']),
+    MonitorList: z.string().nullable(),
+    Interval: z.coerce.number(),
+    PushState: z.enum(['enabled', 'disabled']),
+    AppVersion: z.string().nullable(),
+    BadgeCount: z.coerce.number(),
+    LastNotifiedAt: z.string().nullable(),
+    CreatedOn: z.string(),
+    UpdatedOn: z.string(),
+  }, ['Id']),
+);
+
+export const ZMNotificationResponseSchema = z.object({
+  notification: z.object({ Notification: ZMNotificationSchema }),
+});
+
+export type ZMNotificationResponse = z.infer<typeof ZMNotificationResponseSchema>;

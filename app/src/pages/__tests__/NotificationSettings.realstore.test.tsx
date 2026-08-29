@@ -115,3 +115,44 @@ describe('NotificationSettings page - real store render loop regression (refs #3
     onError.mockRestore();
   });
 });
+
+/**
+ * The direct-mode badge read the toggle, not the outcome. Registration failing
+ * (a server without the endpoint, a rejected token) leaves notificationId
+ * unset and only writes a log line, so the user saw "active", never got a
+ * notification, and had nothing to go on. Refs #392 P11-2.
+ */
+describe('NotificationSettings direct-mode badge reflects registration, not intent', () => {
+  beforeEach(() => {
+    vi.mocked(useCurrentProfile).mockReturnValue({
+      currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
+    });
+    vi.mocked(useProfileById).mockImplementation(() => ({ profile: profileA, settings: {} as never }));
+    vi.mocked(useProfileScope).mockReturnValue({
+      mode: 'single', profile: profileA, profiles: [profileA], settings: {} as never,
+    });
+  });
+
+  afterEach(() => {
+    useNotificationStore.setState({ profileSettings: {} });
+  });
+
+  it('says not registered when direct push is on but registration never succeeded', () => {
+    useNotificationStore.getState().updateProfileSettings(profileA.id, {
+      enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
+    });
+    renderPage();
+    expect(screen.getByText('notifications.status.direct_not_registered').textContent)
+      .toBe('notifications.status.direct_not_registered');
+    expect(screen.queryByText('notifications.status.direct_active')).toBeNull();
+  });
+
+  it('says active once the server has returned a registration id', () => {
+    useNotificationStore.getState().updateProfileSettings(profileA.id, {
+      enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: 42,
+    });
+    renderPage();
+    expect(screen.getByText('notifications.status.direct_active').textContent)
+      .toBe('notifications.status.direct_active');
+  });
+});
