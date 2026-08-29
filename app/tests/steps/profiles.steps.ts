@@ -242,6 +242,10 @@ Then('the dialog close button should be within the viewport', async ({ page }) =
 // AlertDialog is a separate component from Dialog and needs its own height cap
 // (refs #322).
 When('I open the delete all profiles dialog', async ({ page }) => {
+  // Delete All sits behind the page's overflow menu, deliberately out of reach
+  // of a stray tap (663df183). The step predates that move and had been
+  // clicking a menu item that only exists while the menu is open.
+  await openRadixMenu(page.getByTestId('profiles-menu'));
   await page.getByTestId('profiles-delete-all-button').click();
   await expect(page.getByTestId('profiles-delete-all-dialog')).toBeVisible({
     timeout: testConfig.timeouts.transition,
@@ -295,13 +299,17 @@ Then('I should see the profile portal address', async ({ page }) => {
 });
 
 /**
- * Row actions live behind a per-row menu. Opened from the keyboard: Radix
- * leaves a dismissable layer over the page for a beat after a menu closes, and
- * a click landing on it never reaches the trigger, so a second open in the same
- * scenario would silently do nothing.
+ * Open a Radix dropdown from the keyboard. Radix leaves a dismissable layer
+ * over the page for a beat after any menu closes, and a click landing on it
+ * never reaches the trigger, so a second open in the same scenario would
+ * silently do nothing.
  */
-export async function openProfileRowMenu(card: Locator) {
-  const trigger = card.locator('[data-testid^="profile-actions-menu-"]');
+export async function openRadixMenu(trigger: Locator) {
   await trigger.focus();
   await trigger.press('Enter');
+}
+
+/** Row actions live behind a per-row menu. */
+export async function openProfileRowMenu(card: Locator) {
+  await openRadixMenu(card.locator('[data-testid^="profile-actions-menu-"]'));
 }
