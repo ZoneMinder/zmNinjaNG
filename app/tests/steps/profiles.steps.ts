@@ -100,28 +100,29 @@ When('I fill in new profile connection details', async ({ page }) => {
   // "Add" submit fail validation/connection and no profile is ever created.
   const { host, username, password } = testConfig.server;
 
+  // Every field is asserted, not probed. A renamed testid used to leave
+  // newProfileName unset, which sent the Then down its count-based fallback
+  // where the pre-existing default profile satisfied it, so a broken add-server
+  // form shipped green.
   const nameInput = page.getByTestId('setup-profile-name');
-  if (await nameInput.isVisible({ timeout: 2000 }).catch(() => false)) {
-    newProfileName = `New Profile ${Date.now()}`;
-    await nameInput.fill(newProfileName);
-  }
+  await expect(nameInput).toBeVisible({ timeout: testConfig.timeouts.element });
+  newProfileName = `New Profile ${Date.now()}`;
+  await nameInput.fill(newProfileName);
 
   const urlInput = page.getByTestId('setup-portal-url');
-  if (await urlInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-    await urlInput.fill(host);
-  }
+  await expect(urlInput).toBeVisible({ timeout: testConfig.timeouts.element });
+  await urlInput.fill(host);
 
   // Username and password must both be set or both left blank - a lone
   // username throws "credentials_incomplete" and blocks profile creation.
   if (username && password) {
     const usernameInput = page.getByTestId('setup-username');
-    if (await usernameInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await usernameInput.fill(username);
-    }
+    await expect(usernameInput).toBeVisible({ timeout: testConfig.timeouts.element });
+    await usernameInput.fill(username);
+
     const passwordInput = page.getByTestId('setup-password');
-    if (await passwordInput.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await passwordInput.fill(password);
-    }
+    await expect(passwordInput).toBeVisible({ timeout: testConfig.timeouts.element });
+    await passwordInput.fill(password);
   }
 });
 
@@ -129,24 +130,21 @@ When('I save the new profile', async ({ page }) => {
   // The add profile page has an "Add" button
   const saveBtn = page.getByRole('button', { name: /^add$/i })
     .or(page.getByRole('button', { name: /save|connect/i }));
-  // The button may be disabled if required fields are not filled
-  if (await saveBtn.first().isEnabled({ timeout: 1000 }).catch(() => false)) {
-    await saveBtn.first().click();
-    // Saving discovers URLs (trying multiple candidate API paths) and logs in
-    // against the real server before the profile is created, then waits 1s
-    // before navigating - this can take several seconds. Wait for that full
-    // round-trip; a validation error leaves us on this page with no nav, which
-    // the assertion step below correctly still fails on.
-    await page.waitForURL((url) => !url.pathname.includes('/profiles/new'), {
-      timeout: testConfig.timeouts.pageLoad,
-    }).catch(() => {
-      // Some flows (e.g. dialog-based add, or a validation/connection error)
-      // don't navigate; the assertion step below is the real source of truth.
-    });
-  } else {
-    // If button is disabled, the form has validation errors - that's OK for test
-    log.info('E2E: Add profile button is disabled (validation)', { component: 'e2e' });
-  }
+  // The previous step filled every required field, so a disabled Add button is
+  // a form regression, not a condition to log past.
+  await expect(saveBtn.first()).toBeEnabled({ timeout: testConfig.timeouts.element });
+  await saveBtn.first().click();
+  // Saving discovers URLs (trying multiple candidate API paths) and logs in
+  // against the real server before the profile is created, then waits 1s
+  // before navigating - this can take several seconds. Wait for that full
+  // round-trip; a validation error leaves us on this page with no nav, which
+  // the assertion step below correctly still fails on.
+  await page.waitForURL((url) => !url.pathname.includes('/profiles/new'), {
+    timeout: testConfig.timeouts.pageLoad,
+  }).catch(() => {
+    // Some flows (e.g. dialog-based add) don't navigate; the assertion step
+    // below is the real source of truth.
+  });
 });
 
 Then('I should see the new profile in the list', async ({ page }) => {
@@ -161,15 +159,11 @@ Then('I should see the new profile in the list', async ({ page }) => {
   // The new profile must actually be present by name, not just "some card
   // exists" - the latter is already true from the pre-existing default
   // profile and would pass even if the add silently failed.
-  if (newProfileName) {
-    await expect(
-      page.locator('[data-testid="profile-card"]').filter({ hasText: newProfileName })
-    ).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
-    return;
-  }
-  await expect.poll(async () => {
-    return await page.locator('[data-testid="profile-card"]').count();
-  }, { timeout: testConfig.timeouts.pageLoad }).toBeGreaterThanOrEqual(1);
+  // No count fallback: the fill step asserts newProfileName is set, so the only
+  // honest assertion is that this profile, by name, is on screen.
+  await expect(
+    page.locator('[data-testid="profile-card"]').filter({ hasText: newProfileName })
+  ).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
 });
 
 // Delete-profile scenarios (refs #217): profiles are local connection config,

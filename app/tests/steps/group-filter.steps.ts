@@ -32,29 +32,24 @@ Then('I should see the group filter if groups are available', async ({ page }) =
 });
 
 When('I select a group from the filter if available', async ({ page }) => {
+  // groupFilterAvailable stays as the previous step derived it from the server.
+  // Re-reading it from the UI here is what made the whole file self-confirming.
+  if (!groupFilterAvailable) return;
+
   const groupFilter = page.getByTestId('group-filter-select');
-  groupFilterAvailable = await groupFilter.isVisible({ timeout: 2000 }).catch(() => false);
+  await expect(groupFilter).toBeVisible({ timeout: testConfig.timeouts.element });
 
-  if (groupFilterAvailable) {
-    // Store current monitor count before filtering
-    const monitorCards = page.getByTestId('monitor-card');
-    monitorCountBeforeFilter = await monitorCards.count().catch(() => 0);
+  // Store current monitor count before filtering
+  const monitorCards = page.getByTestId('monitor-card');
+  monitorCountBeforeFilter = await monitorCards.count().catch(() => 0);
 
-    await groupFilter.click();
-    // Wait for dropdown to open
-    await page.waitForTimeout(300);
-    // Click the first group option (not "All Monitors")
-    const groupOption = page.getByTestId(/^group-filter-\d+$/).first();
-    if (await groupOption.isVisible({ timeout: 1000 }).catch(() => false)) {
-      await groupOption.click();
-      log.info('E2E: Selected group from filter', { component: 'e2e' });
-    } else {
-      // No groups available, close the dropdown
-      await page.keyboard.press('Escape');
-      groupFilterAvailable = false;
-      log.info('E2E: No groups available to select', { component: 'e2e' });
-    }
-  }
+  await groupFilter.click();
+  // The server said there is at least one group, so an option must appear.
+  // Waiting on it replaces the fixed sleep for the dropdown animation.
+  const groupOption = page.getByTestId(/^group-filter-\d+$/).first();
+  await expect(groupOption).toBeVisible({ timeout: testConfig.timeouts.element });
+  await groupOption.click();
+  log.info('E2E: Selected group from filter', { component: 'e2e' });
 });
 
 Then('the filter should be applied', async ({ page }) => {
