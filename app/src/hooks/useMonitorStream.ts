@@ -23,10 +23,12 @@ import { useAnalysisFrames } from './useAnalysisFrames';
 import { useFreshAccessToken } from './useFreshAccessToken';
 import { useServerUrls } from './useServerUrls';
 import { useVisibilityResume } from './useVisibilityResume';
-import { useAuthStore } from '../stores/auth';
+import { useAuthStore, useAuthSlice } from '../stores/auth';
 import { log, LogLevel } from '../lib/logger';
 import { planReconnect } from '../lib/monitor/reconnect-backoff';
 import { ZM_INTEGRATION } from '../lib/zmninja-ng-constants';
+import { ZMS_FRAMES_PARAM_MIN_VERSION, ZM_DECODING_ALWAYS } from '../lib/zm/zm-constants';
+import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import type { StreamOptions, ProfileId } from '../api/types';
 
 interface UseMonitorStreamOptions {
@@ -47,6 +49,12 @@ interface UseMonitorStreamOptions {
    * instead of the globally-selected profile.
    */
   profileId?: ProfileId | null;
+  /**
+   * The monitor's ZM `Decoding` value, when the server reports one. Only
+   * snapshot polling reads it: a monitor that decodes on demand needs a
+   * different request shape (see snapshotSendsOneJpeg below).
+   */
+  decoding?: string;
 }
 
 interface UseMonitorStreamReturn {
@@ -96,6 +104,7 @@ export function useMonitorStream({
   enabled = true,
   viewModeOverride,
   profileId,
+  decoding,
 }: UseMonitorStreamOptions): UseMonitorStreamReturn {
   const { profile: currentProfile, settings } = useProfileById(profileId);
   // Streaming Mode and analysis frames are view preferences, so the active
@@ -109,6 +118,22 @@ export function useMonitorStream({
   const resolvedPortalUrl = portalPath ? portalPath.replace(/\/index\.php$/, '') : currentProfile?.portalUrl;
 
   const effectiveViewMode = viewModeOverride ?? viewPrefs.viewMode;
+  // Snapshot polling shape. mode=single reads the shared-memory image without
+  // marking the monitor as viewed, so a monitor that only decodes on demand
+  // stops decoding between polls and its picture freezes (refs #383). A jpeg
+  // stream capped at one frame runs one pass of the streaming loop, which does
+  // mark the monitor viewed, so those monitors poll that way instead. Monitors
+  // on Decoding=Always never stop decoding and stay on the cheaper mode=single,
+  // as do servers that report no Decoding at all: no Decoding field means a ZM
+  // too old to understand frames=, which it would log as unknown and then
+  // stream forever. The version check covers the 1.37 development builds that
+  // grew Decoding before zms grew frames=.
+  const zmVersion = useAuthSlice(currentProfile?.id ?? null).version;
+  const snapshotSendsOneJpeg =
+    effectiveViewMode === 'snapshot' &&
+    !!decoding &&
+    decoding !== ZM_DECODING_ALWAYS &&
+    isZmVersionAtLeast(zmVersion, ZMS_FRAMES_PARAM_MIN_VERSION);
   // Multi-port only applies in streaming mode, and only when not force-disabled.
   const effectiveMinStreamingPort =
     effectiveViewMode === 'streaming'
@@ -201,14 +226,17 @@ export function useMonitorStream({
   // can mount an <img> on a connkey the disable teardown has already quit.
   const streamUrl = enabled && currentProfile && connKey !== 0 && isAccessTokenFresh
     ? getStreamUrl(recordingUrl || currentProfile.cgiUrl, monitorId, {
-      mode: effectiveViewMode === 'snapshot' ? 'single' : 'jpeg',
+      mode: effectiveViewMode === 'snapshot' && !snapshotSendsOneJpeg ? 'single' : 'jpeg',
+      frames: snapshotSendsOneJpeg ? 1 : undefined,
       scale: bandwidth.imageScale,
       maxfps:
         effectiveViewMode === 'streaming'
           ? settings.streamMaxFps
           : undefined,
       token: accessToken || undefined,
-      connkey: connKey,
+      // Streaming only: a snapshot request has no command channel to name, and
+      // zms opens a socket per connkey once the request is a jpeg stream.
+      connkey: effectiveViewMode === 'snapshot' ? undefined : connKey,
       // Only use cacheBuster in snapshot mode to force refresh; streaming mode uses only connkey
       cacheBuster: effectiveViewMode === 'snapshot' ? cacheBuster : undefined,
       // Only use multi-port in streaming mode, not snapshot (and not force-disabled)

@@ -297,6 +297,7 @@ export function getStreamUrl(
   monitorId: string,
   options: {
     mode?: 'jpeg' | 'single' | 'stream';
+    frames?: number;
     scale?: number;
     width?: number;
     height?: number;

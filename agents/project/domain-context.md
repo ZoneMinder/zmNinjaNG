@@ -65,6 +65,18 @@ matching reality, fixing it is a protocol change like any rule edit.
   client-side signal is the status query, which a connkey with no process
   behind it answers without `progress`/`duration`. Monitors that store video
   without JPEGs hit this most, since `zms` then has to decode the video.
+- `zms` serves `mode=single` out of shared memory without calling
+  `setLastViewed()`, so `zmc` sees no viewer. A monitor whose `Decoding` is
+  not `Always` stops decoding ten seconds later, and every later snapshot
+  repeats the same frozen frame (#383). `mode=jpeg&frames=1` runs one pass
+  of the streaming loop, which does mark the monitor viewed, so snapshot
+  polling uses it for those monitors and keeps `mode=single` for `Always`.
+  A missing `Decoding` field means a server older than the field, which is
+  also older than `frames=`: unknown parameters are only logged, so such a
+  request would stream forever. `frames=` reached `zms` during 1.37.61
+  development (January 2024), after `Decoding` did, hence the version floor
+  as well. Snapshot requests carry no connkey: nothing commands them, and a
+  connkey makes a `frames=1` request open a socket per poll.
 - `zms` answers 503 once its streaming daemon is saturated, and a profile
   switch is when that happens: the outgoing profile's quits are awaited but
   their replies time out at 3s (`cmdQuitTimeoutSeconds`), so the incoming

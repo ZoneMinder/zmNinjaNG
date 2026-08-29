@@ -120,6 +120,20 @@ export const ZMS_MODES = {
 } as const;
 
 /**
+ * First ZoneMinder release whose zms understands `frames=`, the parameter that
+ * stops a jpeg stream after N frames. Older zms logs it as unknown and streams
+ * forever, so snapshots stay on mode=single there (refs #383).
+ */
+export const ZMS_FRAMES_PARAM_MIN_VERSION = '1.37.61';
+
+/**
+ * Monitor `Decoding` value that keeps zmc decoding whether or not anyone is
+ * watching. The others ('None', 'Ondemand', 'KeyFrames', 'KeyFrames+Ondemand')
+ * decode on demand or not at all. Absent before ZM 1.37.
+ */
+export const ZM_DECODING_ALWAYS = 'Always';
+
+/**
  * Monitor Function States
  *
  * Valid states for a ZoneMinder monitor's function setting.

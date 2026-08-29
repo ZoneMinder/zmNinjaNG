@@ -122,6 +122,8 @@ export function getMonitorStreamUrl(
   monitorId: string,
   options: {
     mode?: 'jpeg' | 'single' | 'stream';
+    /** Stop a jpeg stream after this many frames (ZM 1.38+). */
+    frames?: number;
     scale?: number;
     width?: number;
     height?: number;
@@ -138,6 +140,7 @@ export function getMonitorStreamUrl(
     mode: options.mode || 'jpeg',
   };
 
+  if (options.frames) params.frames = options.frames.toString();
   if (options.scale) params.scale = options.scale.toString();
   if (options.width) params.width = `${options.width}px`;
   if (options.height) params.height = `${options.height}px`;

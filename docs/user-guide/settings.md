@@ -116,6 +116,8 @@ A new profile picks its Streaming Mode from the server it just connected to:
 - **Multi-port streaming configured** (`ZM_MIN_STREAMING_PORT`): **Streaming**, whatever the monitor count. Each camera streams on its own port, so the per-server connection limit no longer applies.
 - **6 or more monitors and no multi-port streaming**: **Snapshot**. Streaming that many feeds would stall after the first few; snapshot mode fetches a still on an interval instead of holding a connection, so every tile keeps updating.
 
+Snapshot mode needs a decoded image waiting on the server. For a monitor whose *Decoding* is not *Always*, ZoneMinder stops decoding about ten seconds after the last viewer, so the app asks such monitors for their stills in a way that counts as watching and keeps them decoding. That request only exists in ZoneMinder 1.37.61 and later. On older servers a monitor set to *On demand* decoding freezes its snapshot tile on one frame: set it to *Decoding: Always*, or use Streaming mode for it.
+
 The count is the monitors the app shows for that server: deleted and per-profile excluded monitors are left out, disabled ones still count because they still get a tile. If the app cannot list the monitors on first connect, the mode stays at Snapshot until a later connect can decide. A profile with *Force disable multi-port streaming* on (Advanced) is treated as if the server had none.
 
 The row shows which mode is recommended for the server and a line explaining why. The recommendation is only the starting value: changing the toggle overrides it for that profile, and no later connection changes it back.
