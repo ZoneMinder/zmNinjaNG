@@ -198,13 +198,19 @@ matching reality, fixing it is a protocol change like any rule edit.
   URL, never from the message; matching wording would encode four
   platforms' prose (65f7a963).
 
+## Auth
+
+- ZoneMinder streams carry the access token in the query string, not a
+  header: `img`/`video` elements cannot set one. `lib/zm/url-builder.ts`,
+  `api/events.ts`, and `services/discovery.ts` append it by design and
+  `sanitizeLogMessage` redacts it on the way to a log. Do not "fix" it out
+  of stream or playback URLs; every live view and event replay breaks. The
+  Auth tokens contract forbids refresh tokens there, not access tokens.
+
 ## Libraries and state
 
 - React Query v5: disabled queries report `isLoading: false`. Gate
   self-heal and reset effects on `isSuccess`, never on `isLoading`.
-- `useCurrentProfile` reads the settings store reactively and bypasses
-  per-getter fixes; settings coercions belong in `mergeProfileSettings`
-  (see the Settings contract).
 - List virtualization of EventListView and Logs with
   `@tanstack/react-virtual` failed twice (blank rows, stale text). Do not
   re-attempt without a materially different approach.
@@ -262,12 +268,6 @@ contract. Remaining code-path facts:
   capped) or omits the field so there is nothing to misquote. A `when`
   phrase that resolves to no window is a corrective error, never a silent
   unfiltered query (e657f33e, 17b83354, 7c36ff0f).
-
-## CI runners
-
-- The linux-arm64 job runs under qemu and needs Node 18 with a normalized
-  manual-trigger input; do not bump that job's Node version without
-  re-verifying under emulation (76fb8c0d, 57015c35).
 
 ## All-profiles facts (refs #337)
 

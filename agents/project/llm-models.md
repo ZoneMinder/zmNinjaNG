@@ -134,8 +134,7 @@ after any prompt or provider change and put both scores in the PR.
 - Plain `npx tsx` scripts cannot import app modules that read
   `import.meta.env`; use vitest with `// @vitest-environment node` and
   stub `Platform.shouldUseProxy` false, or `lib/http.ts` rewrites absolute
-  URLs to the dev proxy. Run vitest from `app/`, never the repo root (the
-  root run resolves a different config and reports phantom failures).
+  URLs to the dev proxy.
 
 This file owns model-selection, model-behavior, and eval facts. Tool-loop
 conduct (grounding, error feedback) lives in the Assistant tool loop

@@ -32,7 +32,7 @@ Gate: `app/src/tests/agents-contracts.test.ts`; review.
 ### Auth tokens
 Owns: token storage, refresh, and login concurrency.
 Path: `getFreshAccessToken` / `login` on the auth store (`app/src/stores/auth.ts`), deduped through one in-flight promise; refresh tokens in platform secure storage.
-Never: refresh calls bypassing the dedup entry points; tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
+Never: refresh calls bypassing the dedup entry points; refresh tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
 Gate: `app/src/stores/__tests__/auth.test.ts`.
 
 ### Sessions

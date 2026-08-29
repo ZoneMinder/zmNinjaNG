@@ -70,10 +70,6 @@ named fleet.
 
 ## Trust boundaries for tooling
 
-- Verification runs direct commands (P6 in `AGENTS.md`). Output-transforming
-  tooling, such as wrappers, compressors, and summarizers, gets validated
-  against raw output at least once before it is trusted, and never wraps a
-  gate.
 - A reviewer only re-runs tests when the code changed after the last run;
   otherwise the implementer's report carries the evidence.
 - Repo-wide greps run from the repo root or with absolute paths; a cwd of
@@ -133,9 +129,6 @@ named fleet.
   consecutive waves each introduced one). Budget scoped re-reviews per
   wave; a fresh Critical inside a wave is fixed, never parked, and the
   extra round is recorded as a deliberate deviation.
-- Demand a regression test be proven red against the pre-fix code.
-  Two would-be-vacuous tests (passing on both old and new code) were
-  caught only by this demand.
 - Subagent final plain text often never reaches the controller. Every
   dispatch states: report via SendMessage to "main", fall back to the
   controller's name if that errors. Budget one nudge round anyway.
