@@ -22,7 +22,10 @@ export interface ErrorBannerProps {
 /** Icon + message banner for a failed query, styled as a destructive box. */
 export function ErrorBanner({ message, icon: Icon = AlertCircle, className }: ErrorBannerProps) {
   return (
-    <div className={cn('p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2', className)}>
+    <div
+      role="alert"
+      className={cn('p-4 bg-destructive/10 text-destructive rounded-lg flex items-center gap-2', className)}
+    >
       <Icon className="h-5 w-5" />
       {message}
     </div>
