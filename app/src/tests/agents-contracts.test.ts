@@ -138,9 +138,17 @@ describe('knowledge files stay evidence-backed and private-data-free (M5)', () =
     'agents/project/out-of-scope.md',
   ];
 
-  it('the PR template carries the Acceptance section the Spec review axis reads', () => {
+  it('the PR template offers the Acceptance heading the ci.yml job requires', () => {
+    // This asserts the template only. It is NOT the gate on P1's
+    // acceptance-lines clause and was read as one for a month, during which
+    // four consecutive PRs shipped with no Acceptance section: a file
+    // containing a heading says nothing about any PR body. The real gate is
+    // the pr-acceptance job in ci.yml, which reads the body.
     const template = fs.readFileSync(path.join(repoRoot, '.github/pull_request_template.md'), 'utf8');
     expect(template).toMatch(/^## Acceptance$/m);
+
+    const ci = fs.readFileSync(path.join(repoRoot, '.github/workflows/ci.yml'), 'utf8');
+    expect(ci, 'the pr-acceptance job is what actually enforces P1').toMatch(/pr-acceptance:/);
   });
 
   it('every issue cited in out-of-scope has a reason line', () => {
