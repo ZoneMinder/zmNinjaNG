@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -57,7 +57,7 @@ jobs:
           done
 
       - name: Upload Windows Electron artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-windows-electron-${{ github.event.inputs.version || github.ref_name }}
           path: dist/windows/*.exe

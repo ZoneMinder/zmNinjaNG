@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real versionCode
 
@@ -88,21 +88,21 @@ jobs:
           cp app/android/app/build/outputs/mapping/release/mapping.txt dist/android/zmNinjaNg-${VERSION}-android-mapping.txt
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-android-apk-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*.apk
           retention-days: 7
 
       - name: Upload AAB artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-android-aab-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*.aab
           retention-days: 7
 
       - name: Upload R8 mapping artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-android-mapping-${{ github.event.inputs.version || github.ref_name }}
           path: dist/android/*-mapping.txt

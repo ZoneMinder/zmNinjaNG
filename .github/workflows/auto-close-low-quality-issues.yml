@@ -13,7 +13,7 @@ jobs:
     if: github.event.issue.author_association == 'NONE' || github.event.issue.author_association == 'FIRST_TIME_CONTRIBUTOR' || github.event.issue.author_association == 'FIRST_TIMER'
     steps:
       - name: Close if title or body is too short
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const issue = context.payload.issue;

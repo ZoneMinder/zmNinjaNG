@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -64,14 +64,14 @@ jobs:
           cp app/android/app/build/outputs/bundle/debug/*.aab dist/android/zmNinjaNg-android-debug-${VERSION}.aab
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-android-apk-${{ github.event.inputs.version }}
           path: dist/android/*.apk
           retention-days: 7
 
       - name: Upload AAB artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-android-aab-${{ github.event.inputs.version }}
           path: dist/android/*.aab
@@ -82,7 +82,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -129,7 +129,7 @@ jobs:
           npx electron-builder --config electron-builder.json -c.mac.notarize=true
 
       - name: Upload Electron DMG artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-macos-electron-dmg-${{ github.event.inputs.version }}
           path: desktop_release_builds/electron/*.dmg
@@ -140,7 +140,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -172,7 +172,7 @@ jobs:
           npx electron-builder --config electron-builder.json
 
       - name: Upload Electron Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-linux-amd64-electron-${{ github.event.inputs.version }}
           path: |
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -218,7 +218,7 @@ jobs:
           npx electron-builder --config electron-builder.json
 
       - name: Upload Electron Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-linux-arm64-electron-${{ github.event.inputs.version }}
           path: |
@@ -232,7 +232,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # full history so git rev-list --count HEAD is the real build number
 
@@ -259,7 +259,7 @@ jobs:
           npx electron-builder --config electron-builder.json
 
       - name: Upload Electron installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: zmNinjaNg-windows-electron-${{ github.event.inputs.version }}
           path: desktop_release_builds/electron/*.exe

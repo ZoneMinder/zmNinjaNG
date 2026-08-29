@@ -23,7 +23,7 @@ jobs:
     if: github.event.sender.type != 'Bot'
     steps:
       - name: Redact first-time download links
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const REDACTION = '«link removed by spam moderation»';

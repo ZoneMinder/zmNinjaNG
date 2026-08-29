@@ -10,7 +10,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # Full history: agents-contracts.test.ts verifies commit hashes
           # cited in agents/project/domain-context.md.
@@ -36,7 +36,7 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload coverage reports
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         if: always()
         with:
           directory: ./app/coverage
@@ -50,7 +50,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # The browser e2e suite drives a real ZoneMinder, so without those
       # secrets there is nothing to run against. The job still has to end
