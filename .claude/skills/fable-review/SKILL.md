@@ -154,8 +154,11 @@ exist in the tree, drop it and say so; a dropped pillar is not a zero.
 
 ## Finding fields
 
-Every finding in the report carries all of these. The executing agent has
-no session context; a missing field becomes a guess.
+Every finding in the report carries all of these, rendered as a bullet
+list with one `**Field:**` per bullet. Single newlines merge into one
+paragraph on GitHub, so field-per-line prose becomes unreadable there.
+The executing agent has no session context; a missing field becomes a
+guess.
 
 | Field | Content |
 |---|---|
@@ -206,17 +209,20 @@ Sections, in order:
 ## After the report
 
 1. Post the report path and the scorecard table in the session.
-2. Offer to log a tracking issue carrying the review. Ask two things in
-   the same message: why this review was run (scheduled sweep, before a
-   handover, after a heavy fix period, a specific worry), and whether
-   there is any other context to include. Wait for the answer; the
-   reason belongs to the maintainer, not to your guess.
-3. Only if they say yes, create it:
+2. Offer to log a tracking issue carrying the review. Ask three things
+   in the same message: why this review was run (scheduled sweep, before
+   a handover, after a heavy fix period, a specific worry), whether there
+   is any other context to include, and whether to fix the findings now.
+   Wait for the answer; the reason belongs to the maintainer, not to
+   your guess.
+3. Only if they say yes to the issue, create it:
    - Title names the review and its date.
-   - Body opens with a short **Why this review ran** section from their
-     answer, then the report verbatim (`gh issue create --body-file
-     <report path>` after prepending that section, so the issue and the
-     file do not drift).
+   - Body, in order: a short **Why this review ran** section from their
+     answer; the **Scorecard** table (pillar, score, verdict, overall)
+     under a `## Score (before)` heading; then the report from the
+     cross-cutting themes onward (`gh issue create --body-file` on a
+     file assembled from those parts, so the issue and the report do
+     not drift). Never paste the report's own header twice.
    - Labels `core` and `refactor` together: a review spans both
      behavior-changing findings and behavior-preserving cleanups, so
      neither label alone describes the work it will spawn. Confirm both
@@ -225,9 +231,20 @@ Sections, in order:
      `Posted by Claude (Fable 5), assisting @<login>.` - resolve `<login>`
      with `gh api user --jq .login`; never hardcode a username.
    - Report the issue URL back.
-4. If they decline, say the report stands on its own and stop. Never open
-   an issue, push a branch, or start executing findings unasked - the
-   phase plan is the maintainer's to schedule (P1).
+4. If they decline the issue, say the report stands on its own and stop.
+   Never open an issue, push a branch, or start executing findings
+   unasked - the phase plan is the maintainer's to schedule (P1).
+5. If they said fix now: branch off the default branch, turn the phased
+   execution plan into a plan file, and execute it with
+   superpowers:subagent-driven-development (commits `Refs #<issue>`).
+   When the branch's final review is clean, re-dispatch the pillar
+   agents for every pillar the branch touched (same briefs, fresh
+   context), re-score them with the rubric, and post one comment on the
+   issue: a table with pillar, score before, score after, one-line
+   verdict; overall before and after; then the findings that remain,
+   each with its ID and why it was left. Close with the identification
+   line. The PR body quotes the issue's acceptance lines (P1); closing
+   keywords only after the maintainer confirms.
 
 ## Common mistakes
 

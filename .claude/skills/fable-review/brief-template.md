@@ -24,11 +24,13 @@ Rules:
 
 Output, written to <scratchpad path>/pillar-<N>.md:
 1. Strengths you verified, each with a site.
-2. Findings, numbered P<N>-1.., each with: Severity (HIGH/MED/LOW by
-   user-visible impact), Site, What is wrong, Why it matters, Fix (with
-   an existing in-repo example of the pattern), Verification (gate or
-   test; new behavior needs a test proven red first), Effort (S/M/L by
-   site count), Risk, Contracts (rule and contract IDs only).
+2. Findings, numbered P<N>-1.., one `### P<N>-k  <title>` heading each,
+   then a bullet list with one `**Field:**` per bullet (single newlines
+   merge on GitHub): Severity (HIGH/MED/LOW by user-visible impact,
+   plus confirmed/theoretical), Site, What is wrong, Why it matters,
+   Fix (with an existing in-repo example of the pattern), Verification
+   (gate or test; new behavior needs a test proven red first), Effort
+   (S/M/L by site count), Risk, Contracts (rule and contract IDs only).
 3. Path to 10/10, split into worth it and not worth it.
 4. Non-findings: things that look wrong and must stay, with the playbook
    line that says so.
