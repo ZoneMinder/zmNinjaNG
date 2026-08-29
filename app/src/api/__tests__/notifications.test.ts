@@ -172,3 +172,33 @@ describe('Notifications API', () => {
     });
   });
 });
+
+/**
+ * registerToken read `resp.data.notification.Notification` off a bare cast, so
+ * a ZoneMinder without the endpoint or a proxy answering 200 with HTML threw
+ * "Cannot read properties of undefined" from a property access. That lands in
+ * the log-only catch in services/pushNotifications.ts, which is why direct
+ * push could fail silently while the UI said active.
+ */
+describe('registerToken fails diagnosably on a response that is not a registration', () => {
+  const badBodies = [
+    ['a proxy HTML error page', '<html><body>502 Bad Gateway</body></html>'],
+    ['a server without the notifications endpoint', { success: false }],
+    ['an envelope with no Notification', { notification: {} }],
+  ] as const;
+
+  for (const [name, data] of badBodies) {
+    it(`rejects ${name} without a TypeError`, async () => {
+      mockPost.mockResolvedValueOnce({ data, status: 200, statusText: 'OK', headers: {} });
+      const thrown = await registerToken(mockClient, {
+        token: 'tok',
+        platform: 'ios',
+      }).catch((e: unknown) => e);
+
+      expect(thrown).toBeInstanceOf(Error);
+      // The old bare cast produced exactly this, from reading .Notification
+      // off undefined. A validation error names the endpoint instead.
+      expect((thrown as Error).message).not.toMatch(/Cannot read propert/i);
+    });
+  }
+});
