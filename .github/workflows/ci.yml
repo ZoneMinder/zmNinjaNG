@@ -21,9 +21,16 @@ jobs:
   # Fork PRs are exempt. The rule governs how this project's own work lands;
   # failing a first-time outside contributor on a heading nobody told them
   # about would cost more than it buys.
+  #
+  # Bots are exempt too. P1 is about a human landing work against an issue's
+  # acceptance lines; a dependabot bump has no issue and no acceptance lines to
+  # quote, and this job failed all five of the first batch it ever saw.
   pr-acceptance:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type != 'Bot'
 
     steps:
       - name: PR body quotes the issue's acceptance lines
