@@ -875,7 +875,8 @@
     "menu_more": "Más",
     "menu_refresh": "Actualizar",
     "menu_show_monitors": "Monitores",
-    "tile_error": "Error de mosaico"
+    "tile_error": "Error de mosaico",
+    "alarm_status": "Alarma en {{monitor}}"
   },
   "notification_history": {
     "title": "Notificaciones",

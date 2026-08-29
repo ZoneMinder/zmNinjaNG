@@ -875,7 +875,8 @@
     "menu_more": "Mehr",
     "menu_refresh": "Aktualisieren",
     "menu_show_monitors": "Monitore",
-    "tile_error": "Kachelfehler"
+    "tile_error": "Kachelfehler",
+    "alarm_status": "Alarm bei {{monitor}}"
   },
   "notification_history": {
     "title": "Benachrichtigungen",

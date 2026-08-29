@@ -270,6 +270,15 @@ function MontageMonitorComponent({
           isAlarming && "montage-alarm-pulse"
         )}
       >
+        {/* The alarm tint is colour alone, and colour that only exists while an
+            animation runs. Announce it too, so reduced-motion and screen-reader
+            users get the alarm at all. */}
+        {isAlarming && (
+          <span role="status" className="sr-only">
+            {t('montage.alarm_status', { monitor: monitor.Name })}
+          </span>
+        )}
+
         {/* Monitor status and name */}
         <div className="flex items-center gap-2 overflow-hidden flex-1 min-w-0">
           <Badge

@@ -4,7 +4,7 @@
  * Basic tests for the MontageMonitor component
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MontageMonitor } from '../MontageMonitor';
@@ -13,6 +13,7 @@ import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../../stores/settings';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
+import { useNotificationStore } from '../../../stores/notifications';
 
 // Mock dependencies
 vi.mock('react-i18next', () => ({
@@ -552,5 +553,77 @@ describe('MontageMonitor', () => {
     // profile-1 (the mocked useCurrentProfile) was never seeded, so a watermark
     // resolved from it would produce no startDateTime at all.
     expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
+  });
+});
+
+/**
+ * The alarm tint was the only conveyance of an alarming monitor, and it is an
+ * animation. The app-wide reduced-motion rule caps every animation at one
+ * 0.01ms iteration, freezing this one on its transparent 0% frame, so under
+ * reduced motion the alarm showed nothing at all and a screen reader was
+ * never told either. Refs #392 P8-2. The CSS half is covered by the
+ * reduced-motion rule in index.css; this covers the announcement.
+ */
+describe('MontageMonitor alarm state is conveyed without animation', () => {
+  const renderTile = () =>
+    render(
+      <MontageMonitor
+        monitor={mockMonitorForAlarm}
+        status={mockStatusForAlarm}
+        currentProfile={mockProfileForAlarm}
+        accessToken="test-token"
+        navigate={vi.fn()}
+      />
+    );
+
+  const mockMonitorForAlarm = {
+    Id: '1', Name: 'Front Door', Width: '1920', Height: '1080', Orientation: '0',
+    Function: 'Modect', Capturing: 'Always', Analysing: 'Always', Enabled: '1',
+  } as Monitor;
+  const mockStatusForAlarm = {
+    MonitorId: '1', Status: 'Connected', CaptureFPS: '15.00', AnalysisFPS: '10.00',
+  } as MonitorStatus;
+  const mockProfileForAlarm = {
+    id: asProfileId('profile-1'), name: 'Test Profile', apiUrl: 'https://test.com',
+    portalUrl: 'https://test.com', cgiUrl: 'https://test.com/cgi-bin',
+    isDefault: false, createdAt: Date.now(),
+  } as Profile;
+
+  const seedEvent = (receivedAt: number) => {
+    (useNotificationStore.getState() as { profileEvents: Record<string, unknown[]> }).profileEvents = {
+      'profile-1': [{ MonitorId: '1', receivedAt }],
+    };
+  };
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      profileSettings: { 'profile-1': { ...DEFAULT_SETTINGS, viewMode: 'streaming' } },
+    });
+    useMonitorSeenStore.setState({ profileWatermarks: {} });
+  });
+
+  afterEach(() => {
+    (useNotificationStore.getState() as { profileEvents: Record<string, unknown[]> }).profileEvents = {};
+  });
+
+  it('announces the alarm to a screen reader, not only as a tint', async () => {
+    seedEvent(Date.now() - 60_000); // pre-existing: seeds lastSeen, no pulse
+    const { rerender } = renderTile();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    seedEvent(Date.now()); // fresh alarm
+    rerender(
+      <MontageMonitor
+        monitor={mockMonitorForAlarm}
+        status={mockStatusForAlarm}
+        currentProfile={mockProfileForAlarm}
+        accessToken="test-token"
+        navigate={vi.fn()}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent('montage.alarm_status');
+    });
   });
 });

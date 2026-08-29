@@ -875,7 +875,8 @@
     "menu_more": "More",
     "menu_refresh": "Refresh",
     "menu_show_monitors": "Show monitors",
-    "tile_error": "Tile failed"
+    "tile_error": "Tile failed",
+    "alarm_status": "Alarm on {{monitor}}"
   },
   "notification_history": {
     "title": "Notifications",
