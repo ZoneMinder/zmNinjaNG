@@ -62,6 +62,7 @@ import { ProfilePicker } from '../profile-picker';
 import { ErrorBanner } from '../ui/query-state';
 import { AssistantResultCards } from './AssistantResultCards';
 import { useAssistantHost } from './useAssistantHost';
+import { isAbortError } from '../../lib/is-abort-error';
 
 declare global {
   interface Window {
@@ -707,7 +708,7 @@ export function AskPanel() {
         });
       }
     } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') {
+      if (isAbortError(e)) {
         // User-initiated abort: not an error to surface.
       } else if (e instanceof Error && e.message === PROVIDER_NOT_AVAILABLE_MESSAGE) {
         setNotConfigured(true);

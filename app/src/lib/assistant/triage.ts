@@ -18,6 +18,7 @@
  */
 import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry } from './types';
 import { sanitizeModelText } from './sanitize';
+import { isAbortError } from '../is-abort-error';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
 
@@ -171,7 +172,7 @@ export async function classifyRequest(
     }
     return parseRequestKind(sanitizeModelText(result.text, 'triage'));
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (isAbortError(error)) throw error;
     return 'zoneminder';
   }
 }

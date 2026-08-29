@@ -29,6 +29,7 @@ import {
 } from './contract-eval-cases';
 import type { AssistantProvider, ExecutedToolCall, ToolCall } from './types';
 import { log, LogLevel } from '../logger';
+import { isAbortError } from '../is-abort-error';
 
 /** How many cases this eval actually scores. Exported so a caller running it
  *  alongside another stage knows the combined total BEFORE either starts, and can
@@ -178,7 +179,7 @@ export async function runContractEval(
         reason = scoreCase(c, calls);
         break;
       } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') throw error;
+        if (isAbortError(error)) throw error;
         if (isRateLimit(error) && attempt < RATE_LIMIT_BACKOFF_MS.length) {
           rateLimited += 1;
           await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_BACKOFF_MS[attempt]));
