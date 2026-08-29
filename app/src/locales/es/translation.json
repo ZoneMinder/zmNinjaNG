@@ -997,7 +997,8 @@
       "connected": "Conectado",
       "disconnected": "Desconectado",
       "connecting": "Conectando...",
-      "direct_active": "Modo directo activo"
+      "direct_active": "Modo directo activo",
+      "direct_not_registered": "Modo directo no registrado"
     },
     "switch_profile_title": "Cambiar perfil?",
     "switch_profile_desc": "Esta notificacion es de \"{{profile}}\". Cambiar a este perfil para ver el evento?",

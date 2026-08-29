@@ -286,8 +286,19 @@ export default function NotificationSettings() {
   const getConnectionBadge = () => {
     const mode = settings?.notificationMode || 'es';
 
-    // Direct mode doesn't use a WebSocket -- show mode-specific status
+    // Direct mode doesn't use a WebSocket -- show mode-specific status.
+    // notificationId is set only by a successful registerToken, so it is the
+    // outcome; settings.enabled is only the user's intent. Reporting the
+    // toggle told users push was active when registration had failed.
     if (mode === 'direct' && settings?.enabled) {
+      if (!settings?.notificationId) {
+        return (
+          <Badge variant="destructive" className="gap-1.5">
+            <AlertCircle className="h-3 w-3" />
+            {t('notifications.status.direct_not_registered')}
+          </Badge>
+        );
+      }
       return (
         <Badge variant="default" className="gap-1.5 bg-blue-500">
           <CheckCircle className="h-3 w-3" />

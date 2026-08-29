@@ -997,7 +997,8 @@
       "connected": "Connected",
       "disconnected": "Disconnected",
       "connecting": "Connecting...",
-      "direct_active": "Direct mode active"
+      "direct_active": "Direct mode active",
+      "direct_not_registered": "Direct mode not registered"
     },
     "switch_profile_title": "Switch Profile?",
     "switch_profile_desc": "This notification is from \"{{profile}}\". Switch to this profile to view the event?",
