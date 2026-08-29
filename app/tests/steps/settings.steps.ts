@@ -9,6 +9,7 @@ let previousBgColor = '';
 let postToggleBgColor = '';
 let previousSettingsHeading = '';
 let notificationToggleState = false;
+let bandwidthModeBefore = false;
 
 // Settings Steps
 Then('I should see settings interface elements', async ({ page }) => {
@@ -193,17 +194,24 @@ Then('the notification toggle state should be preserved', async ({ page }) => {
 });
 
 When('I toggle bandwidth mode', async ({ page }) => {
-  const bandwidthToggle = page.getByTestId('bandwidth-mode-toggle')
-    .or(page.locator('[role="switch"]').filter({ hasText: /bandwidth/i }))
-    .or(page.locator('text=/bandwidth/i').locator('..').locator('[role="switch"]'));
-  if (await bandwidthToggle.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false)) {
-    await bandwidthToggle.click();
-    await page.waitForTimeout(300);
-  }
+  // The old locator chained three guesses, none of which was the real testid
+  // (`settings-bandwidth-mode-switch`), behind an isVisible probe, so the
+  // toggle was never clicked and the scenario passed anyway.
+  const bandwidthToggle = page.getByTestId('settings-bandwidth-mode-switch');
+  await expect(bandwidthToggle).toBeVisible({ timeout: testConfig.timeouts.element });
+  bandwidthModeBefore = await bandwidthToggle.isChecked();
+  await bandwidthToggle.click();
 });
 
 Then('the bandwidth mode label should update', async ({ page }) => {
-  // Verify that a bandwidth-related label is present (e.g., "Low" or "Normal")
+  // Bandwidth mode drives every polling interval (Polling contract), so the
+  // switch actually changing state is the thing under test. The old assertion
+  // looked for the words "low" or "normal", which label both ends of the
+  // control and are on screen before and after any click.
+  const bandwidthToggle = page.getByTestId('settings-bandwidth-mode-switch');
+  await expect
+    .poll(() => bandwidthToggle.isChecked(), { timeout: testConfig.timeouts.element })
+    .toBe(!bandwidthModeBefore);
   const bandwidthLabel = page.locator('text=/low|normal/i');
   await expect(bandwidthLabel.first()).toBeVisible({ timeout: testConfig.timeouts.element });
   log.info('E2E: Bandwidth mode label visible', { component: 'e2e' });
