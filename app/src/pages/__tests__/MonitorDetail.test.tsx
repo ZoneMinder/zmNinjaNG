@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
     insomnia: false,
     forceDisableMultiPort: false,
   } as Record<string, unknown>,
+  zoomReset: vi.fn(),
 }));
 
 vi.mock('react-router-dom', () => ({
@@ -80,7 +81,7 @@ vi.mock('../../services/download', () => ({ downloadSnapshotFromElement: vi.fn()
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('../../hooks/useInsomnia', () => ({ useInsomnia: () => {} }));
 vi.mock('../../hooks/useZoomPan', () => ({
-  useZoomPan: () => ({ ref: { current: null }, innerRef: { current: null }, reset: vi.fn() }),
+  useZoomPan: () => ({ ref: { current: null }, innerRef: { current: null }, reset: h.zoomReset }),
 }));
 vi.mock('../../hooks/useServerUrls', () => ({
   useServerUrls: () => ({ portalPath: 'https://portal.test/index.php', apiBaseUrl: 'https://api.test' }),
@@ -154,6 +155,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     tryGetCurrentSessionMock.mockClear();
     useQueryMock.mockReset();
     liveMonitorPlayerMock.mockClear();
+    h.zoomReset.mockClear();
   });
 
   afterEach(() => {
@@ -212,6 +214,35 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
 
     expect(tryGetCurrentSessionMock).toHaveBeenCalled();
     expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('drops the zoom back to fit when the route moves to another monitor (refs #382)', () => {
+    // The route element is not keyed on the monitor id, so stepping from one
+    // monitor to the next (keyboard jump, prev/next, swipe, auto-cycle) keeps
+    // this page mounted, and without this the zoom transform stayed applied to
+    // whatever loaded next.
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'monitor') {
+        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
+    });
+
+    const { rerender } = render(<MonitorDetail />);
+    h.zoomReset.mockClear();
+
+    // A re-render on the same monitor must not disturb a zoom the user set.
+    rerender(<MonitorDetail />);
+    expect(h.zoomReset).not.toHaveBeenCalled();
+
+    h.routeParams = { id: '2' };
+    rerender(<MonitorDetail />);
+    expect(h.zoomReset).toHaveBeenCalledTimes(1);
+
+    // Same for the All-mode deep route, where the id is a different param.
+    h.routeParams = { profileId: 'profile-b', monitorId: '3' };
+    rerender(<MonitorDetail />);
+    expect(h.zoomReset).toHaveBeenCalledTimes(2);
   });
 
   it('renders the existing error state instead of crashing for an unknown route profileId', () => {

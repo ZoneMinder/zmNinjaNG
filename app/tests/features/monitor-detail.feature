@@ -92,6 +92,15 @@ Feature: Monitor Detail Page
     Then the pan controls should be visible
 
   @web
+  Scenario: Zoom resets when stepping to another monitor
+    Then I should see the monitor player
+    When I zoom into the monitor view
+    Then the pan controls should be visible
+    When I click the next monitor button if visible
+    Then the monitor should change to next in list
+    And the monitor view should be back at fit
+
+  @web
   Scenario: Keyboard and mouse pan the zoomed view
     Then I should see the monitor player
     When I zoom into the monitor view

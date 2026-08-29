@@ -1,11 +1,15 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { log } from '../../src/lib/logger';
 
 const { When, Then } = createBdd();
 
 // Zoom / pan (keyboard + mouse) - issue #191
 let panTransformBefore = '';
+// Monitor the view was zoomed on, so the reset check below can tell a real
+// monitor switch from a server with only one monitor to switch to.
+let zoomedMonitorId: string | null = null;
 
 async function readZoomTransform(page: import('@playwright/test').Page): Promise<string> {
   return page
@@ -27,6 +31,7 @@ When('I scroll the wheel up over the monitor view', async ({ page }) => {
 });
 
 When('I zoom into the monitor view', async ({ page }) => {
+  zoomedMonitorId = page.url().match(/monitors\/(\d+)/)?.[1] ?? null;
   const zoomIn = page.getByTestId('zoom-in-button');
   await expect(zoomIn).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
   // Two steps so the view is well past the zoom threshold with room to pan.
@@ -63,6 +68,23 @@ When('I drag the monitor view with the mouse', async ({ page }) => {
   await page.mouse.up();
   await expect.poll(() => readZoomTransform(page), { timeout: testConfig.timeouts.transition })
     .not.toBe(panTransformBefore);
+});
+
+// Zoom belongs to the picture, not the page (refs #382). Stepping to another
+// monitor keeps the page mounted, so the transform has to be cleared explicitly.
+Then('the monitor view should be back at fit', async ({ page }) => {
+  const nowId = page.url().match(/monitors\/(\d+)/)?.[1] ?? null;
+  if (!nowId || nowId === zoomedMonitorId) {
+    log.info('E2E: Skipping zoom-reset assertion - no second monitor to switch to', { component: 'e2e' });
+    return;
+  }
+  // The zoom controls collapse back to the two buttons only while the hook
+  // itself reports 1x, so this fails if the scale state survives the switch
+  // even when the new monitor's element paints unzoomed.
+  await expect(page.getByTestId('pan-left-button')).toBeHidden({ timeout: testConfig.timeouts.transition });
+  // '' on a freshly mounted element, 'scale(1)' on one the reset wrote to.
+  const transform = await readZoomTransform(page);
+  expect(transform === '' || transform.includes('scale(1)')).toBe(true);
 });
 
 Then('the view should pan', async ({ page }) => {
