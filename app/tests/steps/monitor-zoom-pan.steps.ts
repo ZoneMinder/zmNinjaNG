@@ -1,15 +1,26 @@
 import { createBdd } from 'playwright-bdd';
 import { expect } from '@playwright/test';
 import { testConfig } from '../helpers/config';
+import { getMonitorCount } from '../helpers/zm-api';
 import { log } from '../../src/lib/logger';
 
 const { When, Then } = createBdd();
 
 // Zoom / pan (keyboard + mouse) - issue #191
 let panTransformBefore = '';
-// Monitor the view was zoomed on, so the reset check below can tell a real
-// monitor switch from a server with only one monitor to switch to.
-let zoomedMonitorId: string | null = null;
+
+// Stepping to a neighbour needs a neighbour to step to. Ask the ZM API, never
+// the buttons under test: a guard that reads their visibility skips exactly
+// when the bug it guards has hidden them, and reports green (refs #382).
+// Cached per worker, one call per run.
+let monitorCount: number | null = null;
+async function serverHasTwoMonitors(): Promise<boolean> {
+  if (monitorCount === null) {
+    monitorCount = await getMonitorCount();
+    log.info('E2E server monitor count', { component: 'e2e', count: monitorCount });
+  }
+  return monitorCount > 1;
+}
 
 async function readZoomTransform(page: import('@playwright/test').Page): Promise<string> {
   return page
@@ -31,7 +42,6 @@ When('I scroll the wheel up over the monitor view', async ({ page }) => {
 });
 
 When('I zoom into the monitor view', async ({ page }) => {
-  zoomedMonitorId = page.url().match(/monitors\/(\d+)/)?.[1] ?? null;
   const zoomIn = page.getByTestId('zoom-in-button');
   await expect(zoomIn).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
   // Two steps so the view is well past the zoom threshold with room to pan.
@@ -71,20 +81,22 @@ When('I drag the monitor view with the mouse', async ({ page }) => {
 });
 
 // Zoom belongs to the picture, not the page (refs #382). Stepping to another
-// monitor keeps the page mounted, so the transform has to be cleared explicitly.
+// monitor keeps the page mounted, so the zoom has to be cleared explicitly.
 Then('the monitor view should be back at fit', async ({ page }) => {
-  const nowId = page.url().match(/monitors\/(\d+)/)?.[1] ?? null;
-  if (!nowId || nowId === zoomedMonitorId) {
-    log.info('E2E: Skipping zoom-reset assertion - no second monitor to switch to', { component: 'e2e' });
+  if (!(await serverHasTwoMonitors())) {
+    log.info('E2E: Skipping zoom-reset assertion - server has one monitor', { component: 'e2e' });
     return;
   }
-  // The zoom controls collapse back to the two buttons only while the hook
-  // itself reports 1x, so this fails if the scale state survives the switch
-  // even when the new monitor's element paints unzoomed.
+  // The pan controls only render while the hook itself reports more than 1x,
+  // so their absence is the zoom state being cleared, not just a repainted
+  // element: the <img> remounts on the switch and paints unzoomed either way.
   await expect(page.getByTestId('pan-left-button')).toBeHidden({ timeout: testConfig.timeouts.transition });
   // '' on a freshly mounted element, 'scale(1)' on one the reset wrote to.
-  const transform = await readZoomTransform(page);
-  expect(transform === '' || transform.includes('scale(1)')).toBe(true);
+  // Polled: the reset animates over 0.2s, so the inline style can still carry
+  // the old scale for a frame after the controls have gone.
+  await expect
+    .poll(() => readZoomTransform(page), { timeout: testConfig.timeouts.transition })
+    .toMatch(/^$|scale\(1\)/);
 });
 
 Then('the view should pan', async ({ page }) => {
