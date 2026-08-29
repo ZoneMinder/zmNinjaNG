@@ -161,21 +161,22 @@ When('I toggle a notification setting', async ({ page }) => {
   const empty = page.getByTestId('notification-settings-empty');
   await expect(container.or(empty).first()).toBeVisible({ timeout: testConfig.timeouts.transition });
 
+  // The scenario is "toggle persists across navigation", so a missing toggle
+  // is a failure of the thing under test, not a reason to skip. Assert it
+  // rather than logging past it.
   const toggle = container.locator('[role="switch"]').first();
-  if (await toggle.isVisible({ timeout: testConfig.timeouts.element }).catch(() => false)) {
-    notificationToggleState = await toggle.isChecked().catch(() => false);
-    await toggle.click();
-    await page.waitForTimeout(300);
-  } else {
-    log.info('E2E: No notification toggles visible', { component: 'e2e' });
-  }
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
+  notificationToggleState = await toggle.isChecked();
+  await toggle.click();
+  // Wait for the flip itself instead of a fixed sleep.
+  await expect
+    .poll(() => toggle.isChecked(), { timeout: testConfig.timeouts.element })
+    .toBe(!notificationToggleState);
 });
 
 Then('the notification toggle state should be preserved', async ({ page }) => {
   const toggle = page.locator('[role="switch"]').first();
-  if (!(await toggle.isVisible().catch(() => false))) {
-    return;
-  }
+  await expect(toggle).toBeVisible({ timeout: testConfig.timeouts.element });
 
   // "I navigate to the ... page" only waits for the URL to change
   // (common.steps.ts), not for the destination route to render. Notifications

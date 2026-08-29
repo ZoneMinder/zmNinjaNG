@@ -216,6 +216,43 @@ describe('developer docs cite symbols, not line numbers', () => {
     expect(offenders, `line-number citations found:\n${offenders.join('\n')}`).toEqual([]);
   });
 
+  it('no rst file teaches a retired or invented symbol', () => {
+    // Nothing checked developer-guide symbol truth, and it showed: four
+    // chapters taught the HTTP singleton the Sessions contract deleted, and
+    // applySSLTrustSetting was cited at seven sites without ever having
+    // existed (the real function is applyTrustedCertificates). A contributor
+    // following the guide wrote code the contract gate then rejected.
+    const RETIRED: Record<string, string> = {
+      getApiClient: 'getSession(profileId).client, or createStoreApiClient',
+      setApiClient: 'getSession(profileId), which owns the per-profile client',
+      resetApiClient: 'resetAuthGates, or drop the session from the registry',
+      registerApiClientResetHook: 'resetAuthGates',
+      applySSLTrustSetting: 'applyTrustedCertificates(candidate?: TrustCandidate)',
+    };
+
+    // A name that comes back for real must update this list, not sit here
+    // passing while the guide is right and the test is wrong.
+    const revived = Object.keys(RETIRED).filter((name) =>
+      srcFiles().some((f) => !f.endsWith('agents-contracts.test.ts') && new RegExp(`\\b${name}\\b`).test(read(f))),
+    );
+    expect(revived, `these are back in app/src; drop them from RETIRED: ${revived.join(', ')}`).toEqual([]);
+
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      fs.readFileSync(path.join(guideDir, file), 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          for (const [name, replacement] of Object.entries(RETIRED)) {
+            if (new RegExp(`\\b${name}\\b`).test(line)) {
+              offenders.push(`${file}:${i + 1} ${name} -> ${replacement}`);
+            }
+          }
+        });
+    }
+    expect(offenders, `developer guide teaches symbols that do not exist:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
   it('no mermaid block contains a semicolon', () => {
     // Mermaid parses ";" as a statement separator, so a semicolon inside a
     // message label truncates the statement and the whole diagram renders as
@@ -235,6 +272,72 @@ describe('developer docs cite symbols, not line numbers', () => {
       });
     }
     expect(offenders, `semicolons inside mermaid blocks:\n${offenders.join('\n')}`).toEqual([]);
+  });
+});
+
+/**
+ * The Never clauses that a grep can decide.
+ *
+ * Eleven contracts in AGENTS.project.md cited this file as their gate while it
+ * asserted only that the prose parsed and that the symbols it names exist. A
+ * reader who skips review of anything a gate enforces was skipping eleven
+ * unenforced contracts (M2). The clauses below are the ones a grep can settle;
+ * the rest now say `Gate: review.` and mean it.
+ *
+ * Comments are stripped before matching, so a doc comment that names a
+ * forbidden call (useBandwidthSettings.ts, providers/openai.ts) is not a hit.
+ */
+describe('contract Never clauses a grep can decide', () => {
+  const stripComments = (code: string) =>
+    code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+  /** Every non-test source file as [repo-relative path, comment-free text]. */
+  const codeFiles = (): [string, string][] =>
+    srcFiles()
+      .filter((f) => !f.includes('__tests__'))
+      .map((f) => [path.relative(appSrc, f), stripComments(read(f))]);
+
+  const offenders = (pattern: RegExp, exempt: (rel: string) => boolean = () => false) =>
+    codeFiles()
+      .filter(([rel, code]) => !exempt(rel) && pattern.test(code))
+      .map(([rel]) => rel);
+
+  it('Logging: no console calls outside the logger itself', () => {
+    expect(
+      offenders(/\bconsole\.\w/, (f) => f === 'lib/logger.ts' || f.startsWith('lib/log-file/')),
+    ).toEqual([]);
+  });
+
+  it('HTTP: no raw fetch or axios outside lib/http', () => {
+    expect(offenders(/(^|[^.\w])fetch\s*\(|\baxios\b/, (f) => f.startsWith('lib/http'))).toEqual(
+      [],
+    );
+  });
+
+  it('Native: Capacitor plugins are imported dynamically, never statically', () => {
+    // @capacitor/core holds Capacitor/registerPlugin themselves, not a plugin.
+    expect(offenders(/^import\s[^;]*?from\s+['"]@capacitor\/(?!core)/m)).toEqual([]);
+  });
+
+  it('Server queries: no inline queryKey arrays outside the key factory', () => {
+    expect(offenders(/queryKey:\s*\[/, (f) => f.startsWith('lib/query/'))).toEqual([]);
+  });
+
+  it('Service boundary: no service statically imports a store', () => {
+    // Type-only imports are erased and reach no store at runtime; the gate in
+    // no-circular-deps.test.ts skips them for the same reason.
+    expect(
+      offenders(
+        /^import\s+(?!type\b)[^;]*?from\s+['"][^'"]*\/stores\//m,
+        (f) => !f.startsWith('services/'),
+      ),
+    ).toEqual([]);
+  });
+
+  it('Error handling: abort checks go through isAbortError', () => {
+    // DOMException does not extend Error in browsers and an abort can arrive
+    // wrapped; the helper checks the name, which is the part that holds.
+    expect(offenders(/instanceof\s+DOMException/, (f) => f === 'lib/is-abort-error.ts')).toEqual([]);
   });
 });
 

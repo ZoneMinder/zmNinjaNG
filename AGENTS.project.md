@@ -8,31 +8,31 @@ The sanctioned path is the only path; a bypass is a bug even when it works.
 ### Settings
 Owns: all profile-scoped user preferences.
 Path: `getProfileSettings` / `updateProfileSettings` (`app/src/stores/settings.ts`); every coercion or default lives in `mergeProfileSettings`.
-Never: direct storage access; non-profile-scoped preference keys; coercions outside the merge (reactive readers such as `useCurrentProfile` bypass per-getter fixes).
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Never: reaching storage directly for a profile-scoped preference; non-profile-scoped preference keys; coercions outside the merge (reactive readers such as `useCurrentProfile` bypass per-getter fixes). Per-device UI state belongs in `localStorage` under `STORAGE_KEYS`.
+Gate: review.
 
 ### Polling
 Owns: every recurring refresh interval.
 Path: `useBandwidthSettings` / `getBandwidthSettings` (`app/src/hooks/useBandwidthSettings.ts`).
 Never: literal interval values; users tune bandwidth globally.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: review.
 
 ### HTTP
 Owns: all network requests, including native TLS handling.
 Path: helpers in `app/src/lib/http.ts`.
 Never: raw `fetch` or `axios`.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/tests/agents-contracts.test.ts` (no raw `fetch`/`axios`).
 
 ### Logging
 Owns: all diagnostic output.
 Path: `log` helpers with explicit `LogLevel` (`app/src/lib/logger.ts`).
 Never: `console` calls in app code; credentials or tokens in log output or URLs.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/tests/agents-contracts.test.ts` (no `console.`); review for credentials.
 
 ### Auth tokens
 Owns: token storage, refresh, and login concurrency.
 Path: `getFreshAccessToken` / `login` on the auth store (`app/src/stores/auth.ts`), deduped through one in-flight promise; refresh tokens in platform secure storage.
-Never: refresh calls bypassing the dedup entry points; tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
+Never: refresh calls bypassing the dedup entry points; refresh tokens in URL query strings; plaintext fallback when secure storage fails (drop and re-auth instead).
 Gate: `app/src/stores/__tests__/auth.test.ts`.
 
 ### Sessions
@@ -51,13 +51,13 @@ Gate: `app/src/lib/assistant/__tests__/agent.test.ts`; `app/src/lib/assistant/__
 Owns: React Query keys, invalidation, and caching.
 Path: keys and invalidations from `app/src/lib/query/query-keys.ts`; profile-scoped keys wrap ids with `asProfileId`.
 Never: inline key arrays; unwrapped profile ids in keys.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/tests/agents-contracts.test.ts` (no inline query keys); review for unwrapped ids.
 
 ### Stores
 Owns: client state via Zustand.
 Path: subscriptions select every reactive field they read, with `useShallow` for multi-field selects (`app/src/stores/`); selectors return raw slices or primitives, deriving shapes in `useMemo` outside the subscription.
 Never: mutating objects returned by `getState`; whole-store subscriptions; minting objects inside a selector - `useShallow` never stabilizes them and the render loops.
-Gate: `app/src/tests/agents-contracts.test.ts`; review; subscription changes need a real-store regression test (testing playbook).
+Gate: review; subscription changes need a real-store regression test (testing playbook).
 
 ### Aggregation (virtual profile groups)
 Owns: surfaces fanning out over multiple profiles.
@@ -75,13 +75,13 @@ Gate: `app/src/stores/__tests__/notifications.test.ts`; review.
 Owns: the dependency direction between services and stores.
 Path: services reach stores only through gates; the module graph stays acyclic.
 Never: a service statically importing a store.
-Gate: `app/src/tests/no-circular-deps.test.ts`.
+Gate: `app/src/tests/no-circular-deps.test.ts`; `app/src/tests/agents-contracts.test.ts` (no static store import).
 
 ### Query UI states
 Owns: what users see while data loads or fails.
 Path: `ErrorBanner` (`app/src/components/ui/query-state.tsx`) with `resolveQueryError` (`app/src/lib/query/query-error.ts`); shared query-state skeletons for loading.
 Never: ad-hoc error markup or raw error strings.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: review.
 
 ### Controls
 Owns: pressable control state.
@@ -93,25 +93,25 @@ Gate: `app/src/tests/control-consistency.test.ts`.
 Owns: user-facing date and time rendering.
 Path: `useDateTimeFormat` (`app/src/hooks/useDateTimeFormat.ts`) or `formatAppDate` helpers (`app/src/lib/format-date-time.ts`).
 Never: literal date-fns pattern strings in components.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: review.
 
 ### Localization
 Owns: all user-facing text.
 Path: locale files under `app/src/locales/` (de, en, es, fr, zh); every locale updates together; both pickers list every locale.
 Never: hardcoded user-facing strings.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/locales/__tests__/translation-keys.test.ts`; review for hardcoded strings.
 
 ### Native
 Owns: everything touching Capacitor or platform APIs.
 Path: Capacitor plugins import dynamically behind a platform check, with a test mock; mobile downloads use Capacitor HTTP base64; native TLS trust-on-first-use accepts any certificate when no fingerprint is stored, and trust is global once any profile enables self-signed (deliberate; see the all-profiles design spec).
 Never: static plugin imports; Blob conversion for mobile downloads; fail-closed TLS without stored fingerprint (breaks self-signed onboarding).
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: `app/src/tests/agents-contracts.test.ts` (no static plugin imports); device pass.
 
 ### Constants
 Owns: semantic values shared across modules.
 Path: app-level values in `app/src/lib/zmninja-ng-constants.ts`; ZoneMinder protocol values in `app/src/lib/zm/zm-constants.ts`.
 Never: magic numbers or strings inline where a named constant exists or belongs.
-Gate: `app/src/tests/agents-contracts.test.ts`; review.
+Gate: review.
 
 ## Project rules
 

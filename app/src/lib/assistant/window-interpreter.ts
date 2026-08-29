@@ -19,6 +19,7 @@ import { WINDOW_UNITS, WEEKDAYS, type WindowFields } from './event-range';
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
 import { log, LogLevel } from '../logger';
+import { isAbortError } from '../is-abort-error';
 
 /** The interpreter's output contract, enforced via constrained generation on
  *  backends that support it (Ollama json_schema, WebLLM XGrammar, Apple FM
@@ -258,7 +259,7 @@ export async function interpretWhen(
     if (parsed) clampBareMonthEnd(phrase, parsed);
     result = parsed ?? { error: `Could not interpret "${phrase}" as a time window. Rephrase the when argument.` };
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (isAbortError(error)) throw error;
     log.assistant('Window interpretation failed', LogLevel.WARN, {
       error: error instanceof Error ? error.message : String(error),
     });

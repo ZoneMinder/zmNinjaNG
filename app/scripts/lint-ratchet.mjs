@@ -90,6 +90,21 @@ if (improvements.length > 0) {
   console.log('Run `npm run lint:ratchet -- --update` to lock the gain in.\n');
 }
 
+// C7 symmetry with quality-ratchet.test.ts: a baseline raised by hand and never
+// lowered back stays above reality forever, and the ratchet stops ratcheting.
+const slack = Object.entries(baseline)
+  .map(([rule, allowed]) => ({ rule, allowed, count: counts[rule] ?? 0 }))
+  .filter(({ allowed, count }) => allowed - count > 5);
+
+if (slack.length > 0) {
+  console.error('Lint baseline sits above the real count:');
+  for (const { rule, count, allowed } of slack) {
+    console.error(`  ${rule}: baseline ${allowed} is ${allowed - count} above the ${count} found`);
+  }
+  console.error('\nRun `npm run lint:ratchet -- --update` to lock the gain in.');
+  process.exit(1);
+}
+
 if (regressions.length > 0) {
   console.error('Lint backlog grew:');
   for (const { rule, count, allowed } of regressions) {

@@ -68,7 +68,9 @@ test('proveRed fails when the changed test passes on the base code, and passes w
     assert.equal(proveRed({ base, head, repo: dir, title: 'fix(sum): add', runTests, log }), 0);
     assert.deepEqual(seen, [['src/lib/__tests__/sum.test.ts']]);
     assert.equal(proveRed({ base, head, repo: dir, title: 'fix(sum): add', runTests: () => 0, log }), 1);
-    assert.equal(proveRed({ base, head, repo: dir, title: 'docs: x', runTests: () => 0, log }), 0);
+    // A skip-type title no longer excuses a changed test from the proof.
+    assert.equal(proveRed({ base, head, repo: dir, title: 'docs: x', runTests: () => 0, log }), 1);
+    assert.equal(proveRed({ base, head, repo: dir, title: 'docs: x', runTests: () => 1, log }), 0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

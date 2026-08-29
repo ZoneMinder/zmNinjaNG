@@ -272,8 +272,7 @@ evidence exist in history, the knowledge files contain no emails or IP
 addresses, and rule IDs cited in this guide resolve. Branch protection on
 ``main`` requires these checks, so a PR cannot merge before they pass;
 merges queue with GitHub auto-merge and land when the checks go green.
-The proven-red job is the newest and is not yet in the required list,
-so until it is added there a red result warns rather than blocks. Rule M2 covers the gates' own blind spot: a number a gate
+Rule M2 covers the gates' own blind spot: a number a gate
 reports has to describe the thing it claims to measure, because a gate
 that measures the wrong input passes forever.
 

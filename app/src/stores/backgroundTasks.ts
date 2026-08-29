@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { setDownloadTaskStoreGate } from '../services/download';
 import { BACKGROUND_TASKS } from '../lib/zmninja-ng-constants';
 
 export type TaskType = 'download' | 'upload' | 'sync' | 'export';
@@ -31,7 +32,7 @@ export interface BackgroundTask {
   cancelFn?: () => void;
 }
 
-interface BackgroundTasksState {
+export interface BackgroundTasksState {
   tasks: BackgroundTask[];
   drawerState: 'hidden' | 'badge' | 'collapsed' | 'expanded';
 
@@ -230,3 +231,9 @@ export const useBackgroundTasks = create<BackgroundTasksState>((set, get) => ({
     return get().activeTasks().length > 0;
   },
 }));
+
+// Service boundary: services/download.ts may not statically import a store, so
+// it takes the accessor instead. Injected here, the same direction as
+// stores/notifications.ts injecting the push service's gates. AppLayout mounts
+// BackgroundTaskDrawer, which keeps this module loaded for the whole session.
+setDownloadTaskStoreGate(() => useBackgroundTasks.getState());

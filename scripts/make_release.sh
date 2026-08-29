@@ -8,6 +8,14 @@ cd "$REPO_DIR"
 PKG_JSON="app/package.json"
 SYNC_SCRIPT="scripts/sync-version.js"
 
+SKIP_E2E=false
+for arg in "$@"; do
+    case "$arg" in
+        --skip-e2e) SKIP_E2E=true ;;
+        *) echo "Unknown option: $arg"; echo "Usage: $0 [--skip-e2e]"; exit 1 ;;
+    esac
+done
+
 # --- Read version ---
 get_version() {
   if [ -f "$PKG_JSON" ]; then
@@ -175,6 +183,43 @@ fi
 echo "✅ Working directory is clean"
 echo "✅ All commits are pushed to origin"
 echo ""
+
+# --- Gate: browser e2e ---
+# Nothing runs this suite automatically. CI's e2e job ends green without
+# running: it needs ZM_HOST_1/ZM_USER_1/ZM_PASSWORD_1, no such secret is set,
+# and the test server is on a private LAN a hosted runner cannot reach. So a
+# release is the last point where a broken user journey is still catchable,
+# and it is caught here or not at all. One scenario stayed red for two weeks
+# before this existed.
+if [ "$SKIP_E2E" = "true" ]; then
+    echo "⚠️  Skipping browser e2e (--skip-e2e)."
+    echo "   Nothing else runs these journeys. A regression in them ships."
+    echo ""
+elif [ ! -f "app/.env" ]; then
+    echo "❌ Error: app/.env not found, so the e2e suite has no server to drive."
+    echo ""
+    echo "Create it from app/.env.example with ZM_HOST_1, ZM_USER_1 and"
+    echo "ZM_PASSWORD_1, or re-run with --skip-e2e to release without the gate."
+    echo ""
+    exit 1
+else
+    echo "🧪 Running browser e2e against the server in app/.env..."
+    echo "   20 feature files; this takes a few minutes."
+    echo ""
+    if npm run test:e2e; then
+        echo ""
+        echo "✅ Browser e2e passed"
+        echo ""
+    else
+        echo ""
+        echo "❌ Browser e2e failed. Not tagging $TAG."
+        echo ""
+        echo "Fix the failures, or re-run with --skip-e2e if the test server"
+        echo "itself is down rather than the app being broken."
+        echo ""
+        exit 1
+    fi
+fi
 
 # --- Confirm before proceeding ---
 REMOTE_URL=$(git remote get-url origin)

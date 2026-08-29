@@ -27,6 +27,7 @@ import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
 import { WINDOW_UNITS, type WindowFields } from './event-range';
 import type { AssistantProvider, ResolvedTimeframe } from './types';
+import { isAbortError } from '../is-abort-error';
 
 /** The extractor's output contract, constrained on backends that support it
  *  (Ollama json_schema, WebLLM XGrammar) and parsed defensively everywhere.
@@ -217,7 +218,7 @@ export async function extractTimeframes(
     const reply = await provider.complete(buildTimeframePrompt(now, timezone), question, signal, TIMEFRAME_SCHEMA);
     extracted = parsePhrases(reply.text);
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
+    if (isAbortError(error)) throw error;
     log.assistant('Timeframe extraction failed', LogLevel.WARN, {
       error: error instanceof Error ? error.message : String(error),
     });

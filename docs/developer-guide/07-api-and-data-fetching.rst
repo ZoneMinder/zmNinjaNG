@@ -75,12 +75,13 @@ logs and maps ``HttpError`` to a friendlier message):
 
 .. code:: tsx
 
-   import { getApiClient } from './client';
+   import type { ApiClient } from './client';
    import { LoginResponseSchema, type LoginResponse } from './types';
 
-   export async function login(credentials: LoginCredentials): Promise<LoginResponse> {
-     const client = getApiClient();
-
+   export async function login(
+     client: ApiClient,
+     credentials: LoginCredentials,
+   ): Promise<LoginResponse> {
      // ZoneMinder expects form-encoded data for login
      const formData = new URLSearchParams();
      formData.append('user', credentials.user);
@@ -101,9 +102,11 @@ hand-built form body.
 The returned ``LoginResponse`` carries ``access_token``,
 ``access_token_expires`` (seconds), ``refresh_token``, and
 ``refresh_token_expires``. The auth store converts the *_expires* fields to
-absolute ms-epoch deadlines before persisting. All HTTP goes through
-``getApiClient()`` from ``api/client.ts`` (CapacitorHttp on native, fetch on
-web and Electron), never raw ``fetch()``.
+absolute ms-epoch deadlines before persisting. Every API function takes the
+``ApiClient`` it should use as its first argument; callers get one from
+``getSession(profileId).client`` (``services/sessions.ts``). The client itself
+comes from ``api/client.ts`` (CapacitorHttp on native, fetch on web and
+Electron), and nothing calls raw ``fetch()``.
 
 Only the refresh token is persisted, and never in plain localStorage. The
 custom persist adapter in ``stores/auth.ts`` strips ``refreshToken`` out of the
@@ -132,8 +135,8 @@ Auth Gates
 ``createApiClient`` (``src/api/client.ts``) needs the access token and the
 profile's request timeout, and both live in zustand stores. It cannot import
 them. ``stores/auth.ts`` imports ``api/auth.ts`` for the login and refresh
-calls, and ``api/auth.ts`` imports ``api/client.ts`` for ``getApiClient()``,
-so an import from the client back to the store closes the loop:
+calls, and ``api/auth.ts`` imports ``api/client.ts`` for the ``ApiClient``
+type, so an import from the client back to the store closes the loop:
 ``api/client.ts`` -> ``stores/auth.ts`` -> ``api/auth.ts`` ->
 ``api/client.ts``.
 
@@ -142,20 +145,22 @@ interfaces: ``AuthGate`` (``getAccessToken``, ``getAccessTokenExpires``,
 ``isAuthenticated``, ``getFreshAccessToken``, ``proactiveLogin``,
 ``recoverFromAuthFailure``) and ``SettingsGate``
 (``getApiTimeoutSeconds``). ``api/store-gates.ts`` is the one module that
-imports both the stores and the client; it assembles ``storeGates`` from
-``getState()`` calls and exports ``createStoreApiClient(baseURL, reLogin?,
-profileId?)``, which every production call site uses. Tests inject plain
+imports both the stores and the client; ``makeProfileGates(profileId)``
+assembles them from ``getState()`` calls, and
+``createStoreApiClient(baseURL, reLogin, profileId)`` is the only caller of
+``createApiClient``. ``services/sessions.ts`` is in turn the only caller of
+that, so a client is always reached through ``getSession(profileId)``. Tests inject plain
 object literals with the same method names, so no test mocks zustand to
 exercise the client.
 
 Single-flight state sits behind the gates rather than in the client. The
 pending ``login``, ``getFreshAccessToken``, ``refreshAccessToken``,
 ``proactiveLogin``, and ``recoverFromAuthFailure`` promises are module-level
-variables in ``stores/auth.ts``, and ``resetAuthGates()`` clears all five.
-``createStoreApiClient`` registers that function through
-``registerApiClientResetHook``, and ``resetApiClient()`` runs every
-registered hook, so a profile switch cannot leave the new profile attached
-to a login, refresh, or recovery started for the old one.
+variables in ``stores/auth.ts``, keyed by profile, and
+``resetAuthGates(profileId)`` clears that profile's five.
+``dropSession(profileId)`` calls it while evicting the cached session, so a
+rebuilt session cannot inherit a login, refresh, or recovery started for the
+session it replaced; ``dropAllSessions()`` does the same for every profile.
 
 The same DI-gate shape (module defines a narrow gate interface and a
 setter, a store assembles the real implementation from ``getState()`` and
@@ -300,18 +305,18 @@ in ``stores/auth.ts`` holds a module-level ``pendingFreshToken``
 promise, so a montage view with twelve tiles plus an open hover preview
 issues one ``/host/login.json`` refresh, not thirteen.
 
-``getFreshAccessToken`` returns ``null`` early when the API client is not
-yet initialized, checked via ``isApiClientInitialized()`` from
-``api/client-ready.ts``. The access token is never persisted (only the
+``getFreshAccessToken`` returns ``null`` early when the profile has no built
+session yet, checked via ``hasActiveSession(profileId)`` from
+``services/session-flags.ts``. The access token is never persisted (only the
 refresh token is, see the persist adapter above), so on cold start a
 token-bearing component mounts with ``requiresAuth`` true and no token and
-calls this immediately, before profile bootstrap has created the client.
-Without the gate that refresh throws ``API client not initialized``, logs an
-error, and forces a logout, all pointless because ``clearStaleState``
-re-authenticates from stored credentials regardless. ``client-ready.ts``
-holds the flag in a module with no imports so ``stores/auth.ts`` can read it
-without an ``auth`` <-> ``api/client`` load cycle; ``setApiClient`` and
-``resetApiClient`` keep it in sync.
+calls this immediately, before profile bootstrap has built the session.
+Without the gate that refresh throws, logs an error, and forces a logout, all
+pointless because ``clearStaleState`` re-authenticates from stored credentials
+regardless. ``session-flags.ts`` holds the set in a leaf module with no
+imports, so ``stores/auth.ts`` can read it synchronously without an ``auth``
+<-> ``services/sessions.ts`` load cycle; ``getSession`` and ``dropSession``
+keep it in sync.
 
 Callsites render a ``VideoOff`` placeholder while ``isFresh`` is
 ``false`` rather than building a URL with a stale or empty token:
@@ -1077,9 +1082,8 @@ and it reads ``lib/platform.ts`` to pick an adapter. Above it:
 
    src/api/
    ├── auth.ts               # login(), refreshAccessToken(), getVersion()
-   ├── client.ts             # createApiClient(), getApiClient()
-   ├── client-ready.ts       # isApiClientInitialized() (no imports, breaks a cycle)
-   ├── store-gates.ts        # createStoreApiClient(), storeGates
+   ├── client.ts             # createApiClient()
+   ├── store-gates.ts        # createStoreApiClient(), makeProfileGates()
    ├── developer-notices.ts  # Developer notice feed
    ├── events.ts             # getEvents(), getEvent(), deleteEvent(), URL helpers
    ├── groups.ts             # getGroups()

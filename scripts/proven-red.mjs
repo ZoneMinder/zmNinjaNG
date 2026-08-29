@@ -16,11 +16,12 @@
  *
  *   node scripts/proven-red.mjs <base> <head> [--title "<pr title>"]
  *
- * Skips, and says so: a title whose type is docs, chore, ci, refactor, build,
- * style, or test (no behavior change to prove); a range that changes no
- * source; a range whose only changed tests are browser e2e steps, which
- * need a ZoneMinder and cannot run here. Fails when a behavior change
- * arrives with no changed test at all.
+ * Skips, and says so: a range that changes no source; a source change with no
+ * unit test whose title type is docs, chore, ci, refactor, build, style, or
+ * test (no behavior change to prove); a range whose only changed tests are
+ * browser e2e steps, which need a ZoneMinder and cannot run here. Fails when a
+ * behavior change arrives with no changed test at all. A changed unit test is
+ * always proved, whatever the title claims.
  */
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
@@ -47,10 +48,15 @@ export function classify(files) {
 
 /** Why a range needs no red proof, or null when it does. */
 export function skipReason(title, { unitTests, testSupport, source }) {
+  if (source.length === 0) return 'no source file changed';
+  // The title is unverified input, so it cannot excuse a changed test from the
+  // proof: a behavior change mislabelled `refactor:` used to skip the gate
+  // entirely. A skip-type title still excuses a source change that brings no
+  // test, which is what a real refactor looks like.
+  if (unitTests.length > 0) return null;
   const type = /^([a-z]+)(\(.+\))?!?:/.exec(title ?? '')?.[1];
   if (type && SKIP_TYPES.includes(type)) return `title type "${type}" carries no behavior change`;
-  if (source.length === 0) return 'no source file changed';
-  if (unitTests.length === 0 && testSupport.length > 0) {
+  if (testSupport.length > 0) {
     return 'only browser e2e or test-support files changed; e2e needs a server and runs in its own job';
   }
   return null;

@@ -1,6 +1,6 @@
 ---
 name: fable-review
-description: Use when asked for a full codebase review, health check, quality audit, or scorecard of this repo, or for a "fable review" / multi-pillar review whose output another agent will execute. Runs only on Fable; produces a scored, evidence-backed report at docs/superpowers/analysis/. Triggers on "fable review", "review the codebase", "score the repo", "audit code health".
+description: Use when asked for a full codebase review, health check, quality audit, or scorecard of this repo, or for a "fable review" / multi-pillar review whose output another agent will execute. Runs only on Fable. Triggers on "fable review", "review the codebase", "score the repo", "audit code health".
 ---
 
 # Fable Codebase Review
@@ -80,18 +80,37 @@ is the user's call.
    that shipped a red commit here once). Record raw counts and quote
    failures verbatim.
 4. **Dispatch one read-only agent per pillar, all in one message**, each
-   on Fable (`model: "fable"`). Each brief carries: the pillar definition
-   from the table below, the evidence rules, the finding fields, its
-   output path under the scratchpad directory, and the instruction to
-   report via SendMessage to "main". Agents read and probe only - no
-   edits, no commits. Stop each agent as soon as its report is verified.
+   on Fable (`model: "fable"`). Fill `brief-template.md` (next to this
+   file) once per pillar; the filled template is the whole prompt. Agents
+   read and probe only - no edits, no commits. Stop each agent as soon as
+   its report is verified.
 5. **Verify before publishing.** Re-read the cited source for every
    damning or load-bearing claim yourself. Duplication and dead-code
    claims are wrong often enough that an unverified one belongs nowhere
    near a score. A claim you cannot confirm is dropped, not softened.
-6. **Score, rank, write.** One decimal per pillar, an overall, then the
-   phased execution plan. Rank by risk reduced per unit of effort, not by
-   pillar order.
+6. **Score, rank, write.** One decimal per pillar from the rubric below,
+   an overall, then the phased execution plan. Rank by risk reduced per
+   unit of effort, not by pillar order. Before scoring, read the
+   scorecard of the newest `docs/superpowers/analysis/*-fable-review.md`;
+   any pillar moving more than 1.0 from it gets one sentence naming the
+   findings (or fixes) that moved it.
+
+## Scoring rubric
+
+Scores come from confirmed findings, not impression. Start at 10 and
+apply the cap or deduction each row names; the lowest cap wins, then
+deductions apply below it.
+
+| Condition | Effect |
+|---|---|
+| Any confirmed HIGH finding | Cap 7.0 |
+| Three or more confirmed HIGH | Cap 5.0 |
+| A gate the pillar relies on is red or advisory-only | Cap 6.0 |
+| Each confirmed MED | -0.5 |
+| Each confirmed LOW | -0.2 |
+| Pillar skipped by instruction, or evidence could not be gathered | No number; write "not assessed" |
+
+Floor is 1.0. Overall is the mean of scored pillars only.
 
 ## The pillars
 
@@ -109,10 +128,12 @@ is the user's call.
 | 10 | Documentation and handover | Accuracy over volume: spot-verify code-citing claims against source | `docs/developer-guide/call-flows.rst`, user guide gaps |
 | 11 | Error handling and trust boundaries | I1/I2: validation of server responses, user input and IPC; recovery paths on destructive operations; swallowed errors; error-class misdetection (`DOMException` is not an `Error`) | Validators, delete/download paths, `catch` bodies |
 | 12 | Security | Secrets handling, token storage and logging, injection sinks, TLS trust decisions | Ask the maintainer first; the first run skipped this by instruction. If skipped, say so in the report and score it as not assessed, never 0 |
+| 13 | Instruction system overhead | Whether the contracts, gates, and playbooks cost more than they catch: contracts whose Never list a gate never checks or that duplicate a lint or type error, gates that overlap (two tests asserting the same invariant, a ratchet and a lint on the same count), rules with no gate (M1), playbook facts repeated across files or restating code, instruction length that slows every session without preventing a recorded breakage. Score by work removed per breakage still prevented; a rule whose history (`git log`, `agents/project/domain-context.md`) shows no incident it stopped is a candidate for deletion, not hardening | `AGENTS.md`, `AGENTS.project.md`, `agents/**`, `app/src/tests/agents-contracts.test.ts`, `app/src/tests/no-circular-deps.test.ts`, `scripts/*.mjs`, `.github/workflows/`, husky hooks; findings route through the self-improvement protocol (M3) and name the consolidated gate that survives |
 
-Add a pillar when the repo grows a surface none of these covers, and say
-in the report why it was added. Drop one that does not apply, with a
-reason; a dropped pillar is not a zero.
+If `git ls-files | cut -d/ -f1-2 | sort -u` lists a directory that no
+pillar's Look-at column names and that holds shipped code, add a pillar
+for it and say so in the header. If a pillar's Look-at paths do not
+exist in the tree, drop it and say so; a dropped pillar is not a zero.
 
 ## Evidence rules
 
@@ -133,8 +154,11 @@ reason; a dropped pillar is not a zero.
 
 ## Finding fields
 
-Every finding in the report carries all of these. The executing agent has
-no session context; a missing field becomes a guess.
+Every finding in the report carries all of these, rendered as a bullet
+list with one `**Field:**` per bullet. Single newlines merge into one
+paragraph on GitHub, so field-per-line prose becomes unreadable there.
+The executing agent has no session context; a missing field becomes a
+guess.
 
 | Field | Content |
 |---|---|
@@ -185,17 +209,20 @@ Sections, in order:
 ## After the report
 
 1. Post the report path and the scorecard table in the session.
-2. Offer to log a tracking issue carrying the review. Ask two things in
-   the same message: why this review was run (scheduled sweep, before a
-   handover, after a heavy fix period, a specific worry), and whether
-   there is any other context to include. Wait for the answer; the
-   reason belongs to the maintainer, not to your guess.
-3. Only if they say yes, create it:
+2. Offer to log a tracking issue carrying the review. Ask three things
+   in the same message: why this review was run (scheduled sweep, before
+   a handover, after a heavy fix period, a specific worry), whether there
+   is any other context to include, and whether to fix the findings now.
+   Wait for the answer; the reason belongs to the maintainer, not to
+   your guess.
+3. Only if they say yes to the issue, create it:
    - Title names the review and its date.
-   - Body opens with a short **Why this review ran** section from their
-     answer, then the report verbatim (`gh issue create --body-file
-     <report path>` after prepending that section, so the issue and the
-     file do not drift).
+   - Body, in order: a short **Why this review ran** section from their
+     answer; the **Scorecard** table (pillar, score, verdict, overall)
+     under a `## Score (before)` heading; then the report from the
+     cross-cutting themes onward (`gh issue create --body-file` on a
+     file assembled from those parts, so the issue and the report do
+     not drift). Never paste the report's own header twice.
    - Labels `core` and `refactor` together: a review spans both
      behavior-changing findings and behavior-preserving cleanups, so
      neither label alone describes the work it will spawn. Confirm both
@@ -204,9 +231,20 @@ Sections, in order:
      `Posted by Claude (Fable 5), assisting @<login>.` - resolve `<login>`
      with `gh api user --jq .login`; never hardcode a username.
    - Report the issue URL back.
-4. If they decline, say the report stands on its own and stop. Never open
-   an issue, push a branch, or start executing findings unasked - the
-   phase plan is the maintainer's to schedule (P1).
+4. If they decline the issue, say the report stands on its own and stop.
+   Never open an issue, push a branch, or start executing findings
+   unasked - the phase plan is the maintainer's to schedule (P1).
+5. If they said fix now: branch off the default branch, turn the phased
+   execution plan into a plan file, and execute it with
+   superpowers:subagent-driven-development (commits `Refs #<issue>`).
+   When the branch's final review is clean, re-dispatch the pillar
+   agents for every pillar the branch touched (same briefs, fresh
+   context), re-score them with the rubric, and post one comment on the
+   issue: a table with pillar, score before, score after, one-line
+   verdict; overall before and after; then the findings that remain,
+   each with its ID and why it was left. Close with the identification
+   line. The PR body quotes the issue's acceptance lines (P1); closing
+   keywords only after the maintainer confirms.
 
 ## Common mistakes
 
@@ -222,4 +260,5 @@ Sections, in order:
 | Ranking theoretical risks alongside observed ones | Label the evidence, rank by it |
 | Omitting the non-findings section | The executor will "fix" a deliberate design and ship a regression |
 | Leaving native items unmarked | Say device-pass-required on every one; CI cannot verify them |
+| Grading the instruction system only for gaps | Pillar 13 exists to find what to remove. A redundant gate or an ungated rule that has never fired is friction, and adding more rules to a system that already slows work is itself a finding |
 | Filing the issue with your own guess at why the review ran | Ask, then quote the answer. The trigger is the maintainer's context, and it is what makes the issue readable a month later |
