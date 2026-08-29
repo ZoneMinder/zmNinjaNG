@@ -526,6 +526,7 @@ export function LiveMonitorPlayer({
     enabled: (effectiveStreamingMethod === 'mjpeg' || showMjpegPlaceholder) && !paused && !streamDenied,
     viewModeOverride: forceViewMode,
     profileId,
+    decoding: monitor.Decoding,
   });
 
   // Track MJPEG image error state. Clear it whenever a new connection is minted

@@ -41,6 +41,7 @@ vi.mock('../../api/monitors', () => ({
     const params = new URLSearchParams();
     params.set('monitor', monitorId);
     if (options.mode) params.set('mode', options.mode);
+    if (options.frames) params.set('frames', options.frames.toString());
     if (options.connkey) params.set('connkey', options.connkey.toString());
     if (options.scale) params.set('scale', options.scale.toString());
     if (options.maxfps) params.set('maxfps', options.maxfps.toString());
@@ -67,6 +68,8 @@ vi.mock('../../lib/zm/zm-constants', () => ({
     cmdAnalyzeOn: 'analyzeOn',
     cmdAnalyzeOff: 'analyzeOff',
   },
+  ZMS_FRAMES_PARAM_MIN_VERSION: '1.37.61',
+  ZM_DECODING_ALWAYS: 'Always',
 }));
 
 describe('useMonitorStream', () => {
@@ -214,10 +217,101 @@ describe('useMonitorStream', () => {
     // Check snapshot mode parameters
     // Note: Normal bandwidth mode uses 100% image scale
     expect(result.current.streamUrl).toContain('mode=single');
-    expect(result.current.streamUrl).toContain('connkey=12345');
+    // No connkey in snapshot: zms never opens a command socket for a
+    // single-frame request, and nothing ever sends CMD_QUIT for it (refs #383).
+    expect(result.current.streamUrl).not.toContain('connkey');
     expect(result.current.streamUrl).toContain('scale=100');
     expect(result.current.streamUrl).not.toContain('maxfps'); // No maxfps in snapshot
     expect(result.current.streamUrl).toContain('rand='); // cacheBuster in snapshot
+  });
+
+  describe('snapshot request shape by monitor decoding', () => {
+    // mode=single reads shared memory without marking the monitor as viewed, so
+    // a monitor that decodes on demand stops decoding and the snapshot freezes
+    // (refs #383). mode=jpeg&frames=1 runs one pass of the streaming loop, which
+    // does mark the monitor as viewed, then stops after a single frame.
+    const snapshotOn = (version: string | null) => {
+      useSettingsStore.setState({
+        profileSettings: {
+          'profile-1': {
+            ...DEFAULT_SETTINGS,
+            viewMode: 'snapshot',
+          },
+        },
+      });
+      useAuthStore.setState({
+        slices: {
+          [mockProfile.id]: {
+            ...useAuthStore.getState().slices[mockProfile.id],
+            version,
+          },
+        },
+      });
+    };
+
+    it('polls a one-frame jpeg stream for a monitor that decodes on demand', async () => {
+      snapshotOn('1.38.0');
+
+      const { result } = renderHook(() =>
+        useMonitorStream({ monitorId: '1', decoding: 'Ondemand' }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.streamUrl).toBeTruthy();
+      });
+
+      expect(result.current.streamUrl).toContain('mode=jpeg');
+      expect(result.current.streamUrl).toContain('frames=1');
+      expect(result.current.streamUrl).not.toContain('connkey');
+      expect(result.current.streamUrl).not.toContain('maxfps');
+      expect(result.current.streamUrl).toContain('rand=');
+    });
+
+    it('keeps mode=single for a monitor on Decoding=Always', async () => {
+      // It never stops decoding, so the cheaper single-image request is enough.
+      snapshotOn('1.38.0');
+
+      const { result } = renderHook(() =>
+        useMonitorStream({ monitorId: '1', decoding: 'Always' }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.streamUrl).toBeTruthy();
+      });
+
+      expect(result.current.streamUrl).toContain('mode=single');
+      expect(result.current.streamUrl).not.toContain('frames=');
+    });
+
+    it('keeps mode=single when the server reports no decoding value', async () => {
+      // Pre-1.37 servers have no Decoding field and no frames= either; their zms
+      // logs unknown parameters and would stream forever on every poll.
+      snapshotOn('1.36.35');
+
+      const { result } = renderHook(() => useMonitorStream({ monitorId: '1' }));
+
+      await waitFor(() => {
+        expect(result.current.streamUrl).toBeTruthy();
+      });
+
+      expect(result.current.streamUrl).toContain('mode=single');
+      expect(result.current.streamUrl).not.toContain('frames=');
+    });
+
+    it('keeps mode=single on 1.37 builds that have Decoding but no frames=', async () => {
+      snapshotOn('1.37.44');
+
+      const { result } = renderHook(() =>
+        useMonitorStream({ monitorId: '1', decoding: 'Ondemand' }),
+      );
+
+      await waitFor(() => {
+        expect(result.current.streamUrl).toBeTruthy();
+      });
+
+      expect(result.current.streamUrl).toContain('mode=single');
+      expect(result.current.streamUrl).not.toContain('frames=');
+    });
   });
 
   it('on web, snapshot mode mirrors streamUrl into imageSrc without fetching frames', async () => {

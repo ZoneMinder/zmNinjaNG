@@ -149,6 +149,8 @@ export const MonitorSchema = z.object(
   Capturing: z.string().optional(),
   Analysing: z.string().optional(),
   Recording: z.string().optional(),
+  /** 'None' | 'Ondemand' | 'KeyFrames' | 'KeyFrames+Ondemand' | 'Always'. Absent before ZM 1.37. */
+  Decoding: z.string().optional(),
   Enabled: z.coerce.string(),
   LinkedMonitors: z.string().nullable(),
   Triggers: z.string().nullable(),
@@ -708,6 +710,8 @@ export interface Profile {
 // Stream options types
 export interface StreamOptions {
   mode?: 'jpeg' | 'single' | 'stream';
+  /** Stop a jpeg stream after this many frames (ZM 1.38+). */
+  frames?: number;
   scale?: number;
   width?: number;
   height?: number;

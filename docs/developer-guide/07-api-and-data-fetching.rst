@@ -405,7 +405,7 @@ Why stream URLs carry a cache buster, a port, and a mode
 Cache busting (``_t``)
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Browsers cache image URLs aggressively. In ``mode=single`` (snapshot)
+Browsers cache image URLs aggressively. In snapshot mode
 or after a stream reconnects, the same URL would yield a stale frame.
 ``src/lib/zm/url-builder.ts`` appends a ``_t=<timestamp>`` cache buster:
 
@@ -427,14 +427,38 @@ Streaming vs snapshot
 
 - **Streaming** (``mode=jpeg``), long-lived MJPEG connection. Low
   latency, high bandwidth, holds an HTTP slot.
-- **Snapshot** (``mode=single``), single JPEG fetched every
-  ``snapshotRefreshInterval`` seconds. Lower resource use, lower
-  frame rate.
+- **Snapshot**, single JPEG fetched every ``snapshotRefreshInterval``
+  seconds. Lower resource use, lower frame rate.
+
+Snapshot has two request shapes, picked per monitor. ``zms`` serves
+``mode=single`` straight out of shared memory and never calls
+``setLastViewed()``, so ``zmc`` sees no viewer. A monitor whose ``Decoding``
+is anything but ``Always`` then stops decoding ten seconds after the last
+real viewer, and every later snapshot returns the same frozen frame.
+``mode=jpeg&frames=1`` runs one pass of the streaming loop instead, which
+marks the monitor as viewed and keeps ``zmc`` decoding.
+
+``useMonitorStream`` therefore sends ``mode=jpeg&frames=1`` only when the
+monitor reports a ``Decoding`` other than ``ZM_DECODING_ALWAYS``, and
+``mode=single`` otherwise: a monitor on ``Always`` never stops decoding and
+does not need a stream, and a server that reports no ``Decoding`` at all is
+older than the field. That fallback matters because ``frames=`` arrived
+later than ``Decoding`` did: ``zms`` logs unknown parameters and keeps
+streaming, so a ``frames=1`` request to a server without it would leave an
+unbounded MJPEG connection open on every poll. The version check against
+``ZMS_FRAMES_PARAM_MIN_VERSION`` closes the gap for the 1.37 development
+builds that have ``Decoding`` but not ``frames=``.
+
+Snapshot requests carry no ``connkey``. A connection key names a live
+stream so the client can command it later, and nothing ever commands a
+snapshot: ``useStreamLifecycle`` sends ``CMD_QUIT`` for streaming
+connections only. Passing one to a ``frames=1`` jpeg request would also
+make ``zms`` create a command socket and lock file per poll.
 
 In snapshot mode, ``useMonitorStream`` exposes ``imageSrc`` for the
 ``<img>`` to bind to on every platform; this equals ``streamUrl``, so
-the WebView or browser loads each ``mode=single`` URL directly as the
-cache buster changes.
+the WebView or browser loads each snapshot URL directly as the cache
+buster changes.
 
 Per-platform transport
 ^^^^^^^^^^^^^^^^^^^^^^
