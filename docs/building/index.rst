@@ -131,6 +131,20 @@ zmNinjaNg uses GitHub Actions to build release binaries automatically. See
 `make_release.sh <https://github.com/ZoneMinder/zmNinjaNg/blob/main/scripts/make_release.sh>`_
 for the release workflow.
 
+Before it tags anything, ``make_release.sh`` runs the browser e2e suite
+against the ZoneMinder named in ``app/.env``, and stops without tagging if a
+scenario fails. This is the only automatic run those journeys get: CI's
+``e2e-tests`` job ends green without running them, because it needs
+``ZM_HOST_1`` / ``ZM_USER_1`` / ``ZM_PASSWORD_1`` secrets that are not set,
+and the test server sits on a private LAN that a GitHub-hosted runner cannot
+reach. A green tick on that job means "ran, or had nothing to run"; its step
+summary says which.
+
+``--skip-e2e`` bypasses the gate for when the test server itself is down
+rather than the app being broken. It prints a warning, because nothing else
+covers those journeys. Missing ``app/.env`` is an error rather than a silent
+skip, so a release never quietly loses the gate.
+
 When the version in ``app/package.json`` already has a tag, ``make_release.sh``
 offers to pick a new version. It runs ``generate_notice.mjs --plan`` once, which
 feeds the closed issues since the last release (from ``github_changelog_generator``)
