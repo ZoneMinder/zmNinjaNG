@@ -20,7 +20,26 @@ import { httpRequest, type HttpProgress } from '../lib/http';
 import { getEventVideoUrl as buildEventVideoUrl } from '../lib/zm/url-builder';
 import { DOWNLOAD } from '../lib/zmninja-ng-constants';
 import { isAbortError } from '../lib/is-abort-error';
-import { useBackgroundTasks } from '../stores/backgroundTasks';
+import type { BackgroundTasksState } from '../stores/backgroundTasks';
+
+/**
+ * Background-task bookkeeping, injected rather than imported: the Service
+ * boundary contract forbids a service statically importing a store. The store
+ * module calls the setter at its own module scope, so the gate is set before
+ * any UI can reach downloadEventVideo.
+ */
+let taskStoreGate: (() => BackgroundTasksState) | null = null;
+
+export function setDownloadTaskStoreGate(getState: () => BackgroundTasksState): void {
+  taskStoreGate = getState;
+}
+
+function taskStoreState(): BackgroundTasksState {
+  if (!taskStoreGate) {
+    throw new Error('Download task store gate not initialized. Import stores/backgroundTasks first.');
+  }
+  return taskStoreGate();
+}
 
 /**
  * Strip characters that could escape the target directory or break the
@@ -398,7 +417,7 @@ export function downloadEventVideo(
   const abortController = new AbortController();
 
   // Get background task store (cannot use hook outside component)
-  const taskStore = useBackgroundTasks.getState();
+  const taskStore = taskStoreState();
 
   // Create background task
   const taskId = taskStore.addTask({
@@ -426,9 +445,9 @@ export function downloadEventVideo(
           // ran, so `taskStore.tasks` never contains this task and this
           // block was previously always a no-op. Go through updateTaskMetadata
           // (an immutable set()) rather than mutating the task object in place.
-          const currentTasks = useBackgroundTasks.getState().tasks;
+          const currentTasks = taskStoreState().tasks;
           if (progress.total && !currentTasks.find(t => t.id === taskId)?.metadata.fileSize) {
-            useBackgroundTasks.getState().updateTaskMetadata(taskId, { fileSize: progress.total });
+            taskStoreState().updateTaskMetadata(taskId, { fileSize: progress.total });
           }
         },
       });

@@ -16,8 +16,15 @@ import { fileURLToPath } from 'node:url';
 
 const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-/** `import ... from 'x'`, `export ... from 'x'`, and bare `import 'x'`. */
-const SPECIFIER = /(?:^|\n)\s*(?:import|export)\b[^'"\n]*?(?:from\s*)?['"]([^'"]+)['"]/g;
+/**
+ * `import ... from 'x'`, `export ... from 'x'`, and bare `import 'x'`.
+ *
+ * A statement that opens `import type` / `export type` is erased by the
+ * compiler and reaches no module at runtime, so it cannot form a cycle and is
+ * skipped. An inline `import { type A, b }` still pulls the module in and is
+ * counted, which is why only the leading keyword is matched.
+ */
+const SPECIFIER = /(?:^|\n)\s*(?:import|export)\b\s*(type\b)?[^'"\n]*?(?:from\s*)?['"]([^'"]+)['"]/g;
 
 function collectFiles(dir: string): string[] {
   const out: string[] = [];
@@ -49,7 +56,8 @@ function buildGraph(files: string[]): Map<string, string[]> {
     const source = fs.readFileSync(file, 'utf8');
     const edges = new Set<string>();
     for (const match of source.matchAll(SPECIFIER)) {
-      const target = resolve(file, match[1]);
+      if (match[1]) continue; // type-only: erased, no runtime edge
+      const target = resolve(file, match[2]);
       if (target && target !== file) edges.add(target);
     }
     graph.set(file, [...edges]);
