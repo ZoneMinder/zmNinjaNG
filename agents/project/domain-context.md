@@ -204,7 +204,7 @@ matching reality, fixing it is a protocol change like any rule edit.
   header: `img`/`video` elements cannot set one. `lib/zm/url-builder.ts`,
   `api/events.ts`, and `services/discovery.ts` append it by design and
   `sanitizeLogMessage` redacts it on the way to a log. Do not "fix" it out
-  of stream or playback URLs; every live view and event replay breaks. The
+  of stream or playback URLs; every feed and event replay breaks. The
   Auth tokens contract forbids refresh tokens there, not access tokens.
 
 ## Libraries and state
