@@ -216,6 +216,43 @@ describe('developer docs cite symbols, not line numbers', () => {
     expect(offenders, `line-number citations found:\n${offenders.join('\n')}`).toEqual([]);
   });
 
+  it('no rst file teaches a retired or invented symbol', () => {
+    // Nothing checked developer-guide symbol truth, and it showed: four
+    // chapters taught the HTTP singleton the Sessions contract deleted, and
+    // applySSLTrustSetting was cited at seven sites without ever having
+    // existed (the real function is applyTrustedCertificates). A contributor
+    // following the guide wrote code the contract gate then rejected.
+    const RETIRED: Record<string, string> = {
+      getApiClient: 'getSession(profileId).client, or createStoreApiClient',
+      setApiClient: 'getSession(profileId), which owns the per-profile client',
+      resetApiClient: 'resetAuthGates, or drop the session from the registry',
+      registerApiClientResetHook: 'resetAuthGates',
+      applySSLTrustSetting: 'applyTrustedCertificates(candidate?: TrustCandidate)',
+    };
+
+    // A name that comes back for real must update this list, not sit here
+    // passing while the guide is right and the test is wrong.
+    const revived = Object.keys(RETIRED).filter((name) =>
+      srcFiles().some((f) => !f.endsWith('agents-contracts.test.ts') && new RegExp(`\\b${name}\\b`).test(read(f))),
+    );
+    expect(revived, `these are back in app/src; drop them from RETIRED: ${revived.join(', ')}`).toEqual([]);
+
+    const offenders: string[] = [];
+    const guideDir = path.join(repoRoot, 'docs/developer-guide');
+    for (const file of fs.readdirSync(guideDir).filter((f) => f.endsWith('.rst'))) {
+      fs.readFileSync(path.join(guideDir, file), 'utf8')
+        .split('\n')
+        .forEach((line, i) => {
+          for (const [name, replacement] of Object.entries(RETIRED)) {
+            if (new RegExp(`\\b${name}\\b`).test(line)) {
+              offenders.push(`${file}:${i + 1} ${name} -> ${replacement}`);
+            }
+          }
+        });
+    }
+    expect(offenders, `developer guide teaches symbols that do not exist:\n${offenders.join('\n')}`).toEqual([]);
+  });
+
   it('no mermaid block contains a semicolon', () => {
     // Mermaid parses ";" as a statement separator, so a semicolon inside a
     // message label truncates the statement and the whole diagram renders as

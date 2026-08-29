@@ -387,12 +387,15 @@ An End-to-End Switch
 The two halves, subscription and ``getState``, meet when the user picks a
 different server. Tapping an entry in ``components/profile-switcher.tsx``
 calls the ``switchProfile`` action it selected from the store. The action
-tears down the outgoing profile (quit active streams, ``logout()``,
-``clearQueryCache()``, ``resetApiClient()``), then does the single write that
-matters, ``set({ currentProfileId: profile.id })``. Every component holding
-a ``currentProfileId`` selector re-renders against the new id, while the
-action continues outside React and calls ``setApiClient`` with a client built
-for the new server's URL.
+quits the outgoing profile's active streams first, while its SSL trust and
+access token are still in effect, then does the single write that matters,
+``set({ currentProfileId: profile.id })``. Every component holding a
+``currentProfileId`` selector re-renders against the new id, while the action
+continues outside React to ensure the new profile's session exists and run its
+bootstrap. There is no client to swap: the incoming profile's session is built
+by ``getSession(profile.id)`` and the outgoing profile's stays cached, so
+switching back costs nothing. Only the rollback path calls
+``logout(profile.id)``.
 
 Stores in zmNinjaNg
 -------------------

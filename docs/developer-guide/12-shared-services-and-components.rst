@@ -147,10 +147,15 @@ itself otherwise.
 
 .. code:: typescript
 
-   import { applySSLTrustSetting, getServerCertFingerprint } from '../lib/security/ssl-trust';
+   import { applyTrustedCertificates, getServerCertFingerprint } from '../lib/security/ssl-trust';
 
-   // Normal operation: trust exactly this fingerprint.
-   await applySSLTrustSetting(true, storedFingerprint);
+   // Normal operation: apply the union of every profile's trust setting.
+   // Reads the profile and settings stores itself, so it takes no arguments.
+   await applyTrustedCertificates();
+
+   // A profile not yet saved (test-connection in progress) is folded in as
+   // the candidate, so the probe can reach it before it exists in the store.
+   await applyTrustedCertificates({ urls: [portalUrl], fingerprint, enabled });
 
    // Fetch the cert for the TOFU dialog. No fingerprint yet, so this enables
    // trust for HTTP requests only and does not install the WebView handler.
@@ -172,7 +177,7 @@ only on a fingerprint match, never unconditionally; HTTP requests go through
 a ``TrustManager`` that validates fingerprints. On iOS, both ``URLProtocol``
 and ``WKNavigationDelegate`` validate with CommonCrypto SHA-256.
 
-Electron gets trust without pinning. ``applySSLTrustSetting`` forwards to
+Electron gets trust without pinning. ``applyTrustedCertificates`` forwards to
 ``window.electronSsl.setTrustSelfSigned`` over IPC, and while that flag is on
 the main process accepts any invalid certificate, both for renderer loads (the
 ``certificate-error`` handler) and for the ``net.fetch`` the HTTP bridge uses
@@ -263,7 +268,7 @@ Given credentials it also authenticates once, so it can read the real
    const result = await discoverUrls(portalUrl, {
      credentials: { username, password },
      signal: abortController.signal,
-     onClientCreated: (client) => setApiClient(client),
+     onClientCreated: (client) => { profileClient = client; },
    });
    // { portalUrl, apiUrl, cgiUrl }
 
@@ -1664,8 +1669,9 @@ own.
    <SecureImage src={imageUrl} fallbackSrc={placeholderUrl} alt={alt} className="w-full" />
 
 It renders ``<img src={src}>`` plainly. The interesting part is ``onError``.
-On native, if the plain load failed, it retries through ``getApiClient()`` with
-``responseType: 'base64'``, builds a ``data:`` URL from the response and its
+On native, if the plain load failed, it retries through
+``getSession(profileId).client`` (or ``getCurrentSession()`` when the caller
+passes no profile) with ``responseType: 'base64'``, builds a ``data:`` URL from the response and its
 ``content-type`` header, and swaps that in. That second attempt exists because
 the native HTTP layer can reach servers the WebView refuses: a self-signed
 certificate the ``SSLTrust`` plugin trusts, or a CORS policy CapacitorHttp

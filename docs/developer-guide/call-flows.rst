@@ -140,11 +140,13 @@ waiting on the network.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L92>`__
    · → :doc:`03-state-management-zustand`
 
-#. **Point the HTTP client at this server.** ``initializeApiClient`` calls
-   ``setApiClient(createStoreApiClient(profile.apiUrl, reLogin))``. From here on
-   every ``httpGet`` / ``httpPost`` resolves through ``getApiClient()``, so this
-   one call decides which server all later requests talk to. The ``reLogin``
-   callback is what lets the client quietly re-authenticate a lapsed token.
+#. **Make sure this server has a session.** ``initializeApiClient`` calls
+   ``getSession(profile.id)``. There is no app-wide client to point anywhere:
+   the session registry builds one ``ApiClient`` per profile on first ask and
+   caches it, so a request carries its profile with it rather than depending on
+   which server was selected last. Building the session also registers this
+   profile's credentials re-login with the auth store, which is what lets the
+   client quietly re-authenticate a lapsed token.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-initialization.ts#L108>`__
    · → :doc:`07-api-and-data-fetching`
 
@@ -159,8 +161,10 @@ waiting on the network.
 #. **Background setup, SSL trust first.** ``performBootstrap`` runs
    ``bootstrapSSLTrust`` before any network call. For a self-signed server it
    applies the trust override (and, the first time, shows the trust-on-first-use
-   dialog) via ``lib/security/ssl-trust.ts`` ``applySSLTrustSetting``, dispatching to the
-   native ``ssl-trust`` plugin or Electron. If trust were applied after the login
+   dialog) via ``lib/security/ssl-trust.ts`` ``applyTrustedCertificates``, dispatching
+   to the native ``ssl-trust`` plugin or Electron. Trust is global, not
+   per-profile: the function reads every profile's setting and applies the
+   union, so one self-signed server turns trust on for all of them. If trust were applied after the login
    call, a self-signed server would reject it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/services/profile-bootstrap.ts#L266>`__
    · → :doc:`13-network-endpoints`
@@ -506,9 +510,11 @@ time, logs in to confirm the details, then saves the profile and switches to it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/pages/ProfileForm.tsx#L132>`__
    · → :doc:`04-pages-and-views`
 
-#. **Trust the cert before probing.** When self-signed is on, ``applySSLTrustSetting``
-   enables trust-all first, so the upcoming discovery calls can reach a
-   self-signed host instead of failing the handshake.
+#. **Trust the cert before probing.** When self-signed is on,
+   ``applyTrustedCertificates({ urls, fingerprint: null, enabled })`` runs first,
+   so the upcoming discovery calls can reach a self-signed host instead of
+   failing the handshake. The profile is not saved yet, so it is passed as the
+   ``candidate`` argument to be folded into the trust set.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/security/ssl-trust.ts#L18>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -532,8 +538,8 @@ time, logs in to confirm the details, then saves the profile and switches to it.
 
 #. **Trust on first use.** On native with self-signed enabled,
    ``getServerCertFingerprint`` fetches the cert; ``CertTrustDialog`` shows it and
-   waits. Accepting pins the fingerprint (``applySSLTrustSetting(true,
-   fingerprint)``); rejecting aborts.
+   waits. Accepting pins the fingerprint (``applyTrustedCertificates({ urls,
+   fingerprint, enabled: true })``); rejecting aborts.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CertTrustDialog.tsx#L13>`__
    · → :doc:`05-component-architecture`
 
@@ -740,15 +746,19 @@ a 401 triggers recovery, all behind module-level single-flight gates.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/client.ts#L228>`__
    · → :doc:`07-api-and-data-fetching`
 
-#. **The gate that breaks the import cycle.** ``storeGates`` injects the auth
-   accessors into the client so it never imports the store directly, keeping all
-   the single-flight dedup in the store and the client mockable.
+#. **The gate that breaks the import cycle.** ``makeProfileGates(profileId)``
+   in ``api/store-gates.ts`` injects that profile's auth accessors into the
+   client, so the client never imports the store directly; the single-flight
+   dedup stays in the store and the client stays mockable.
+   ``createStoreApiClient`` is the only caller of ``createApiClient``.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/api/store-gates.ts#L20>`__
    · → :doc:`12-shared-services-and-components`
 
-#. **A switch clears the gates.** ``resetAuthGates`` (a reset hook run by
-   ``resetApiClient``) nulls all five pending gates so a new profile never attaches
-   to an old profile's in-flight login or refresh.
+#. **A switch clears the gates.** ``dropSession(profileId)`` evicts the cached
+   session and calls ``resetAuthGates(profileId)``, which nulls that profile's
+   pending gates so a rebuilt session never attaches to the dropped one's
+   in-flight login or refresh. ``dropAllSessions`` does the same for every
+   profile at once.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts#L213>`__
    · → :doc:`12-shared-services-and-components`
 
@@ -1671,7 +1681,7 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
 
 #. **Saving applies trust before it probes.** ``handleUpdateProfile`` validates
    that username and password are both present or both absent, awaits
-   ``applySSLTrustSetting(formData.allowSelfSignedCerts)``, and only then runs
+   ``applyTrustedCertificates`` with the edited profile as the candidate, and only then runs
    ``discoverUrls`` for any API or CGI URL the user blanked out. If trust were
    applied after discovery, a self-signed host would fail the handshake and the
    probe would report the server as unreachable. This is the same ordering
@@ -1735,9 +1745,9 @@ stream, all of which ``switchProfile`` does. The clean state comes from a
 
 #. **Delete-all is the exception that calls the reset.**
    ``deleteAllProfiles`` loops ``deletePassword`` over every profile, empties the
-   state, and is the only one of the three writes to call ``resetApiClient()``,
-   which nulls the client and runs the registered reset hooks so the auth
-   single-flight gates are cleared. Its caller navigates to ``/profiles/new``
+   state, and is the only one of the three writes to call ``dropAllSessions()``,
+   which clears the whole session registry and every profile's auth
+   single-flight gates. Its caller navigates to ``/profiles/new``
    without a reload, since there is no server left to talk to.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/profile.ts#L223>`__
    · → :doc:`07-api-and-data-fetching`
