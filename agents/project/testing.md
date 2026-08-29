@@ -75,6 +75,11 @@ Never run two web e2e suites in one checkout. They share generated files and res
   settings shape, not just files importing the changed module. Two
   fixtures broke this way in one wave while the directly-scoped suites
   stayed green.
+- `mockReturnValue` set inside one test outlives `vi.clearAllMocks()`,
+  which clears recorded calls but not implementations. A store override
+  that leaked this way made a timezone test pass in UTC-5 and fail in
+  CI's UTC for weeks (75c89db3). Use `mockReturnValueOnce`, or reset the
+  mock in `beforeEach`.
 
 ## Regression tests for store-subscription bugs
 

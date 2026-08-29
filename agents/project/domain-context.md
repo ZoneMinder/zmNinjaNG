@@ -47,6 +47,18 @@ matching reality, fixing it is a protocol change like any rule edit.
   ZoneMinder's zone editor. 1.39.18 writes percent, so a full-frame zone reads
   `0,0 100,0 100,100 0,100`; percent values carry two decimals, so parse them
   as floats, and scale before rotation, which works in pixel space.
+- `ajax/control.php` has no denial branch. A PTZ command the account may
+  not send is answered with 200 and an empty body, so there is no refusal
+  for the client to catch; PTZ is gated proactively on permissions or not
+  at all (6161352f).
+- Control definitions arrive with their axis flags coerced to strings, and
+  a server may send a JSON boolean or an empty column, which lands as
+  `'false'` or `''`. Gate capability on `=== '1'` rather than `!== '0'`,
+  and treat only an absent field as capable (343bd334, 26054e6f).
+- A server that prunes deletes events underneath an open list, so a card
+  can outlive the row it describes and a PUT to that id answers 404. Treat
+  that as the event being gone and refresh the list, not as a failed write
+  (8002b74c). `isNotFound` lives beside `createHttpError`.
 
 ## Streaming and media
 
@@ -160,6 +172,31 @@ matching reality, fixing it is a protocol change like any rule edit.
   gated off on iOS; remote Ollama is the supported path there.
 - Google Play's native debug-symbols warning for Android builds is inherent
   to stripped Google dependencies and cannot be cleared.
+- Capacitor 8's core `SystemBars` plugin owns the Android window chrome and
+  re-asserts it on every configuration change: it re-applies the bar style
+  it is tracking, and its `setStyle` finishes by repainting the decor view
+  with the theme's `windowBackground`, which follows OS night mode rather
+  than the app theme. Anything written directly to the insets controller
+  or the window background is overwritten on the next rotation. Drive icon
+  style through `SystemBars.setStyle` from the web layer so the tracked
+  style is the one it re-applies; restore the window colour after a
+  configuration change, posted so it queues behind the plugin's handler;
+  order any direct window write after `setStyle`. Five fixes on one plugin
+  before this was understood (68eab240, 2672c108, 7d3d8fb4, e1f55af0,
+  aaf4dbfd).
+- On the Android WebView `env(safe-area-inset-*)` is unreliable: 0 below
+  WebView 140, 0 under enforced edge-to-edge on Android 16. Capacitor
+  injects `--safe-area-inset-*` inline on `documentElement`, so `--sai-*`
+  resolves through that first and `env()` second (aaf4dbfd). The md layout
+  shields the top inset with a sticky opaque strip, not padding: padding
+  scrolls with the content and pages rendered behind the status bar
+  (34cb62d7, 4c6f2ecd).
+- Android's `HttpURLConnection` error text reaches the user verbatim
+  through Capacitor, leading slash from `InetSocketAddress.toString()`
+  included. Detect "unreachable" structurally, an `HttpError` with no
+  `status` never received a response, and take the host from the request
+  URL, never from the message; matching wording would encode four
+  platforms' prose (65f7a963).
 
 ## Libraries and state
 
@@ -174,6 +211,25 @@ matching reality, fixing it is a protocol change like any rule edit.
 - The React Compiler lint reports at most one violation per function and
   only file-scoped `eslint-disable` comments silence it; fixing one
   violation can reveal the next on the same function.
+- `MonitorDetail` and `EventDetail` stay mounted across a route param
+  change: the route elements carry no `key`, so stepping between ids keeps
+  every piece of per-visit state (the zoom, the MP4-to-ZMS fallback flag,
+  anything in `useState`). Per-visit state resets from an effect on the id
+  or it leaks onto the next entity (4e447581, 200d805d, ec43a4dd). Keying
+  the route instead would remount the player and mint a fresh connkey on
+  every step.
+- The scroll pad's automatic trigger was wrong twice, a free-pixel threshold
+  the player's `100svh-7rem` cap could never satisfy and then a coverage
+  ratio, and became a remembered per-profile setting (524d45a5, 500cae59,
+  1a0b5139, 7a6e72c5). Do not re-attempt auto-measurement. The underlying
+  problem was `touch-action: none` at every zoom level; it now follows the
+  zoom (`pan-y` unzoomed, `none` zoomed), which is what let a finger scroll
+  from over the feed (e3e11b4f, 4956078f).
+- Compact mode rewrites Tailwind utility classes, not arbitrary values, so
+  a `pt-[2rem]` beside a compacted `h-8` opens a gap. Toolbar clearance
+  reads `--fullscreen-toolbar-h`, overridden in the compact block beside
+  the rule it tracks (6882898c). Fullscreen montage tile math excludes the
+  overlay header, which takes no flow space (267d8453).
 
 ## Hardware and CI limits
 
@@ -200,6 +256,12 @@ contract. Remaining code-path facts:
   `resolveWindow` does arithmetic. Never regress to direct fills or
   app-side phrase regexes (deleted twice); the measured why lives in
   `llm-models.md`.
+- Counts computed from a truncated page are not facts, and the model drops
+  qualifiers such as "(listed rows)". A truncated result either fetches the
+  real totals (`pagination.totalCount`, one count query per monitor,
+  capped) or omits the field so there is nothing to misquote. A `when`
+  phrase that resolves to no window is a corrective error, never a silent
+  unfiltered query (e657f33e, 17b83354, 7c36ff0f).
 
 ## CI runners
 
@@ -234,3 +296,10 @@ contract. Remaining code-path facts:
   parallel e2e runs (filter-popover timeouts, drifting counts). Five
   events-filter scenarios are bisect-proven pre-existing failures
   tracked in #342; treat new failures against that baseline, not zero.
+- An unparented read of the current profile inside a group resolves to the
+  aggregate id, which is no profile: `useFreshAccessToken()` answers with
+  the empty auth slice and a stream never starts; `useProfileScope().settings`
+  reads a bucket nothing writes server-scoped keys into. Every multi-server
+  read takes the owning `profileId` as a required prop with no default
+  (c4a68a72, 93b56b7b, 9be0f2ef); two of those were the same component in
+  two branches.
