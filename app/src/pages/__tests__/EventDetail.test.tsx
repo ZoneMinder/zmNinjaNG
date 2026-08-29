@@ -35,6 +35,7 @@ const h = vi.hoisted(() => ({
   logEventDetail: vi.fn(),
   logOther: vi.fn(),
   toastError: vi.fn(),
+  zoomReset: vi.fn(),
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -145,7 +146,7 @@ vi.mock('../../hooks/useZoomPan', () => ({
     innerRef: { current: null },
     scale: 1,
     isZoomed: false,
-    reset: vi.fn(),
+    reset: h.zoomReset,
     zoomIn: vi.fn(),
     zoomOut: vi.fn(),
     panLeft: vi.fn(),
@@ -446,6 +447,33 @@ describe('EventDetail All-mode deep route (refs #337)', () => {
 
   afterEach(() => {
     h.routeParams = { id: '101' };
+  });
+
+  it('drops the zoom back to fit when the route moves to another event (refs #382)', () => {
+    // Same shape as MonitorDetail: the route element is not keyed on the event
+    // id, so stepping to the next event keeps this page mounted and without
+    // this the zoom stayed on whatever loaded next.
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'event') return { data: event, isLoading: false, error: null };
+      if (queryKey[0] === 'monitor') return { data: monitorData, isLoading: false, error: null };
+      return { data: null, isLoading: false, error: null };
+    });
+
+    const { rerender } = render(<EventDetail />);
+    h.zoomReset.mockClear();
+
+    // A re-render on the same event must not disturb a zoom the user set.
+    rerender(<EventDetail />);
+    expect(h.zoomReset).not.toHaveBeenCalled();
+
+    h.routeParams = { id: '102' };
+    rerender(<EventDetail />);
+    expect(h.zoomReset).toHaveBeenCalledTimes(1);
+
+    // Same for the All-mode deep route, where the id is a different param.
+    h.routeParams = { profileId: 'profile-b', eventId: '103' };
+    rerender(<EventDetail />);
+    expect(h.zoomReset).toHaveBeenCalledTimes(2);
   });
 
   it('fetches the event via the route profileId\'s client and query key', () => {
