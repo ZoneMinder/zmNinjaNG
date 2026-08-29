@@ -15,13 +15,25 @@ Read before tests, UI work, navigation work, or platform checks.
   show it fail (`node scripts/proven-red.mjs <base> <head>` does this in a
   worktree; CI runs it on every PR). A bug fix starts with that red command,
   shown, before any code is read for a theory.
+- That script skips e2e, which needs a server, so an e2e scenario is proven
+  red by hand: `git stash push <source file>`, `npx bddgen`, `npx playwright
+  test --grep "<scenario name>"`, then `git stash pop`. Skipping it hides a
+  scenario that skips itself or asserts the wrong thing (refs #382).
 - Route new tests by tier: pure logic in `lib/`, stores, and hooks gets unit tests; user-visible behavior or navigation gets a feature e2e scenario plus units for the logic beneath; native-only flows rely on manual device checks. E2e asserts the journey, units the edge cases; do not cover the same assertion in both tiers.
 - Unit tests live beside source in `__tests__/`.
 - Browser e2e uses `app/tests/features/*.feature` and screen-specific step files in `app/tests/steps/`. Do not add direct Playwright specs.
+- Rename or add a step and the generated specs go stale: run `npx bddgen`
+  (`npm run test:e2e` does it first). A stale `.features-gen` reports
+  `Missing step`, which reads like a failing test and is not one.
 - Test UI and navigation changes with relevant feature e2e.
 - New interactive UI needs a kebab-case `data-testid`. Repeated elements suffix the entity id (`monitor-card-${monitor.Id}`); variants suffix kind or role (`assistant-message-${msg.role}`).
 - Do not use fixed `waitForTimeout`. Use auto-retrying `expect`.
 - Capability-based e2e skips must derive from API or fixture data, never visibility of UI under test. When capability exists, assert the UI.
+- Pages that stay mounted across a route param change (`/monitors/:id`,
+  `/events/:id`) repaint their content either way, so a DOM property such as a
+  transform is green with or without the fix. Assert the state that survives
+  the repaint, such as a control that only renders while the hook holds the
+  old value (refs #382).
 - Every `Then` step asserts, through `expect` or an `assert*` helper, and every step definition is referenced by a feature. `app/src/tests/e2e-steps.test.ts` fails the unit suite otherwise, so a step that cannot fail and a step nothing runs both surface without an e2e run.
 
 ## Platforms

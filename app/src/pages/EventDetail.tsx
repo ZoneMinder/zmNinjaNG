@@ -318,6 +318,15 @@ export default function EventDetail() {
   // Pinch-to-zoom and pan for event video/image
   const zoomPan = useZoomPan({ maxScale: 4 });
 
+  // Zoom belongs to the frame the user zoomed into, not to the page. Stepping
+  // to another event keeps this component mounted (the route element is not
+  // keyed on the id), so without this the next event arrived magnified and
+  // panned to the previous one's framing (refs #382).
+  const resetZoom = zoomPan.reset;
+  useEffect(() => {
+    resetZoom();
+  }, [id, resetZoom]);
+
   // Frame carousel viewer (#272): the full-size image covers the player, so
   // playback pauses while it is open and resumes on close if it was running.
   // The player is held structurally so this page does not import video.js.
