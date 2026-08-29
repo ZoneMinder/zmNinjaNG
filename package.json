@@ -40,7 +40,6 @@
     "prepare": "husky"
   },
   "devDependencies": {
-    "@wdio/cli": "^9.26.1",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.8"
   },
