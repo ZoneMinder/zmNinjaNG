@@ -291,6 +291,17 @@ export default function NotificationSettings() {
     // outcome; settings.enabled is only the user's intent. Reporting the
     // toggle told users push was active when registration had failed.
     if (mode === 'direct' && settings?.enabled) {
+      // FCM registration is native-only (pushNotifications.initialize returns
+      // on web), so notificationId can never be set here. A red "not
+      // registered" would damn an impossibility; say what is actually true.
+      if (!Platform.isNative) {
+        return (
+          <Badge variant="secondary" className="gap-1.5">
+            <AlertCircle className="h-3 w-3" />
+            {t('notifications.status.direct_native_only')}
+          </Badge>
+        );
+      }
       if (!settings?.notificationId) {
         return (
           <Badge variant="destructive" className="gap-1.5">

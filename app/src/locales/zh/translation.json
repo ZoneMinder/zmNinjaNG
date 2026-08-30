@@ -999,7 +999,8 @@
       "disconnected": "已断开",
       "connecting": "连接中...",
       "direct_active": "直连模式已激活",
-      "direct_not_registered": "直连模式未注册"
+      "direct_not_registered": "直连模式未注册",
+      "direct_native_only": "直连模式需要移动应用"
     },
     "switch_profile_title": "切换配置文件？",
     "switch_profile_desc": "此通知来自\"{{profile}}\"。切换到此配置文件以查看事件？",
