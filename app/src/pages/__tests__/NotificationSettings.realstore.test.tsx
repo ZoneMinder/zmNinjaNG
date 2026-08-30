@@ -17,6 +17,7 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { useNotificationStore } from '../../stores/notifications';
 import { Platform } from '../../lib/platform';
+import { getEventPoller } from '../../services/eventPoller';
 
 // Platform.isNative is a getter; spy on it rather than assigning.
 let nativeSpy: ReturnType<typeof vi.spyOn> | undefined;
@@ -53,7 +54,7 @@ vi.mock('../../api/notifications', () => ({
   checkNotificationsApiSupport: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('../../services/eventPoller', () => ({
-  getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
+  getEventPoller: vi.fn(() => ({ isRunning: () => false, stop: vi.fn() })),
   stopEventPoller: vi.fn(),
 }));
 vi.mock('../../components/NotificationBadge', () => ({
@@ -146,15 +147,28 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
     nativeSpy = undefined;
   });
 
-  it('on web says direct mode needs the mobile app: registration cannot happen here', () => {
-    // jsdom is the web platform; no Platform override.
+  it('off-native reports the poller, which is how direct mode delivers there', () => {
+    // jsdom is the web platform; no Platform override. The suite's eventPoller
+    // mock reports isRunning() false, so the badge must say the poller is
+    // stopped -- and never the FCM registered/not-registered split, which
+    // cannot happen off-native.
     useNotificationStore.getState().updateProfileSettings(profileA.id, {
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
     renderPage();
-    expect(screen.getByText('notifications.status.direct_native_only').textContent)
-      .toBe('notifications.status.direct_native_only');
-    expect(screen.queryByText('notifications.status.direct_not_registered')).toBeNull();
+    expect(screen.getByText('notifications.status.direct_poller_stopped').textContent)
+      .toBe('notifications.status.direct_poller_stopped');
+    expect(screen.queryByText('notifications.status.direct_registering')).toBeNull();
+  });
+
+  it('off-native shows polling when the poller runs', () => {
+    vi.mocked(getEventPoller).mockReturnValue({ isRunning: () => true, stop: vi.fn() } as never);
+    useNotificationStore.getState().updateProfileSettings(profileA.id, {
+      enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
+    });
+    renderPage();
+    expect(screen.getByText('notifications.status.direct_polling').textContent)
+      .toBe('notifications.status.direct_polling');
   });
 
   it('says not registered when direct push is on but registration never succeeded', () => {
@@ -163,8 +177,8 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
     renderPage();
-    expect(screen.getByText('notifications.status.direct_not_registered').textContent)
-      .toBe('notifications.status.direct_not_registered');
+    expect(screen.getByText('notifications.status.direct_registering').textContent)
+      .toBe('notifications.status.direct_registering');
     expect(screen.queryByText('notifications.status.direct_active')).toBeNull();
   });
 

@@ -92,6 +92,8 @@ export interface PushNotificationData {
 export class MobilePushService {
   private isInitialized = false;
   private currentToken: string | null = null;
+  // `${profileId}:${token}` of the direct-mode registration in flight or done.
+  private registrationKey: string | null = null;
 
   /**
    * Initialize push notifications (mobile only)
@@ -236,7 +238,8 @@ export class MobilePushService {
           if (notifId) {
             log.push('Deleting notification via ZM API (direct mode)', LogLevel.INFO, { notificationId: notifId });
             await deleteNotification(getSession(asProfileId(profileId)).client, notifId);
-            gates.updateProfileSettings(profileId, { notificationId: null });
+            gates.updateProfileSettings(profileId, { notificationId: null, notificationToken: null });
+            this.registrationKey = null;
           }
         } else {
           // ES mode: deregister via websocket
@@ -429,6 +432,28 @@ export class MobilePushService {
     const settings = gates.notifications.getProfileSettings(profileId);
 
     if (settings.notificationMode === 'direct') {
+      // Same token, same server row: a restart re-runs initialize() with the
+      // token it registered last launch, and re-POSTing it hits ZM's
+      // Notifications.Token unique index. Monitor filters and badge counts
+      // sync through updateNotification, so skipping the create loses nothing.
+      if (settings.notificationId && settings.notificationToken === token) {
+        log.push('FCM token already registered with ZM API', LogLevel.INFO, {
+          notificationId: settings.notificationId,
+        });
+        return;
+      }
+
+      // A cold enable delivers the same token twice - getToken() resolves it
+      // and the tokenReceived listener fires with it - and both used to POST
+      // it, so the loser got an HTTP 500 duplicate-entry error. Claim the
+      // token before the first await, so the twin call has something to see.
+      const key = `${profileId}:${token}`;
+      if (this.registrationKey === key) {
+        log.push('FCM token registration already in progress', LogLevel.INFO);
+        return;
+      }
+      this.registrationKey = key;
+
       // Direct mode: register via ZM REST API (no websocket needed)
       try {
         const platform = Capacitor.getPlatform() as 'android' | 'ios';
@@ -451,9 +476,12 @@ export class MobilePushService {
           profile: currentProfile?.name,
         });
 
-        gates.notifications.updateProfileSettings(profileId, { notificationId: result.Id });
+        gates.notifications.updateProfileSettings(profileId, { notificationId: result.Id, notificationToken: token });
         log.push('Successfully registered FCM token via ZM API', LogLevel.INFO, { notificationId: result.Id });
       } catch (error) {
+        // Let the next attempt retry: a failed registration must not look
+        // like a completed one.
+        this.registrationKey = null;
         log.push('Failed to register FCM token via ZM API', LogLevel.ERROR, error);
       }
     } else {

@@ -158,6 +158,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   enabled: false,
   notificationMode: 'es',
   notificationId: null,
+  notificationToken: null,
   host: '',
   port: NOTIFICATIONS_SERVICE.defaultPort,
   ssl: true,

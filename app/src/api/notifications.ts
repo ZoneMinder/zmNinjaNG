@@ -31,8 +31,11 @@ interface NotificationResponse {
 }
 
 /**
- * Register or upsert an FCM token with the ZM server.
- * If the token already exists, updates the existing row.
+ * Register an FCM token with the ZM server.
+ * Notifications.Token is uniquely indexed server-side: re-posting a token the
+ * server already holds fails with an HTTP 500 duplicate-entry error rather
+ * than updating the row. Callers keep the returned Id and update through
+ * updateNotification instead.
  */
 export async function registerToken(
   client: ApiClient,

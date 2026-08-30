@@ -55,8 +55,12 @@ vi.mock('../../components/notifications/ProfileNotificationConnector', () => ({
   ),
 }));
 
+const pushSetupCalls = vi.hoisted(() => [] as Array<{ enabled?: boolean; notificationMode?: string } | null>);
+
 vi.mock('../../hooks/useNotificationPushSetup', () => ({
-  useNotificationPushSetup: () => {},
+  useNotificationPushSetup: ({ settings }: { settings: { enabled?: boolean; notificationMode?: string } | null }) => {
+    pushSetupCalls.push(settings);
+  },
 }));
 
 vi.mock('../../hooks/useNotificationDelivered', () => ({
@@ -197,5 +201,43 @@ describe('NotificationHandler All-mode fan-out (refs #337)', () => {
     const { getByTestId } = renderHandler();
 
     expect(getByTestId('connector-profile-a')).toBeInTheDocument();
+  });
+});
+
+// Direct mode never opens a websocket, so nothing in `connections` changes when
+// the user enables it. Unless this component subscribes to profileSettings, it
+// never re-renders and useNotificationPushSetup keeps its stale `enabled:false`
+// settings -- FCM registration never runs and the badge stays "not registered"
+// until an unrelated ES connect happens to re-render it.
+describe('NotificationHandler settings subscription', () => {
+  beforeEach(() => {
+    pushSetupCalls.length = 0;
+    useNotificationStore.setState({
+      profileEvents: {},
+      profileSettings: {},
+      currentProfileId: null,
+    });
+    seedProfiles([makeProfile(PROFILE_ID, { name: 'Test Profile', portalUrl: 'http://zm.local' })]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
+  it('passes updated settings to push setup when direct mode is enabled', () => {
+    useNotificationStore.getState().updateProfileSettings(PROFILE_ID, {
+      enabled: false,
+      notificationMode: 'direct',
+    });
+    renderHandler();
+    expect(pushSetupCalls.at(-1)?.enabled).toBe(false);
+
+    act(() => {
+      useNotificationStore.getState().updateProfileSettings(PROFILE_ID, { enabled: true });
+    });
+
+    expect(pushSetupCalls.at(-1)?.enabled).toBe(true);
+    expect(pushSetupCalls.at(-1)?.notificationMode).toBe('direct');
   });
 });

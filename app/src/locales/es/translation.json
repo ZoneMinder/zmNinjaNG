@@ -999,8 +999,9 @@
       "disconnected": "Desconectado",
       "connecting": "Conectando...",
       "direct_active": "Modo directo activo",
-      "direct_not_registered": "Modo directo no registrado",
-      "direct_native_only": "El modo directo requiere la app móvil"
+      "direct_registering": "Esperando el registro",
+      "direct_polling": "Consultando eventos",
+      "direct_poller_stopped": "Sondeo detenido"
     },
     "switch_profile_title": "Cambiar perfil?",
     "switch_profile_desc": "Esta notificacion es de \"{{profile}}\". Cambiar a este perfil para ver el evento?",
