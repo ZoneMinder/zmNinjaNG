@@ -121,7 +121,13 @@ describe('AGENTS.md stays portable', () => {
     // demands (proven-red job, quality ratchet), P1 the out-of-scope ledger
     // and acceptance lines; the verification section was compressed to pay
     // for half of it.
-    const WORD_BUDGET = 2100;
+    // 2100 -> 4000 (maintainer decision, 2026-08-30): headroom, not a target.
+    // Context windows stopped being the constraint; instruction-following
+    // degrades with rule count, not file size, so the discipline stays the
+    // same: gates over prose, playbooks over always-loaded text, and every
+    // addition still answers "can a script check this instead". The files
+    // sit at ~2100; treat the gap as room for future rules, not an invitation.
+    const WORD_BUDGET = 4000;
     const words = (f: string) =>
       fs.readFileSync(path.join(repoRoot, f), 'utf8').split(/\s+/).filter(Boolean).length;
     const total = words('AGENTS.md') + words('AGENTS.project.md') + words('CLAUDE.md');
