@@ -310,11 +310,14 @@ export default function NotificationSettings() {
           </Badge>
         );
       }
+      // Amber, not destructive: registration runs asynchronously after the
+      // toggle, so this is the normal in-between state as often as it is a
+      // failure.
       if (!settings?.notificationId) {
         return (
-          <Badge variant="destructive" className="gap-1.5">
-            <AlertCircle className="h-3 w-3" />
-            {t('notifications.status.direct_not_registered')}
+          <Badge variant="default" className="gap-1.5 bg-amber-500">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            {t('notifications.status.direct_registering')}
           </Badge>
         );
       }

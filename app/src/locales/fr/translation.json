@@ -999,7 +999,7 @@
       "disconnected": "Déconnecté",
       "connecting": "Connexion...",
       "direct_active": "Mode direct actif",
-      "direct_not_registered": "Mode direct non enregistré",
+      "direct_registering": "En attente d'enregistrement",
       "direct_polling": "Interrogation des événements",
       "direct_poller_stopped": "Interrogation arrêtée"
     },

@@ -999,7 +999,7 @@
       "disconnected": "Getrennt",
       "connecting": "Verbinde...",
       "direct_active": "Direktmodus aktiv",
-      "direct_not_registered": "Direktmodus nicht registriert",
+      "direct_registering": "Warte auf Registrierung",
       "direct_polling": "Fragt Ereignisse ab",
       "direct_poller_stopped": "Abfrage läuft nicht"
     },

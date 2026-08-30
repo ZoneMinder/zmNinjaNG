@@ -158,7 +158,7 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
     renderPage();
     expect(screen.getByText('notifications.status.direct_poller_stopped').textContent)
       .toBe('notifications.status.direct_poller_stopped');
-    expect(screen.queryByText('notifications.status.direct_not_registered')).toBeNull();
+    expect(screen.queryByText('notifications.status.direct_registering')).toBeNull();
   });
 
   it('off-native shows polling when the poller runs', () => {
@@ -177,8 +177,8 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
     renderPage();
-    expect(screen.getByText('notifications.status.direct_not_registered').textContent)
-      .toBe('notifications.status.direct_not_registered');
+    expect(screen.getByText('notifications.status.direct_registering').textContent)
+      .toBe('notifications.status.direct_registering');
     expect(screen.queryByText('notifications.status.direct_active')).toBeNull();
   });
 

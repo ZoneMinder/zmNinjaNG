@@ -999,7 +999,7 @@
       "disconnected": "Desconectado",
       "connecting": "Conectando...",
       "direct_active": "Modo directo activo",
-      "direct_not_registered": "Modo directo no registrado",
+      "direct_registering": "Esperando el registro",
       "direct_polling": "Consultando eventos",
       "direct_poller_stopped": "Sondeo detenido"
     },
