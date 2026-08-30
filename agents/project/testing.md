@@ -20,6 +20,16 @@ Read before tests, UI work, navigation work, or platform checks.
   test --grep "<scenario name>"`, then `git stash pop`. Skipping it hides a
   scenario that skips itself or asserts the wrong thing (refs #382).
 - Route new tests by tier: pure logic in `lib/`, stores, and hooks gets unit tests; user-visible behavior or navigation gets a feature e2e scenario plus units for the logic beneath; native-only flows rely on manual device checks. E2e asserts the journey, units the edge cases; do not cover the same assertion in both tiers.
+- Store-backed code is tested through `app/src/tests/profile-fixture.ts`:
+  two hoisted one-liners mock `api/store-gates` and `lib/security/secureStorage`
+  with their `tests/fake-*` stand-ins, `seedProfiles([...])` fills the real
+  profile, settings and auth stores, and `installApiClient(id, fakeApiClient({
+  '/monitors.json': body }))` scripts the HTTP boundary so the real session
+  registry, hooks and components run. An unscripted request rejects. Reset
+  with `resetProfileFixture()` and `resetFakeStoreGates()` in `afterEach`.
+  The reference is `hooks/__tests__/useMonitors.test.tsx`. Never mock
+  `zustand/react/shallow` as a passthrough: it hides the selector loop the
+  real store exists to catch, and three files were doing it.
 - Unit tests live beside source in `__tests__/`.
 - Browser e2e uses `app/tests/features/*.feature` and screen-specific step files in `app/tests/steps/`. Do not add direct Playwright specs.
 - Rename or add a step and the generated specs go stale: run `npx bddgen`
