@@ -13,10 +13,21 @@ const testDir = defineBddConfig({
 
 export default defineConfig({
   testDir,
+  // Serial everywhere, not just in CI. These scenarios share one ZoneMinder
+  // and one app: they create and delete profiles, archive events, and toggle
+  // per-profile settings, so running them concurrently makes them fight over
+  // the same state. Locally that produced six or seven phantom failures a run
+  // that all passed serially, which is #237 reappearing - that issue was
+  // closed without changing this line.
+  //
+  // It matters beyond developer patience: make_release.sh runs this suite
+  // before it will tag a release, and a gate that cries wolf gets bypassed.
+  // Set E2E_WORKERS to override when you know the subset you are running is
+  // independent.
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.E2E_WORKERS ? Number(process.env.E2E_WORKERS) : 1,
   reporter: 'html',
 
   timeout: 30000,

@@ -59,6 +59,14 @@ npm run test:e2e:ios-tablet
 
 Never run two web e2e suites in one checkout. They share generated files and result paths.
 
+The suite runs serially (`workers: 1`) everywhere, not only in CI. These
+scenarios share one ZoneMinder and one app: they create and delete profiles,
+archive events, and toggle per-profile settings, so concurrent workers fight
+over the same state. A local parallel run produced six or seven phantom
+failures that all passed serially, and chasing them cost a session. That is
+#237, which was closed without changing the config. A full run is ~18 minutes;
+`E2E_WORKERS=4` overrides it when the subset you are running is independent.
+
 
 ## Traps that have burned agents (each cost a fix round)
 
