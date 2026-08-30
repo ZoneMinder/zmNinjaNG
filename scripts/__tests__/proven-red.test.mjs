@@ -95,3 +95,10 @@ test('a ratchet baseline is bookkeeping, not source', () => {
   assert.deepEqual(split.source, []);
   assert.equal(skipReason('test: migrate', split), 'no source file changed');
 });
+
+test('a repo-hygiene gate under app/src/tests is gate work, not a unit test to prove', () => {
+  const split = classify(['app/src/tests/quality-ratchet.test.ts', 'scripts/proven-red.mjs']);
+  assert.deepEqual(split.unitTests, []);
+  assert.deepEqual(split.testSupport, ['app/src/tests/quality-ratchet.test.ts']);
+  assert.match(skipReason('fix: x', split), /gate/);
+});

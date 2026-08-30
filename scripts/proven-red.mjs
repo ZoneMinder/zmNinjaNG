@@ -32,7 +32,10 @@ import { fileURLToPath } from 'node:url';
 
 export const SKIP_TYPES = ['docs', 'chore', 'ci', 'refactor', 'build', 'style', 'test'];
 
-const UNIT_TEST = /^app\/src\/.*\.test\.(ts|tsx)$/;
+// app/src/tests/ holds the repo-hygiene gates. A new assertion there is
+// proven red against a scratch violation (testing playbook), not against the
+// previous commit, where the violation it guards against does not exist yet.
+const UNIT_TEST = /^app\/src\/(?!tests\/).*\.test\.(ts|tsx)$/;
 const TEST_SUPPORT = /^app\/src\/tests\/|\/__tests__\/|^app\/tests\/steps\//;
 // Ratchet baselines record a count; changing one is bookkeeping, not
 // behaviour. Counting them as source made a pure test migration (tests
@@ -61,7 +64,7 @@ export function skipReason(title, { unitTests, testSupport, source }) {
   const type = /^([a-z]+)(\(.+\))?!?:/.exec(title ?? '')?.[1];
   if (type && SKIP_TYPES.includes(type)) return `title type "${type}" carries no behavior change`;
   if (testSupport.length > 0) {
-    return 'only browser e2e or test-support files changed; e2e needs a server and runs in its own job';
+    return 'only browser e2e, gate, or test-support files changed; e2e needs a server, and a gate is proven red by scratch violation';
   }
   return null;
 }
