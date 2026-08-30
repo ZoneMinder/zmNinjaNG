@@ -102,6 +102,7 @@ function makeSettings(overrides: Partial<NotificationSettings> = {}): Notificati
     enabled: true,
     notificationMode: 'es',
     notificationId: null,
+    notificationToken: null,
     host: 'es.example.com',
     port: 9000,
     ssl: false,
@@ -303,7 +304,57 @@ describe('registerTokenWithServer()', () => {
         profile: 'Home',
       })
     );
-    expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', { notificationId: 42 });
+    expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', {
+      notificationId: 42,
+      notificationToken: 'fcm-token-123',
+    });
+  });
+
+  // The FCM token arrives twice on a cold enable: once from getToken() and
+  // once from the tokenReceived listener. Both used to POST it, and ZM's
+  // Notifications.Token unique index answered the loser with an HTTP 500
+  // "Duplicate entry" that surfaced as a registration failure.
+  it('registers once when the same token arrives twice concurrently', async () => {
+    gates.notifications.getProfileSettings = vi.fn().mockReturnValue(makeSettings({ notificationMode: 'direct' }));
+    let resolveRegister: (value: { Id: number }) => void = () => {};
+    mockRegisterToken.mockImplementation(() => new Promise((resolve) => { resolveRegister = resolve; }));
+
+    const service = new MobilePushService();
+    await service.initialize();
+    const second = service.registerTokenWithServer();
+    resolveRegister({ Id: 42 });
+    await second;
+
+    expect(mockRegisterToken).toHaveBeenCalledTimes(1);
+  });
+
+  // A cold start re-runs initialize() with the same token. Without the
+  // stored token the POST repeats every launch and fails the same way.
+  it('skips the POST when this token is already registered for the profile', async () => {
+    gates.notifications.getProfileSettings = vi.fn().mockReturnValue(
+      makeSettings({ notificationMode: 'direct', notificationId: 42, notificationToken: 'fcm-token-123' })
+    );
+
+    const service = new MobilePushService();
+    await service.initialize();
+
+    expect(mockRegisterToken).not.toHaveBeenCalled();
+  });
+
+  it('re-registers when the stored token no longer matches', async () => {
+    gates.notifications.getProfileSettings = vi.fn().mockReturnValue(
+      makeSettings({ notificationMode: 'direct', notificationId: 42, notificationToken: 'stale-token' })
+    );
+    mockRegisterToken.mockResolvedValue({ Id: 43 });
+
+    const service = new MobilePushService();
+    await service.initialize();
+
+    expect(mockRegisterToken).toHaveBeenCalledTimes(1);
+    expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', {
+      notificationId: 43,
+      notificationToken: 'fcm-token-123',
+    });
   });
 
   it('swallows a direct-mode registration failure instead of throwing', async () => {
@@ -375,7 +426,10 @@ describe('deregister()', () => {
     await service.deregister();
 
     expect(mockDeleteNotification).toHaveBeenCalledWith(expect.anything(), 99);
-    expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', { notificationId: null });
+    expect(gates.notifications.updateProfileSettings).toHaveBeenCalledWith('profile-1', {
+      notificationId: null,
+      notificationToken: null,
+    });
     expect(mockRemoveAllListeners).toHaveBeenCalled();
     expect(mockDeleteToken).toHaveBeenCalled();
     expect(service.getToken()).toBeNull();

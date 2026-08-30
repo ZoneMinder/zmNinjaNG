@@ -67,6 +67,7 @@ export interface NotificationSettings {
     enabled: boolean;
     notificationMode: NotificationMode; // 'es' = Event Server websocket, 'direct' = ZM REST API
     notificationId: number | null; // Server-side Notifications.Id (direct mode)
+    notificationToken: string | null; // FCM token that notificationId was created for
     host: string; // Event server host (e.g., "zm.example.com")
     port: number; // Event server port (default 9000)
     ssl: boolean; // Use wss:// instead of ws://
