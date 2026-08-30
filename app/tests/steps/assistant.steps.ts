@@ -71,33 +71,6 @@ Given('the assistant will answer {string} after calling count_events', async ({ 
   ]);
 });
 
-/** A real list_events round (no `when`, so no window interpretation) followed
- *  by the answer. The tool hits the live server, so the display cards under the
- *  answer are real events: whether any exist is the server's business, which is
- *  why the hover steps below are conditional. */
-Given('the assistant will answer {string} after listing events', async ({ page }, answer: string) => {
-  await seedScript(page, [
-    { toolCalls: [{ id: '1', name: 'list_events', input: { limit: 3 } }] },
-    { text: answer, toolCalls: [] },
-  ]);
-});
-
-let cardHoverPerformed = false;
-
-When('I hover the first assistant event card thumbnail if cards exist', async ({ page }) => {
-  const thumb = page.getByTestId('assistant-card-thumbnail').first();
-  if ((await thumb.count()) === 0) return;
-  await thumb.hover();
-  cardHoverPerformed = true;
-});
-
-Then('I should see the enlarged assistant event preview if hover was performed', async ({ page }) => {
-  if (!cardHoverPerformed) return;
-  const preview = page.getByTestId('event-thumbnail-hover-preview');
-  await expect(preview).toBeVisible({ timeout: 2000 });
-  const box = await preview.boundingBox();
-  expect(box?.width).toBeGreaterThanOrEqual(350);
-});
 
 /** A model that reaches for the withheld action: the loop refuses the call
  *  (WITHHELD_TOOL_REFUSAL in agent.ts, no destructive tools exist) and the

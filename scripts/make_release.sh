@@ -188,36 +188,64 @@ echo ""
 # Nothing runs this suite automatically. CI's e2e job ends green without
 # running: it needs ZM_HOST_1/ZM_USER_1/ZM_PASSWORD_1, no such secret is set,
 # and the test server is on a private LAN a hosted runner cannot reach. So a
-# release is the last point where a broken user journey is still catchable,
-# and it is caught here or not at all. One scenario stayed red for two weeks
-# before this existed.
-if [ "$SKIP_E2E" = "true" ]; then
-    echo "⚠️  Skipping browser e2e (--skip-e2e)."
-    echo "   Nothing else runs these journeys. A regression in them ships."
-    echo ""
-elif [ ! -f "app/.env" ]; then
-    echo "❌ Error: app/.env not found, so the e2e suite has no server to drive."
-    echo ""
-    echo "Create it from app/.env.example with ZM_HOST_1, ZM_USER_1 and"
-    echo "ZM_PASSWORD_1, or re-run with --skip-e2e to release without the gate."
-    echo ""
-    exit 1
-else
+# release is the last point where a broken user journey is still catchable.
+# One scenario stayed red for two weeks before this existed.
+#
+# It is a prompt rather than an unconditional run because it is slow: 168
+# scenarios, serial, about 18 minutes, and roughly 45% of that is the app
+# booting under the Vite dev server once per scenario. A gate that always
+# costs 18 minutes gets routed around; one that asks gets answered.
+run_e2e() {
+    if [ ! -f "app/.env" ]; then
+        echo "❌ Error: app/.env not found, so the e2e suite has no server to drive."
+        echo ""
+        echo "Create it from app/.env.example with ZM_HOST_1, ZM_USER_1 and"
+        echo "ZM_PASSWORD_1, or answer 'n' to release without the gate."
+        echo ""
+        return 1
+    fi
+
     echo "🧪 Running browser e2e against the server in app/.env..."
-    echo "   20 feature files; this takes a few minutes."
+    echo "   168 scenarios, serial. Roughly 18 minutes."
     echo ""
     if npm run test:e2e; then
         echo ""
         echo "✅ Browser e2e passed"
         echo ""
+        return 0
+    fi
+
+    echo ""
+    echo "❌ Browser e2e failed. Not tagging $TAG."
+    echo ""
+    echo "Fix the failures, or re-run and answer 'n' if the test server itself"
+    echo "is down rather than the app being broken."
+    echo ""
+    return 1
+}
+
+warn_no_e2e() {
+    echo "⚠️  Skipping browser e2e."
+    echo "   Nothing else runs these journeys: CI's e2e job reports green"
+    echo "   without executing them. A regression in them ships."
+    echo ""
+}
+
+if [ "$SKIP_E2E" = "true" ]; then
+    warn_no_e2e
+elif [ ! -t 0 ]; then
+    # No terminal to ask on. Run it rather than silently skipping the only
+    # thing that covers these journeys.
+    run_e2e || exit 1
+else
+    echo "The browser e2e suite takes about 18 minutes and is the only"
+    echo "automated cover these user journeys get."
+    read -p "Run it before tagging $TAG? [Y/n] " -n 1 -r
+    echo ""
+    if [[ $REPLY =~ ^[Nn]$ ]]; then
+        warn_no_e2e
     else
-        echo ""
-        echo "❌ Browser e2e failed. Not tagging $TAG."
-        echo ""
-        echo "Fix the failures, or re-run with --skip-e2e if the test server"
-        echo "itself is down rather than the app being broken."
-        echo ""
-        exit 1
+        run_e2e || exit 1
     fi
 fi
 
