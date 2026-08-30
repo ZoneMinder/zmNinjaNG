@@ -240,6 +240,31 @@ elif [ ! -t 0 ]; then
 else
     echo "The browser e2e suite takes about 18 minutes and is the only"
     echo "automated cover these user journeys get."
+    # Every run writes app/.e2e-last-run.json (Playwright's json reporter).
+    # Recommend a run when that is missing, red, or older than two weeks.
+    E2E_MAX_AGE_DAYS=14
+    if [ -f app/.e2e-last-run.json ]; then
+        E2E_LAST=$(node -e '
+            const s = require("./app/.e2e-last-run.json").stats || {};
+            const days = Math.floor((Date.now() - new Date(s.startTime)) / 864e5);
+            const red = (s.unexpected || 0) > 0;
+            console.log(`${days} ${red ? "red" : "green"} ${s.expected || 0} ${s.unexpected || 0}`);
+        ' 2>/dev/null)
+        read -r E2E_AGE E2E_RESULT E2E_PASSED E2E_FAILED <<< "$E2E_LAST"
+        if [ -z "$E2E_AGE" ]; then
+            echo "⚠️  app/.e2e-last-run.json is unreadable; treating e2e as never run."
+        elif [ "$E2E_RESULT" = "red" ]; then
+            echo "⚠️  Last e2e run was $E2E_AGE day(s) ago and FAILED ($E2E_FAILED failed, $E2E_PASSED passed)."
+            echo "   Recommended: run it now."
+        elif [ "$E2E_AGE" -gt "$E2E_MAX_AGE_DAYS" ]; then
+            echo "⚠️  Last e2e run was $E2E_AGE days ago (passed, $E2E_PASSED scenarios)."
+            echo "   That is older than $E2E_MAX_AGE_DAYS days. Recommended: run it now."
+        else
+            echo "ℹ️  Last e2e run was $E2E_AGE day(s) ago and passed ($E2E_PASSED scenarios)."
+        fi
+    else
+        echo "⚠️  No record of an e2e run on this machine. Recommended: run it now."
+    fi
     read -p "Run it before tagging $TAG? [Y/n] " -n 1 -r
     echo ""
     if [[ $REPLY =~ ^[Nn]$ ]]; then
