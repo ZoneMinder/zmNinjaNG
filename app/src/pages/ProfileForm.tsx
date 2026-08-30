@@ -14,6 +14,7 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../components/ui/card';
 import { useProfileStore } from '../stores/profile';
 import type { ApiClient } from '../api/client';
+import type { LoginResponse } from '../api/types';
 import { createStoreApiClient } from '../api/store-gates';
 import { asProfileId } from '../api/types';
 import { discoverUrls, DiscoveryError } from '../services/discovery';
@@ -174,6 +175,9 @@ export default function ProfileForm() {
       // so there's no session to pull a client from; both branches below build
       // one directly for this candidate profileId. Refs #337.
       let profileClient: ApiClient | undefined;
+      // Discovery logs in to read ZM_PATH_ZMS; reuse that instead of paying
+      // ZoneMinder's ~0.6s password hash a second time.
+      let discoveredLogin: LoginResponse | undefined;
 
       if (showManualUrls) {
         // Manual URL entry mode
@@ -227,6 +231,7 @@ export default function ProfileForm() {
         confirmedPortalUrl = discovered.portalUrl;
         apiUrl = discovered.apiUrl;
         cgiUrl = discovered.cgiUrl;
+        discoveredLogin = discovered.loginResponse;
         log.profileForm('URLs discovered', LogLevel.INFO, { portalUrl: confirmedPortalUrl, apiUrl, cgiUrl });
       }
 
@@ -267,8 +272,13 @@ export default function ProfileForm() {
           useAuthStore.getState().logout(profileId);
           log.profileForm('Cleared existing auth state for fresh login', LogLevel.DEBUG);
 
-          await useAuthStore.getState().login(profileId, normalizedUsername, password, profileClient);
-          log.profileForm('Login successful', LogLevel.INFO);
+          if (discoveredLogin) {
+            useAuthStore.getState().setTokens(profileId, discoveredLogin);
+            log.profileForm('Reused the login discovery performed', LogLevel.INFO);
+          } else {
+            await useAuthStore.getState().login(profileId, normalizedUsername, password, profileClient);
+            log.profileForm('Login successful', LogLevel.INFO);
+          }
 
           // Note: ZMS path is already fetched during discovery when credentials are provided,
           // so cgiUrl is already set correctly. We just need to fetch Go2RTC path here.
@@ -328,10 +338,9 @@ export default function ProfileForm() {
         await switchProfile(profileId);
       }
 
-      // Navigate after a short delay
-      setTimeout(() => {
-        navigate(returnTo);
-      }, 1000);
+      // The destination page is the confirmation; a fixed pause before it
+      // was one more second on every first connect.
+      navigate(returnTo);
     } catch (err: unknown) {
       // The failed/cancelled attempt may have landed real tokens under this
       // profile's minted id (a successful login before a later step, e.g.

@@ -325,3 +325,41 @@ describe('discoverZoneminder', () => {
     });
   });
 });
+
+/**
+ * Discovery logs in to read ZM_PATH_ZMS, then threw the token away, and the
+ * add-server form logged in again for the same credentials 600ms later:
+ * ZoneMinder's login.json hashes the password server-side and is 20x slower
+ * than any other endpoint. The login discovery already did is now part of
+ * its result, so a caller that holds it can skip its own.
+ */
+describe('discovery returns the login it performed', () => {
+  it('carries the validated login response alongside the URLs', async () => {
+    const mockGet = vi.fn()
+      .mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } })          // getVersion probe
+      .mockResolvedValueOnce({ status: 200, data: { config: { Value: '/zm/cgi-bin/nph-zms' } } }); // ZM_PATH_ZMS
+    const mockPost = vi.fn().mockResolvedValueOnce({
+      status: 200,
+      data: { access_token: 'tok', access_token_expires: 3600, refresh_token: 'ref', refresh_token_expires: 86400, version: '1.36.0', apiversion: '2.0' },
+    });
+    (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+
+    const result = await discoverZoneminder('http://zm.example.com', { username: 'admin', password: 'pw' });
+
+    expect(result.cgiUrl).toBe('http://zm.example.com/zm/cgi-bin/nph-zms');
+    expect(result.loginResponse?.access_token).toBe('tok');
+    expect(result.loginResponse?.refresh_token).toBe('ref');
+    expect(mockPost).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits the login when the server answered without tokens', async () => {
+    const mockGet = vi.fn().mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
+    const mockPost = vi.fn().mockResolvedValueOnce({ status: 200, data: {} });
+    (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+
+    const result = await discoverZoneminder('http://zm.example.com', { username: 'admin', password: 'pw' });
+
+    expect(result.loginResponse).toBeUndefined();
+    expect(result.cgiUrl).toBe('http://zm.example.com/zm/cgi-bin/nph-zms');
+  });
+});
