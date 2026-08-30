@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
@@ -91,14 +91,6 @@ vi.mock('../../../hooks/useServerUrls', () => ({
   }),
 }));
 
-vi.mock('../../../stores/notifications', () => {
-  const state = { profileEvents: {} };
-  const store = (selector: (s: typeof state) => unknown) => selector(state);
-  store.getState = () => state;
-  store.subscribe = () => () => {};
-  return { useNotificationStore: store };
-});
-
 describe('MontageMonitor', () => {
   const mockMonitor: Monitor = {
     Id: '1',
@@ -149,6 +141,7 @@ describe('MontageMonitor', () => {
     });
 
     useMonitorSeenStore.setState({ profileWatermarks: {} });
+    useNotificationStore.setState({ profileEvents: {} });
     mockRouterNavigate.mockClear();
 
     vi.clearAllMocks();
@@ -157,6 +150,7 @@ describe('MontageMonitor', () => {
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useNotificationStore.setState({ profileEvents: {} });
   });
 
   it('renders monitor name and status', async () => {
@@ -556,9 +550,20 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
   } as Profile;
 
   const seedEvent = (receivedAt: number) => {
-    (useNotificationStore.getState() as { profileEvents: Record<string, unknown[]> }).profileEvents = {
-      'profile-1': [{ MonitorId: '1', receivedAt }],
-    };
+    useNotificationStore.setState({
+      profileEvents: {
+        'profile-1': [{
+          MonitorId: 1,
+          MonitorName: 'Front Door',
+          EventId: 1,
+          Cause: 'Motion',
+          Name: 'Front Door',
+          receivedAt,
+          read: false,
+          source: 'poll',
+        }],
+      },
+    });
   };
 
   beforeEach(() => {
@@ -567,7 +572,7 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
   });
 
   afterEach(() => {
-    (useNotificationStore.getState() as { profileEvents: Record<string, unknown[]> }).profileEvents = {};
+    useNotificationStore.setState({ profileEvents: {} });
     resetProfileFixture();
     resetFakeStoreGates();
   });
@@ -577,7 +582,7 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
     const { rerender } = renderTile();
     expect(screen.queryByRole('status')).toBeNull();
 
-    seedEvent(Date.now()); // fresh alarm
+    act(() => seedEvent(Date.now())); // fresh alarm
     rerender(
       <MontageMonitor
         monitor={mockMonitorForAlarm}

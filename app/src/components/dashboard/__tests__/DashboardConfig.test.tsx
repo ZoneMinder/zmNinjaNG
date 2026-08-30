@@ -9,13 +9,7 @@ import { asProfileId, mintVirtualProfileId } from '../../../api/types';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 import { useProfileStore } from '../../../stores/profile';
-
-const addWidget = vi.fn();
-
-vi.mock('../../../stores/dashboard', () => ({
-  useDashboardStore: (selector: (state: { addWidget: typeof addWidget }) => unknown) =>
-    selector({ addWidget }),
-}));
+import { useDashboardStore } from '../../../stores/dashboard';
 
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({
@@ -36,13 +30,13 @@ vi.mock('react-i18next', () => ({
 
 describe('DashboardConfig', () => {
   beforeEach(() => {
-    addWidget.mockClear();
     seedProfiles([makeProfile('profile-1', { name: 'Home' })]);
   });
 
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   it('adds a monitor widget when a monitor is selected', () => {
@@ -55,14 +49,13 @@ describe('DashboardConfig', () => {
     });
     fireEvent.click(screen.getByTestId('widget-add-button'));
 
-    expect(addWidget).toHaveBeenCalledWith(
-      'profile-1',
-      expect.objectContaining({
-        type: 'monitor',
-        title: 'My Monitor',
-        settings: { monitorIds: ['1'], feedFit: 'contain' },
-      })
-    );
+    const widgets = useDashboardStore.getState().widgets['profile-1'];
+    expect(widgets).toHaveLength(1);
+    expect(widgets[0]).toMatchObject({
+      type: 'monitor',
+      title: 'My Monitor',
+      settings: { monitorIds: ['1'], feedFit: 'contain' },
+    });
   });
 
   it('adds an events widget without requiring a monitor selection', () => {
@@ -72,13 +65,12 @@ describe('DashboardConfig', () => {
     fireEvent.click(screen.getByTestId('widget-type-events'));
     fireEvent.click(screen.getByTestId('widget-add-button'));
 
-    expect(addWidget).toHaveBeenCalledWith(
-      'profile-1',
-      expect.objectContaining({
-        type: 'events',
-        settings: { monitorId: undefined, eventCount: 5 },
-      })
-    );
+    const widgets = useDashboardStore.getState().widgets['profile-1'];
+    expect(widgets).toHaveLength(1);
+    expect(widgets[0]).toMatchObject({
+      type: 'events',
+      settings: { monitorId: undefined, eventCount: 5 },
+    });
   });
 
   // Each aggregate keeps its own dashboard, so a widget added while a group is
@@ -96,6 +88,8 @@ describe('DashboardConfig', () => {
     fireEvent.click(screen.getByTestId('widget-type-events'));
     fireEvent.click(screen.getByTestId('widget-add-button'));
 
-    expect(addWidget).toHaveBeenCalledWith(group, expect.objectContaining({ type: 'events' }));
+    const widgets = useDashboardStore.getState().widgets[group];
+    expect(widgets).toHaveLength(1);
+    expect(widgets[0]).toMatchObject({ type: 'events' });
   });
 });

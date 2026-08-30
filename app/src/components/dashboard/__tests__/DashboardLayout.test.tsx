@@ -9,42 +9,26 @@ import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../../api
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 import { useProfileStore } from '../../../stores/profile';
+import { useDashboardStore, type DashboardWidget } from '../../../stores/dashboard';
 
-// Track calls to updateLayouts to verify it's not called during sync
-const updateLayouts = vi.fn();
-const mockWidgets = [
-  {
-    id: 'widget-1',
-    type: 'monitor',
-    title: 'Front Door',
-    layout: { x: 0, y: 0, w: 4, h: 3 },
-    settings: { monitorIds: ['1'], feedFit: 'contain' },
-  },
-  {
-    id: 'widget-2',
-    type: 'events',
-    title: 'Recent Events',
-    layout: { x: 4, y: 0, w: 4, h: 3 },
-    settings: { eventCount: 5 },
-  },
-];
-
-// Which bucket the widgets live in. Mutable so a test can put the app in a
-// group and check the key it reads.
-let widgetBuckets: Record<string, typeof mockWidgets> = {};
-
-vi.mock('../../../stores/dashboard', () => ({
-  useDashboardStore: (selector: (state: {
-    widgets: Record<string, typeof mockWidgets>;
-    isEditing: boolean;
-    updateLayouts: typeof updateLayouts;
-  }) => unknown) =>
-    selector({
-      widgets: widgetBuckets,
-      isEditing: true,
-      updateLayouts,
-    }),
-}));
+function makeWidgets(): DashboardWidget[] {
+  return [
+    {
+      id: 'widget-1',
+      type: 'monitor',
+      title: 'Front Door',
+      layout: { i: 'widget-1', x: 0, y: 0, w: 4, h: 3 },
+      settings: { monitorIds: ['1'], feedFit: 'contain' },
+    },
+    {
+      id: 'widget-2',
+      type: 'events',
+      title: 'Recent Events',
+      layout: { i: 'widget-2', x: 4, y: 0, w: 4, h: 3 },
+      settings: { eventCount: 5 },
+    },
+  ];
+}
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -91,8 +75,8 @@ vi.mock('../DashboardWidget', () => ({
 describe('DashboardLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    widgetBuckets = { 'profile-1': mockWidgets };
     seedProfiles([makeProfile('profile-1', { name: 'Test' })]);
+    useDashboardStore.setState({ widgets: { 'profile-1': makeWidgets() }, isEditing: true });
     capturedOnLayoutChange = null;
     // Mock requestAnimationFrame
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
@@ -104,6 +88,7 @@ describe('DashboardLayout', () => {
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   it('renders widgets from the store', () => {
@@ -117,7 +102,7 @@ describe('DashboardLayout', () => {
   // group's id, not the All Servers sentinel's (refs #337).
   it("renders the active group's own widgets", () => {
     const group = mintVirtualProfileId();
-    widgetBuckets = { [group]: mockWidgets, [ALL_PROFILES_ID]: [] };
+    useDashboardStore.setState({ widgets: { [group]: makeWidgets(), [ALL_PROFILES_ID]: [] } });
     useProfileStore.setState({
       currentProfileId: group,
       virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [asProfileId('profile-1')] }],
@@ -129,38 +114,35 @@ describe('DashboardLayout', () => {
   });
 
   it('renders empty state when no widgets exist', () => {
-    // This test documents expected behavior - empty widgets renders empty state
-    // The current mock always has widgets, so this test verifies the component renders
-    // with the mocked data. Full empty state testing is done in E2E tests.
-  });
+    useDashboardStore.setState({ widgets: { 'profile-1': [] } });
 
-  it('does not call updateLayouts during initial sync from store', async () => {
     render(<DashboardLayout />);
 
-    // Wait for the component to mount and sync
+    expect(screen.queryByTestId('grid-layout')).not.toBeInTheDocument();
+  });
+
+  it('does not touch the store during initial sync from store', async () => {
+    render(<DashboardLayout />);
+
     await waitFor(() => {
       expect(screen.getByTestId('grid-layout')).toBeInTheDocument();
     });
 
-    // Simulate a layout change event (as if react-grid-layout emitted it)
-    // during the sync phase - this should NOT trigger updateLayouts
-    // because isSyncingFromStoreRef is true
-    
-    // The initial render should not have called updateLayouts
-    expect(updateLayouts).not.toHaveBeenCalled();
+    // The initial render's own layout sync must not write back to the
+    // store - it should still hold exactly what beforeEach seeded.
+    expect(useDashboardStore.getState().widgets['profile-1']).toEqual(makeWidgets());
   });
 
-  it('calls updateLayouts when layout changes in edit mode after sync completes', async () => {
+  it('writes the changed layout to the store once sync completes', async () => {
     render(<DashboardLayout />);
 
-    // Wait for mount and initial sync
     await waitFor(() => {
       expect(screen.getByTestId('grid-layout')).toBeInTheDocument();
     });
 
     // Wait for requestAnimationFrame to complete (sync flag reset)
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 50));
     });
 
     // Now simulate a user-initiated layout change
@@ -173,52 +155,10 @@ describe('DashboardLayout', () => {
       });
     }
 
-    // After sync completes and user makes a change, updateLayouts should be called
     await waitFor(() => {
-      expect(updateLayouts).toHaveBeenCalledWith('profile-1', {
-        lg: expect.arrayContaining([
-          expect.objectContaining({ i: 'widget-1', w: 6, h: 4 }),
-        ]),
-      });
-    });
-  });
-
-  it('only updates store on actual layout changes, not identical calls', async () => {
-    // This test verifies that the areLayoutsEqual check prevents unnecessary store updates
-    // by checking that calling with identical layouts after a change doesn't trigger another update
-    
-    render(<DashboardLayout />);
-
-    await waitFor(() => {
-      expect(screen.getByTestId('grid-layout')).toBeInTheDocument();
-    });
-
-    // Wait for sync flag to reset
-    await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 50));
-    });
-
-    // Clear any calls from initial render
-    updateLayouts.mockClear();
-
-    // Make a change
-    const changedLayout = [
-      { i: 'widget-1', x: 0, y: 0, w: 6, h: 4 },
-      { i: 'widget-2', x: 6, y: 0, w: 4, h: 3 },
-    ];
-
-    if (capturedOnLayoutChange) {
-      act(() => {
-        capturedOnLayoutChange!(changedLayout);
-      });
-    }
-
-    // First call should update the store
-    expect(updateLayouts).toHaveBeenCalledTimes(1);
-    
-    // Verify it was called with the changed layout
-    expect(updateLayouts).toHaveBeenCalledWith('profile-1', {
-      lg: changedLayout,
+      const widget1 = useDashboardStore.getState().widgets['profile-1'].find((w) => w.id === 'widget-1');
+      expect(widget1?.layout).toMatchObject({ w: 6, h: 4 });
+      expect(widget1?.layouts?.lg).toMatchObject({ w: 6, h: 4 });
     });
   });
 
@@ -228,7 +168,7 @@ describe('DashboardLayout', () => {
       { i: 'widget-1', x: 0, y: 0, w: 4, h: 3 },
       { i: 'widget-2', x: 4, y: 0, w: 4, h: 3 },
     ];
-    
+
     const layout2 = [
       { i: 'widget-1', x: 0, y: 0, w: 4, h: 3 },
       { i: 'widget-2', x: 4, y: 0, w: 4, h: 3 },

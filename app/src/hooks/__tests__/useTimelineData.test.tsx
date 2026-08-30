@@ -15,6 +15,7 @@ import { getMonitors } from '../../api/monitors';
 import { TIMELINE } from '../../lib/zmninja-ng-constants';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useNotificationStore } from '../../stores/notifications';
 
 vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
 vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
@@ -25,53 +26,6 @@ vi.mock('../../api/events', () => ({
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
-}));
-
-// Manual notification store mock: callable as a hook with a selector, plus
-// getState/subscribe used imperatively by the hook under test.
-const notificationStore = vi.hoisted(() => {
-  interface MockNotificationEvent {
-    EventId: number;
-    MonitorId: number;
-    MonitorName?: string;
-    Cause?: string;
-    Notes?: string;
-    receivedAt: number;
-  }
-  interface MockState {
-    profileEvents: Record<string, MockNotificationEvent[]>;
-    getProfileSettings: (profileId: string) => { enabled: boolean };
-  }
-  const listeners = new Set<(state: MockState) => void>();
-  const state: MockState = {
-    profileEvents: {},
-    getProfileSettings: () => ({ enabled: true }),
-  };
-  return {
-    state,
-    listeners,
-    emit() {
-      for (const listener of listeners) listener(state);
-    },
-    reset() {
-      state.profileEvents = {};
-      state.getProfileSettings = () => ({ enabled: true });
-      listeners.clear();
-    },
-  };
-});
-
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector(notificationStore.state),
-    {
-      getState: () => notificationStore.state,
-      subscribe: (listener: (s: unknown) => void) => {
-        notificationStore.listeners.add(listener);
-        return () => notificationStore.listeners.delete(listener);
-      },
-    },
-  ),
 }));
 
 const apiEvent = {
@@ -108,20 +62,28 @@ function createWrapper(queryClient?: QueryClient) {
 }
 
 function emitLiveEvent(eventId: number, receivedAt: number) {
-  notificationStore.state.profileEvents['profile-1'] = [
-    { EventId: eventId, MonitorId: 5, MonitorName: 'Door', Cause: 'Motion', Notes: 'person', receivedAt },
-    ...(notificationStore.state.profileEvents['profile-1'] ?? []),
-  ];
   act(() => {
-    notificationStore.emit();
+    useNotificationStore.setState((state) => ({
+      profileEvents: {
+        ...state.profileEvents,
+        'profile-1': [
+          { EventId: eventId, MonitorId: 5, MonitorName: 'Door', Cause: 'Motion', Notes: 'person', receivedAt } as never,
+          ...(state.profileEvents['profile-1'] ?? []),
+        ],
+      },
+    }));
   });
 }
 
 describe('useTimelineData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    notificationStore.reset();
+    useNotificationStore.setState({ profileEvents: {}, profileSettings: {}, connections: {} });
     seedProfiles(['profile-1'], { current: 'profile-1' });
+    // The live-injection effect gates on the profile's own notifications
+    // being enabled (DEFAULT_SETTINGS.enabled is false) - flip it on through
+    // the real action, the way a user's settings would.
+    useNotificationStore.getState().updateProfileSettings('profile-1', { enabled: true });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [] } as never);
     vi.mocked(getEvents).mockResolvedValue({ events: [] } as never);
   });
@@ -130,6 +92,7 @@ describe('useTimelineData', () => {
     vi.useRealTimers();
     resetProfileFixture();
     resetFakeStoreGates();
+    useNotificationStore.setState({ profileEvents: {}, profileSettings: {}, connections: {} });
   });
 
   it('transforms API events into timeline events', async () => {

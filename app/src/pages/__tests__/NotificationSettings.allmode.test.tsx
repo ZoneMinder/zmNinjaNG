@@ -8,6 +8,7 @@ import NotificationSettings from '../NotificationSettings';
 import { getMonitors } from '../../api/monitors';
 import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { useNotificationStore } from '../../stores/notifications';
 import { useProfileStore } from '../../stores/profile';
 import { seedProfiles, resetProfileFixture, fakeApiClient, makeProfile, type FakeApiClient } from '../../tests/profile-fixture';
 import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
@@ -33,38 +34,16 @@ vi.mock('../../services/eventPoller', () => ({
   getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
   stopEventPoller: vi.fn(),
 }));
-// Keyed by profileId so All-mode tests can give each profile a distinct
-// config; a test that never populates it falls back to the previous
-// hardcoded settings (unaffected).
-const { notificationSettingsFixture, DEFAULT_TEST_SETTINGS } = vi.hoisted(() => {
-  const DEFAULT_TEST_SETTINGS = { enabled: true, notificationMode: 'es' as const, host: 'zm.local' };
-  return {
-    DEFAULT_TEST_SETTINGS,
-    notificationSettingsFixture: {} as Record<string, { enabled: boolean; notificationMode: 'es' | 'direct'; host: string }>,
-  };
+// startEventPoller reaches into eventPoller/session wiring only exercised by
+// mode-switch flows none of these tests trigger; stubbed defensively the same
+// way useNotificationAutoConnect.test.ts does. Everything else - settings,
+// unread counts, connections - runs against the real store.
+vi.mock('../../stores/notifications', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../stores/notifications')>();
+  return { ...actual, startEventPoller: vi.fn() };
 });
 
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: (selector: (state: {
-    getProfileSettings: (profileId: string) => unknown;
-    getUnreadCount: () => number;
-    updateProfileSettings: () => void;
-    setMonitorFilter: () => void;
-    connect: () => void;
-    disconnect: () => void;
-    connections: Record<string, string>;
-  }) => unknown) =>
-    selector({
-      getProfileSettings: (profileId: string) => notificationSettingsFixture[profileId] ?? DEFAULT_TEST_SETTINGS,
-      getUnreadCount: () => 0,
-      updateProfileSettings: vi.fn(),
-      setMonitorFilter: vi.fn(),
-      connect: vi.fn(),
-      disconnect: vi.fn(),
-      connections: {},
-    }),
-  startEventPoller: vi.fn(),
-}));
+const DEFAULT_TEST_SETTINGS = { enabled: true, notificationMode: 'es' as const, host: 'zm.local' };
 vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,
 }));
@@ -126,8 +105,9 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
   let clientB: FakeApiClient;
 
   beforeEach(() => {
-    Object.keys(notificationSettingsFixture).forEach((key) => delete notificationSettingsFixture[key]);
     seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
+    useNotificationStore.getState().updateProfileSettings(profileA.id, { ...DEFAULT_TEST_SETTINGS });
+    useNotificationStore.getState().updateProfileSettings(profileB.id, { ...DEFAULT_TEST_SETTINGS });
     clientA = fakeApiClient({ '/servers.json': { servers: [] } });
     clientB = fakeApiClient({ '/servers.json': { servers: [] } });
     installApiClient(profileA.id, clientA);
@@ -137,6 +117,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useNotificationStore.setState({ profileSettings: {}, connections: {}, profileEvents: {} });
   });
 
   it('gates the whole (server-scoped) page behind a picker defaulted to the first profile, and switching fetches via B', async () => {
@@ -153,8 +134,8 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
   });
 
   it('renders a per-profile overview row for each profile with correct enabled/mode/host values', async () => {
-    notificationSettingsFixture['profile-a'] = { enabled: true, notificationMode: 'es', host: 'a.zm.local' };
-    notificationSettingsFixture['profile-b'] = { enabled: false, notificationMode: 'direct', host: '' };
+    useNotificationStore.getState().updateProfileSettings(profileA.id, { enabled: true, notificationMode: 'es', host: 'a.zm.local' });
+    useNotificationStore.getState().updateProfileSettings(profileB.id, { enabled: false, notificationMode: 'direct', host: '' });
 
     renderPage();
 
@@ -173,8 +154,8 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
   });
 
   it('clicking an overview row selects that profile, switching the form to show its host', async () => {
-    notificationSettingsFixture['profile-a'] = { enabled: true, notificationMode: 'es', host: 'a.zm.local' };
-    notificationSettingsFixture['profile-b'] = { enabled: true, notificationMode: 'es', host: 'b.zm.local' };
+    useNotificationStore.getState().updateProfileSettings(profileA.id, { enabled: true, notificationMode: 'es', host: 'a.zm.local' });
+    useNotificationStore.getState().updateProfileSettings(profileB.id, { enabled: true, notificationMode: 'es', host: 'b.zm.local' });
 
     renderPage();
 

@@ -6,6 +6,7 @@ import { ALL_PROFILES_ID } from '../../api/types';
 import type { HistoryEvent } from '../../components/notifications/NotificationHistoryItem';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useNotificationStore } from '../../stores/notifications';
 
 vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
 vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
@@ -17,10 +18,6 @@ vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,
 }));
 
-const markEventRead = vi.fn();
-const markAllRead = vi.fn();
-const clearEvents = vi.fn();
-
 const profileA = makeProfile('profile-a', { name: 'Home' });
 const profileB = makeProfile('profile-b', { name: 'Work' });
 
@@ -28,25 +25,13 @@ const eventFrom = (_profileId: string, eventId: number, receivedAt: number, read
   EventId: eventId,
   MonitorId: 7,
   MonitorName: 'Cam',
+  Name: 'Cam',
   Cause: 'Motion',
   Notes: '',
   receivedAt,
   read,
   source: 'websocket' as const,
 });
-
-let storeState: { profileEvents: Record<string, ReturnType<typeof eventFrom>[]> };
-
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: (selector: (state: unknown) => unknown) =>
-    selector({
-      ...storeState,
-      getEvents: (id: string) => storeState.profileEvents[id] || [],
-      markEventRead,
-      markAllRead,
-      clearEvents,
-    }),
-}));
 
 // Row rendering (thumbnails/hover preview/owning-profile resolution) is
 // covered by NotificationHistoryItem's own tests; stub it here so this file
@@ -78,12 +63,13 @@ describe('NotificationHistory page (refs #337)', () => {
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useNotificationStore.setState({ profileEvents: {} });
   });
 
   describe('single mode (unchanged)', () => {
     beforeEach(() => {
       seedProfiles([profileA], { current: profileA.id });
-      storeState = { profileEvents: { [profileA.id]: [eventFrom(profileA.id, 1, 100)] } };
+      useNotificationStore.setState({ profileEvents: { [profileA.id]: [eventFrom(profileA.id, 1, 100)] } });
     });
 
     it('lists only the current profile bucket, no chips', () => {
@@ -96,12 +82,12 @@ describe('NotificationHistory page (refs #337)', () => {
   describe('All mode', () => {
     beforeEach(() => {
       seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
-      storeState = {
+      useNotificationStore.setState({
         profileEvents: {
           [profileA.id]: [eventFrom(profileA.id, 1, 100), eventFrom(profileA.id, 2, 300)],
           [profileB.id]: [eventFrom(profileB.id, 3, 200)],
         },
-      };
+      });
     });
 
     it('shows the union of every profile, newest first, with a chip per row', () => {
@@ -118,21 +104,26 @@ describe('NotificationHistory page (refs #337)', () => {
       const rows = screen.getAllByTestId('notification-history-item');
       // Second row (receivedAt 200) belongs to profile B.
       fireEvent.click(rows[1].querySelector('[data-testid="row-mark-read"]')!);
-      expect(markEventRead).toHaveBeenCalledWith(profileB.id, 3);
+      const event3 = useNotificationStore.getState().profileEvents[profileB.id].find((e) => e.EventId === 3);
+      expect(event3?.read).toBe(true);
+      // Profile A's own bucket is untouched by a B-owned event's mark-read.
+      expect(useNotificationStore.getState().profileEvents[profileA.id].every((e) => !e.read)).toBe(true);
     });
 
     it('mark all read iterates every scope profile', () => {
       renderPage();
       fireEvent.click(screen.getByText('notification_history.mark_all_read'));
-      expect(markAllRead).toHaveBeenCalledWith(profileA.id);
-      expect(markAllRead).toHaveBeenCalledWith(profileB.id);
+      const events = useNotificationStore.getState().profileEvents;
+      expect(events[profileA.id].every((e) => e.read)).toBe(true);
+      expect(events[profileB.id].every((e) => e.read)).toBe(true);
     });
 
     it('tap-through uses the All-mode deep-link path and marks the owning bucket read', () => {
       renderPage();
       const rows = screen.getAllByTestId('notification-history-item');
       fireEvent.click(rows[1].querySelector('[data-testid="row-view"]')!);
-      expect(markEventRead).toHaveBeenCalledWith(profileB.id, 3);
+      const event3 = useNotificationStore.getState().profileEvents[profileB.id].find((e) => e.EventId === 3);
+      expect(event3?.read).toBe(true);
     });
   });
 });

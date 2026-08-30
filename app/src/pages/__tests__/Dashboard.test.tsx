@@ -15,28 +15,18 @@ import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { useProfileStore } from '../../stores/profile';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useDashboardStore, type DashboardWidget } from '../../stores/dashboard';
 
 vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
 vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-const widget = {
+const widget: DashboardWidget = {
   id: 'widget-1',
   type: 'events',
   title: 'Recent Events',
-  layout: { x: 0, y: 0, w: 4, h: 3 },
+  layout: { i: 'widget-1', x: 0, y: 0, w: 4, h: 3 },
   settings: { eventCount: 5 },
 };
-
-let widgetBuckets: Record<string, Array<typeof widget>> = {};
-
-vi.mock('../../stores/dashboard', () => ({
-  useDashboardStore: (selector: (state: Record<string, unknown>) => unknown) =>
-    selector({ widgets: widgetBuckets, isEditing: false, toggleEditMode: vi.fn() }),
-}));
-
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
-}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -57,17 +47,18 @@ vi.mock('../../components/common/RefreshButton', () => ({
 
 describe('Dashboard page', () => {
   beforeEach(() => {
-    widgetBuckets = {};
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   it("shows the edit chrome for the current profile's own widgets", () => {
     const [profile] = seedProfiles(['profile-1']);
-    widgetBuckets = { [profile.id]: [widget] };
+    useDashboardStore.setState({ widgets: { [profile.id]: [widget] } });
 
     render(<Dashboard />);
 
@@ -81,7 +72,7 @@ describe('Dashboard page', () => {
       currentProfileId: group,
       virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [profile.id] }],
     });
-    widgetBuckets = { [group]: [widget], [ALL_PROFILES_ID]: [] };
+    useDashboardStore.setState({ widgets: { [group]: [widget], [ALL_PROFILES_ID]: [] } });
 
     render(<Dashboard />);
 
@@ -95,7 +86,7 @@ describe('Dashboard page', () => {
       currentProfileId: group,
       virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [profile.id] }],
     });
-    widgetBuckets = { [ALL_PROFILES_ID]: [widget] };
+    useDashboardStore.setState({ widgets: { [ALL_PROFILES_ID]: [widget] } });
 
     render(<Dashboard />);
 

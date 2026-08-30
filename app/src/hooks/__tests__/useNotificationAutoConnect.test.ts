@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { PluginListenerHandle } from '@capacitor/core';
 import { useNotificationAutoConnect } from '../useNotificationAutoConnect';
+import { useNotificationStore } from '../../stores/notifications';
 import { asProfileId } from '../../api/types';
 
 // Mock logger
@@ -37,16 +38,19 @@ vi.mock('@capacitor/app', () => ({
   App: { addListener: mockAppAddListener },
 }));
 
-// Mock notification store (getState + poller wiring usage inside hook)
-const mockNotificationStoreState = { connections: {} as Record<string, string> };
+// The real notification store drives `connections`, which the hook reads
+// imperatively via getState() (not a reactive selector - refs #337 round 3).
+// Only startEventPoller is stubbed: it reaches into eventPoller/session
+// wiring this hook-level test has no business exercising.
 const mockStartEventPoller = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: {
-    getState: vi.fn(() => mockNotificationStoreState),
-  },
-  startEventPoller: (profileId: string) => mockStartEventPoller(profileId),
-}));
+vi.mock('../../stores/notifications', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../stores/notifications')>();
+  return {
+    ...actual,
+    startEventPoller: (profileId: string) => mockStartEventPoller(profileId),
+  };
+});
 
 // Mock event poller
 const mockStopEventPoller = vi.fn();
@@ -122,7 +126,7 @@ describe('useNotificationAutoConnect', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    mockNotificationStoreState.connections = {};
+    useNotificationStore.setState({ connections: {} });
     mockPlatform.isDesktopOrWeb = true;
     mockPlatform.isNative = false;
     mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
@@ -187,11 +191,11 @@ describe('useNotificationAutoConnect', () => {
     });
 
     // The ES-connect effect reads live connection state from the store
-    // directly (mockNotificationStoreState.connections), not the
+    // directly (useNotificationStore's connections), not the
     // isConnected/connectionState props - those are deliberately not
     // reactive deps on this effect (refs #337 round 3).
     it('does not connect when already connected', async () => {
-      mockNotificationStoreState.connections = { 'profile-1': 'connected' };
+      useNotificationStore.setState({ connections: { 'profile-1': 'connected' } });
       const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
@@ -204,7 +208,7 @@ describe('useNotificationAutoConnect', () => {
     });
 
     it('does not connect when connectionState is not "disconnected"', async () => {
-      mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
+      useNotificationStore.setState({ connections: { 'profile-1': 'connecting' } });
       const params = makeParams();
       renderHook(() => useNotificationAutoConnect(params));
 
@@ -258,7 +262,7 @@ describe('useNotificationAutoConnect', () => {
       const params = makeParams();
       // Simulate store having changed state by the time decrypt resolves
       params.getDecryptedPassword = vi.fn().mockImplementation(async () => {
-        mockNotificationStoreState.connections = { 'profile-1': 'connecting' };
+        useNotificationStore.setState({ connections: { 'profile-1': 'connecting' } });
         return 'secret';
       });
 

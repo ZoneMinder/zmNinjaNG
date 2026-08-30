@@ -8,6 +8,7 @@ import { getMonitors, getAlarmStatus } from '../../api/monitors';
 import enTranslation from '../../locales/en/translation.json';
 import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { useNotificationStore } from '../../stores/notifications';
 import { useAuthStore } from '../../stores/auth';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
@@ -87,6 +88,7 @@ async function freshImports() {
   // (imported through '../../api/store-gates') never actually reads from.
   const gates = (await import('../../api/store-gates')) as unknown as typeof import('../../tests/fake-store-gates');
   const settingsModule = await import('../../stores/settings');
+  const notificationsModule = await import('../../stores/notifications');
   return {
     LiveActivityFresh,
     getMonitors: vi.mocked(monitorsApi.getMonitors),
@@ -96,21 +98,10 @@ async function freshImports() {
     fakeApiClient: fixture.fakeApiClient,
     installApiClient: gates.installApiClient,
     useSettingsStore: settingsModule.useSettingsStore,
+    useNotificationStore: notificationsModule.useNotificationStore,
   };
 }
 
-// The real stores/notifications.ts module is heavy: importing it for real
-// pulls in stores/profile.ts, which subscribes to the auth store at module
-// load and throws against the bare mock above. resolvePollIntervalMs's exact
-// floor behavior is covered by stores/__tests__/notifications.test.ts; this
-// page only needs a poll interval to exist.
-vi.mock('../../stores/notifications', () => ({
-  resolvePollIntervalMs: () => 1000,
-  // No events for any profile: the accelerant selector always sees an empty
-  // hint set, so these tests exercise the plain poll path.
-  useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-    selector({ profileEvents: {} }),
-}));
 
 // Initializing the real i18next instance drags in its LanguageDetector setup;
 // instead this stub does the same lookup + interpolation i18next does, but
@@ -201,6 +192,7 @@ describe('LiveActivity', () => {
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useNotificationStore.setState({ profileEvents: {} });
     localStorage.clear();
   });
 
@@ -385,27 +377,21 @@ describe('LiveActivity', () => {
     // The trap this control exists to avoid: the monitor never stops alarming
     // here, so a dismissal that did not suppress re-entry would see the tile
     // pop straight back on the next poll and the button would read as broken.
-    vi.resetModules();
-    vi.doMock('../../stores/notifications', () => ({
-      resolvePollIntervalMs: () => 20,
-      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-        selector({ profileEvents: {} }),
-    }));
-
-    const f = await freshImports();
-    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
-      settings: { p1: { ...P1_SETTINGS } },
+    // A 20ms poll (via the real resolvePollIntervalMs, in normal bandwidth
+    // mode a straight pass-through of the seconds setting) keeps the test fast.
+    seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS, liveActivityPollSeconds: 0.02 } },
     });
-    f.getMonitors.mockResolvedValue(MONITORS as never);
+    mockMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       return { status: 2 } as never;
     });
 
-    render(<f.LiveActivityFresh />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     const dismiss = await screen.findByTestId('live-activity-dismiss-3');
     const callsAtDismiss = monitorThreeCalls;
@@ -425,30 +411,22 @@ describe('LiveActivity', () => {
   }, 10000);
 
   it('shows a monitor again when it alarms after a dismissal was released', async () => {
-    vi.resetModules();
-    vi.doMock('../../stores/notifications', () => ({
-      resolvePollIntervalMs: () => 20,
-      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-        selector({ profileEvents: {} }),
-    }));
-
-    const f = await freshImports();
-    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
-      settings: { p1: { ...P1_SETTINGS } },
+    seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS, liveActivityPollSeconds: 0.02 } },
     });
-    f.getMonitors.mockResolvedValue(MONITORS as never);
+    mockMonitors.mockResolvedValue(MONITORS as never);
 
     // Alarming, then quiet once dismissed, then alarming again: the second
     // alarm is new information and has to show.
     let quiet = false;
     let alarmAgain = false;
-    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       if (alarmAgain) return { status: 2 } as never;
       return { status: quiet ? 0 : 2 } as never;
     });
 
-    render(<f.LiveActivityFresh />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     const dismiss = await screen.findByTestId('live-activity-dismiss-3');
     act(() => {
@@ -475,32 +453,27 @@ describe('LiveActivity', () => {
     // The alarm poll never carries a cause, so the notification store is the
     // only source. Its event also promotes the monitor onto the page, which is
     // the accelerant path this fixture exercises at the same time.
-    vi.resetModules();
-    vi.doMock('../../stores/notifications', () => ({
-      resolvePollIntervalMs: () => 1000,
-      useNotificationStore: (
-        selector: (s: {
-          profileEvents: Record<
-            string,
-            { MonitorId: number; Cause: string; receivedAt: number }[]
-          >;
-        }) => unknown
-      ) =>
-        selector({
-          profileEvents: {
-            p1: [{ MonitorId: 3, Cause: 'Motion: All', receivedAt: Date.now() }],
-          },
-        }),
-    }));
-
-    const f = await freshImports();
-    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+    seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
       settings: { p1: { ...P1_SETTINGS } },
     });
-    f.getMonitors.mockResolvedValue(MONITORS as never);
-    f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
+    useNotificationStore.setState({
+      profileEvents: {
+        p1: [{
+          MonitorId: 3,
+          MonitorName: 'Front Door',
+          EventId: 1,
+          Cause: 'Motion: All',
+          Name: 'Front Door',
+          receivedAt: Date.now(),
+          read: false,
+          source: 'poll',
+        }],
+      },
+    });
+    mockMonitors.mockResolvedValue(MONITORS as never);
+    mockStatus.mockResolvedValue({ status: 0 } as never);
 
-    render(<f.LiveActivityFresh />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByTestId('live-activity-cause-3')).toHaveTextContent('Motion: All');
@@ -679,21 +652,13 @@ describe('LiveActivity', () => {
     // `tape` (not alarming), so that repeated for the length of an event's
     // tail: exactly the window before a tile dwells out. Winding down is
     // signalled by the state icon dropping out of the header instead. refs #313
-    vi.resetModules();
-    vi.doMock('../../stores/notifications', () => ({
-      resolvePollIntervalMs: () => 20,
-      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-        selector({ profileEvents: {} }),
-    }));
-
-    const f = await freshImports();
-    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
-      settings: { p1: { ...P1_SETTINGS } },
+    seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS, liveActivityPollSeconds: 0.02 } },
     });
-    f.getMonitors.mockResolvedValue(MONITORS as never);
+    mockMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarms once to enter the list, then stays quiet inside the 30s dwell,
@@ -701,7 +666,7 @@ describe('LiveActivity', () => {
       return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
     });
 
-    render(<f.LiveActivityFresh />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     // The tile is keyed by monitor id, so this is the same DOM node throughout;
     // capture how it looks while the monitor is still alarming.
@@ -722,29 +687,21 @@ describe('LiveActivity', () => {
     // state change through a view transition (absent in jsdom, so it falls
     // back to a plain update). A tile that stopped alarming still has to
     // leave, which is what proves the fallback path publishes anything at all.
-    vi.resetModules();
-    vi.doMock('../../stores/notifications', () => ({
-      resolvePollIntervalMs: () => 20,
-      useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-        selector({ profileEvents: {} }),
-    }));
-
-    const f = await freshImports();
-    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
-      // 10ms of dwell, so the window closes between two fast polls.
-      settings: { p1: { ...P1_SETTINGS, liveActivityDwellSeconds: 0.01 } },
+    seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      // 10ms of dwell, so the window closes between two fast polls; 20ms poll.
+      settings: { p1: { ...P1_SETTINGS, liveActivityDwellSeconds: 0.01, liveActivityPollSeconds: 0.02 } },
     });
-    f.getMonitors.mockResolvedValue(MONITORS as never);
+    mockMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
+    mockStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarming on the first poll only, quiet from then on.
       return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
     });
 
-    render(<f.LiveActivityFresh />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
@@ -976,22 +933,24 @@ describe('LiveActivity', () => {
           refetchProfile: vi.fn(),
         }),
       }));
-      // A real-store event for p1's monitor "3" only; p2's own "3" never
-      // fired a notification.
-      vi.doMock('../../stores/notifications', () => ({
-        resolvePollIntervalMs: () => 1000,
-        useNotificationStore: (
-          selector: (s: {
-            profileEvents: Record<string, { MonitorId: number; Cause: string; receivedAt: number }[]>;
-          }) => unknown
-        ) =>
-          selector({
-            profileEvents: { p1: [{ MonitorId: 3, Cause: 'Motion: All', receivedAt: Date.now() }] },
-          }),
-      }));
-
       const f = await freshImports();
       seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      // A real-store event for p1's monitor "3" only; p2's own "3" never
+      // fired a notification.
+      f.useNotificationStore.setState({
+        profileEvents: {
+          p1: [{
+            MonitorId: 3,
+            MonitorName: 'p1-cam3',
+            EventId: 1,
+            Cause: 'Motion: All',
+            Name: 'p1-cam3',
+            receivedAt: Date.now(),
+            read: false,
+            source: 'poll',
+          }],
+        },
+      });
       // Both idle by poll; the hint alone must promote p1's tile.
       f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 

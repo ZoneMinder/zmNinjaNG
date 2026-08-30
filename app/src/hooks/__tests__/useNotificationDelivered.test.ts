@@ -48,17 +48,6 @@ vi.mock('@capacitor-firebase/messaging', () => ({
   },
 }));
 
-// Mock stores (getState usage inside the listener callback)
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: {
-    getState: vi.fn(() => ({
-      currentProfileId: null,
-      addEvent: vi.fn(),
-      _updateBadge: vi.fn(),
-    })),
-  },
-}));
-
 describe('useNotificationDelivered', () => {
   beforeEach(() => {
     vi.clearAllMocks();
