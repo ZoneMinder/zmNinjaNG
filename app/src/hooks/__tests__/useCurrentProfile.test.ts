@@ -1,82 +1,24 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useCurrentProfile } from '../useCurrentProfile';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore, DEFAULT_SETTINGS } from '../../stores/settings';
 import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
-// Mock the stores
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: vi.fn(),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-vi.mock('../../stores/settings', () => {
-  const DEFAULT_SETTINGS = {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'system',
-    snapshotRefreshInterval: 3,
-    streamMaxFps: 10,
-    streamScale: 50,
-    montageByGroup: {},
-    eventMontageByGroup: {},
-    monitorDetailCycleSeconds: 0,
-    defaultEventLimit: 300,
-    eventsThumbnailFit: 'contain',
-    disableLogRedaction: false,
-    dashboardRefreshInterval: 30,
-  };
-  return {
-    useSettingsStore: vi.fn(),
-    DEFAULT_SETTINGS,
-    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw }),
-  };
-});
-
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
-}));
-
-const mockProfile = {
-  id: 'profile-1',
-  name: 'Home Server',
-  apiUrl: 'http://localhost/api',
-  portalUrl: 'http://localhost',
-  cgiUrl: 'http://localhost/cgi-bin',
-  isDefault: true,
-  createdAt: Date.now(),
-};
-
-const mockProfile2 = {
-  id: 'profile-2',
-  name: 'Work Server',
-  apiUrl: 'http://work/api',
-  portalUrl: 'http://work',
-  cgiUrl: 'http://work/cgi-bin',
-  isDefault: false,
-  createdAt: Date.now(),
-};
+import { seedProfiles, resetProfileFixture, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 describe('useCurrentProfile', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('returns null profile when no profile is selected', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: null,
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: null });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -86,48 +28,23 @@ describe('useCurrentProfile', () => {
   });
 
   it('returns the current profile when one is selected', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile, mockProfile2],
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1', 'profile-2'], { current: 'profile-1' });
 
     const { result } = renderHook(() => useCurrentProfile());
 
-    expect(result.current.currentProfile).toEqual(mockProfile);
+    // Compared against the live store entry rather than seedProfiles'
+    // returned snapshot: setting an auth token for 'profile-1' also fires the
+    // profile store's auth-subscribe effect, which stamps refreshToken onto
+    // the stored profile object after seeding returns.
+    const stored = useProfileStore.getState().profiles.find((p) => p.id === asProfileId('profile-1'));
+    expect(result.current.currentProfile).toEqual(stored);
     expect(result.current.hasProfile).toBe(true);
   });
 
   it('merges profile settings with defaults', () => {
-    const customSettings = {
-      viewMode: 'streaming' as const,
-      streamMaxFps: 15,
-    };
-
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {
-          'profile-1': customSettings,
-        },
-      };
-      return selector(state as never);
+    seedProfiles(['profile-1'], {
+      current: 'profile-1',
+      settings: { 'profile-1': { viewMode: 'streaming', streamMaxFps: 15 } },
     });
 
     const { result } = renderHook(() => useCurrentProfile());
@@ -141,51 +58,32 @@ describe('useCurrentProfile', () => {
   });
 
   it('returns correct profile when switching profiles', () => {
-    let currentProfileId = 'profile-1';
-
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile, mockProfile2],
-        currentProfileId,
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    const profiles = seedProfiles(['profile-1', 'profile-2'], { current: 'profile-1' });
 
     const { result, rerender } = renderHook(() => useCurrentProfile());
 
-    expect(result.current.currentProfile?.id).toBe('profile-1');
-    expect(result.current.currentProfile?.name).toBe('Home Server');
+    expect(result.current.currentProfile?.id).toBe(profiles[0].id);
+    expect(result.current.currentProfile?.name).toBe(profiles[0].name);
 
     // Switch to profile 2
-    currentProfileId = 'profile-2';
+    useProfileStore.setState({ currentProfileId: profiles[1].id });
     rerender();
 
-    expect(result.current.currentProfile?.id).toBe('profile-2');
-    expect(result.current.currentProfile?.name).toBe('Work Server');
+    expect(result.current.currentProfile?.id).toBe(profiles[1].id);
+    expect(result.current.currentProfile?.name).toBe(profiles[1].name);
   });
 
   it('returns null when current profile ID does not match any profile', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: 'non-existent-profile',
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: 'non-existent-profile' });
 
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    const { result } = renderHook(() => useCurrentProfile());
+
+    expect(result.current.currentProfile).toBeNull();
+    expect(result.current.hasProfile).toBe(false);
+  });
+
+  it('handles empty profiles array', () => {
+    seedProfiles([], { current: 'profile-1' });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -194,20 +92,11 @@ describe('useCurrentProfile', () => {
   });
 
   it('handles undefined profileSettings gracefully', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: undefined,
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    // Guards against corrupted persisted state: the real store never
+    // initializes profileSettings to undefined, but a hand-edited or
+    // partially-migrated localStorage blob could rehydrate one.
+    useSettingsStore.setState({ profileSettings: undefined as never });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -215,43 +104,10 @@ describe('useCurrentProfile', () => {
     expect(result.current.settings).toEqual(DEFAULT_SETTINGS);
   });
 
-  it('handles empty profiles array', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [],
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
-
-    const { result } = renderHook(() => useCurrentProfile());
-
-    expect(result.current.currentProfile).toBeNull();
-    expect(result.current.hasProfile).toBe(false);
-  });
-
   it('handles null profiles array gracefully', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: null,
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    // Same defense as above, for the profile store's own list.
+    useProfileStore.setState({ profiles: null as never });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -261,20 +117,7 @@ describe('useCurrentProfile', () => {
   });
 
   it('isAllMode is false for a real profile selection', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: 'profile-1',
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1' });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -282,20 +125,7 @@ describe('useCurrentProfile', () => {
   });
 
   it('isAllMode is true for the ALL_PROFILES_ID sentinel, with currentProfile and hasProfile unaffected', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: ALL_PROFILES_ID,
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: ALL_PROFILES_ID });
 
     const { result } = renderHook(() => useCurrentProfile());
 
@@ -308,20 +138,7 @@ describe('useCurrentProfile', () => {
   // flag treats it the same way; the flag says "aggregating", not "which
   // aggregate" (refs #337).
   it('isAllMode is true for a group id, with currentProfile and hasProfile unaffected', () => {
-    vi.mocked(useProfileStore).mockImplementation((selector) => {
-      const state = {
-        profiles: [mockProfile],
-        currentProfileId: mintVirtualProfileId(),
-      };
-      return selector(state as never);
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      const state = {
-        profileSettings: {},
-      };
-      return selector(state as never);
-    });
+    seedProfiles(['profile-1'], { current: mintVirtualProfileId() });
 
     const { result } = renderHook(() => useCurrentProfile());
 

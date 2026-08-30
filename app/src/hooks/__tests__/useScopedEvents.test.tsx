@@ -1,35 +1,23 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedEvents } from '../useScopedEvents';
-import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { getEvents } from '../../api/events';
-import { getSession } from '../../services/sessions';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { queryKeys } from '../../lib/query/query-keys';
 import { formatForServerInTz } from '../../lib/time';
-import { asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, type Profile } from '../../api/types';
+import type { ApiClient } from '../../api/client';
 import type { EventData, EventsResponse } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/events', () => ({
   getEvents: vi.fn(),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  // stores/profile.ts (pulled in transitively via lib/time.ts's
-  // useProfileStore import) calls registerSessionsGate at module scope;
-  // dropSession/dropAllSessions are its other named imports from this
-  // module. Stubbed so that module-level wiring doesn't throw here.
-  registerSessionsGate: vi.fn(),
-  dropSession: vi.fn(),
-  dropAllSessions: vi.fn(),
-}));
-
-vi.mock('../useProfileScope', () => ({
-  useProfileScope: vi.fn(),
 }));
 
 // Spy on the real useQueries (delegates to actual react-query) so the
@@ -45,7 +33,7 @@ vi.mock('@tanstack/react-query', async () => {
   return { ...actual, useQueries: useQueriesSpy };
 });
 
-const profileA = {
+const profileA: Profile = {
   id: asProfileId('profile-a'),
   name: 'Home',
   apiUrl: 'http://a/api',
@@ -56,7 +44,7 @@ const profileA = {
   timezone: 'UTC',
 };
 
-const profileB = {
+const profileB: Profile = {
   id: asProfileId('profile-b'),
   name: 'Work',
   apiUrl: 'http://b/api',
@@ -96,20 +84,14 @@ function createWrapper() {
   };
 }
 
-function mockScope(profiles: Array<typeof profileA>, mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
-  const scope =
-    mode === 'single'
-      ? { mode: 'single' as const, profile: profiles[0], profiles: [profiles[0]] as [typeof profileA], settings: {} }
-      : { mode: 'all' as const, profile: null, profiles, settings: {} };
-  vi.mocked(useProfileScope).mockReturnValue(scope as unknown as ProfileScope);
-}
-
-function sessionFor(p: typeof profileA) {
-  return {
-    profileId: p.id,
-    client: { profile: p.id } as unknown as import('../../api/client').ApiClient,
-    timezone: p.timezone,
-  };
+/** Seed the real profile store for the given scope and give each profile a
+ * distinguishable fake session client (getEvents is mocked directly, so the
+ * client only needs to carry which profile it belongs to). */
+function setupScope(profiles: Profile[], mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
+  seedProfiles(profiles, { current: mode === 'single' ? profiles[0].id : ALL_PROFILES_ID });
+  for (const p of profiles) {
+    installApiClient(p.id, { profile: p.id } as unknown as ApiClient);
+  }
 }
 
 const baseOptions = {
@@ -123,15 +105,16 @@ const baseOptions = {
 describe('useScopedEvents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getSession).mockImplementation((id) => {
-      const p = [profileA, profileB].find((pr) => pr.id === id);
-      return sessionFor(p ?? profileA);
-    });
     useEventFavoritesStore.setState({ profileFavorites: {} });
   });
 
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   it('orders merged events by true cross-timezone instant, not by wall-clock string', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       // A (UTC) at 14:00 vs B (America/New_York, EST=-05:00) at 10:00 the
@@ -150,7 +133,7 @@ describe('useScopedEvents', () => {
   });
 
   it('keeps colliding event ids distinct across profiles, tagged with the owning profile', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       return eventsResponse([event('1', isA ? '2026-01-15 09:00:00' : '2026-01-15 08:00:00')]);
@@ -169,7 +152,7 @@ describe('useScopedEvents', () => {
   });
 
   it('sums every profile\'s own totalCount, matching the single query\'s totalCount in single mode (refs #337)', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00'), event('2', '2026-01-15 08:00:00')]));
 
     const { result } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
@@ -177,7 +160,7 @@ describe('useScopedEvents', () => {
   });
 
   it('sums totalCount across profiles in All mode', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       return isA
@@ -194,7 +177,7 @@ describe('useScopedEvents', () => {
   // not every profile in scope - a per-profile breakdown is the minimal
   // addition that lets it recompute that without re-fetching (refs #337).
   it('exposes each profile\'s own totalCount alongside the summed total', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       return isA
@@ -208,7 +191,7 @@ describe('useScopedEvents', () => {
   });
 
   it('converts a shared date-range bound per profile using that profile\'s OWN timezone, not one shared value (refs #337)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     // A raw local datetime-local input string, as useEventFilters produces -
@@ -220,7 +203,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { startDateTime?: string };
 
     const forA = callFor(profileA)?.startDateTime;
@@ -241,8 +224,8 @@ describe('useScopedEvents', () => {
   // a hardcoded 'UTC' - the latter silently shifted the query window for
   // such a profile once Events.tsx switched to this hook.
   it('a profile without a timezone converts date filters using the browser zone, matching formatForServer byte-for-byte', async () => {
-    const profileNoTz = { ...profileA, timezone: undefined as unknown as string };
-    mockScope([profileNoTz], 'single');
+    const profileNoTz: Profile = { ...profileA, timezone: undefined };
+    setupScope([profileNoTz], 'single');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     const filters = { startDateTime: '2026-01-15T10:00:00' };
@@ -256,7 +239,7 @@ describe('useScopedEvents', () => {
   });
 
   it('fans out only each profile\'s own composite monitorId selection (refs #337 I6)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     renderHook(
@@ -266,7 +249,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string; eventIds?: string[] };
 
     // A's selection stays A's - B never gets filtered by a monitor id that
@@ -281,7 +264,7 @@ describe('useScopedEvents', () => {
   });
 
   it('a profile owning none of the selected monitors contributes NO events (refs #337)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     // Mirrors the getEvents contract an empty id set has (covered directly in
     // api/__tests__/events.test.ts): it short-circuits to an empty response
     // without a request, rather than falling through unfiltered.
@@ -305,7 +288,7 @@ describe('useScopedEvents', () => {
   });
 
   it('joins multiple composite ids owned by the same profile into one comma list (refs #337 I6)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     renderHook(
@@ -315,7 +298,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { monitorId?: string };
 
     expect(callFor(profileA)?.monitorId).toBe('3,5');
@@ -323,7 +306,7 @@ describe('useScopedEvents', () => {
   });
 
   it('resolves favoritesOnly per profile - a profile with no favorites contributes nothing (refs #337 I7)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     useEventFavoritesStore.getState().addFavorite(profileA.id, '3');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
@@ -331,7 +314,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { eventIds?: string[] };
 
     // A's own favorite reaches its query; B (no favorites of its own) gets
@@ -342,7 +325,7 @@ describe('useScopedEvents', () => {
   });
 
   it('passes no eventIds filter when favoritesOnly is off', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     useEventFavoritesStore.getState().addFavorite(profileA.id, '3');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
@@ -350,7 +333,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { eventIds?: string[] };
 
     expect(callFor(profileA)?.eventIds).toBeUndefined();
@@ -358,7 +341,7 @@ describe('useScopedEvents', () => {
   });
 
   it('sends each profile its OWN tag ids for the same selected tag (refs #337 D4)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     // "person" is tag 1 on A and tag 7 on B. Sending one shared id to both
@@ -370,7 +353,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
 
     expect(callFor(profileA)?.tagIds).toEqual(['1']);
@@ -378,7 +361,7 @@ describe('useScopedEvents', () => {
   });
 
   it('gives a profile that has none of the selected tags an impossible filter, not an unfiltered query', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     renderHook(
@@ -388,7 +371,7 @@ describe('useScopedEvents', () => {
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
 
     // Same shape favoritesOnly uses: an empty list means "matches nothing
@@ -399,14 +382,14 @@ describe('useScopedEvents', () => {
   });
 
   it('passes no tag filter when the caller supplies none', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([]));
 
     renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
 
     await waitFor(() => expect(vi.mocked(getEvents).mock.calls.length).toBeGreaterThanOrEqual(2));
 
-    const callFor = (p: typeof profileA) =>
+    const callFor = (p: Profile) =>
       vi.mocked(getEvents).mock.calls.find(([, id]) => id === p.id)?.[2] as { tagIds?: string[] };
 
     expect(callFor(profileA)?.tagIds).toBeUndefined();
@@ -414,7 +397,7 @@ describe('useScopedEvents', () => {
   });
 
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     const failure = new Error('B is down');
     vi.mocked(getEvents).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
@@ -435,7 +418,7 @@ describe('useScopedEvents', () => {
   });
 
   it('single-mode profile scope writes to the exact key Events.tsx reads, so the cache entry is shared', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('42', '2026-01-15 09:00:00')]));
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -465,7 +448,7 @@ describe('useScopedEvents', () => {
   });
 
   it('refetchProfile(id) refetches only that profile', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
     const { result } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
@@ -480,7 +463,7 @@ describe('useScopedEvents', () => {
   });
 
   it('keeps events/errors array identity across an unrelated rerender (combine + replaceEqualDeep)', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
     const { result, rerender } = renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
@@ -496,7 +479,7 @@ describe('useScopedEvents', () => {
   });
 
   it('fetches every profile in scope even when neither has ever authenticated this session (refs #337)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
     renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
@@ -508,7 +491,7 @@ describe('useScopedEvents', () => {
   });
 
   it('does not poll by default - refetchInterval is omitted unless the caller opts in', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
     renderHook(() => useScopedEvents(baseOptions), { wrapper: createWrapper() });
@@ -520,7 +503,7 @@ describe('useScopedEvents', () => {
   });
 
   it('honors an explicit refetchInterval when the caller opts in, staggered per profile (W8)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEvents).mockResolvedValue(eventsResponse([event('1', '2026-01-15 09:00:00')]));
 
     renderHook(() => useScopedEvents({ ...baseOptions, refetchInterval: 15000 }), { wrapper: createWrapper() });

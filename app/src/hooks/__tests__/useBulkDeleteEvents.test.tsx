@@ -1,35 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { useBulkDeleteEvents } from '../useBulkDeleteEvents';
-import { deleteEvent } from '../../api/events';
-import { getSession } from '../../services/sessions';
-import { eventSelectionKey } from '../../stores/deleteSelection';
-import { asProfileId } from '../../api/types';
-import { toast } from 'sonner';
-import { createHttpError } from '../../lib/http/types';
-import { usePermissionDenialStore, denialKey } from '../../stores/permissions';
-
-const P1 = asProfileId('p1');
-const P2 = asProfileId('p2');
 
 vi.mock('../../api/events', () => ({ deleteEvent: vi.fn() }));
-vi.mock('../../services/sessions', () => ({
-  // Mirrors the real registry: a real profile id yields its own client, the
-  // ALL sentinel throws (services/sessions.ts getSession).
-  getSession: vi.fn((id: string) => {
-    if (id === 'ALL') throw new Error('getSession: ALL_PROFILES_ID has no session');
-    return { client: { profileId: id } };
-  }),
-  // All mode makes the ALL sentinel the current profile, so the real
-  // getCurrentSession throws there - the crash this suite guards against.
-  getCurrentSession: vi.fn(() => {
-    if (!mockCurrentProfile) throw new Error('getSession: ALL_PROFILES_ID has no session');
-    return { client: { profileId: 'p1' } };
-  }),
-  registerSessionsGate: vi.fn(),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // Every interpolated value is appended, so a toast that drops one is visible
 // in the assertion instead of reading as the bare key.
@@ -38,18 +14,27 @@ vi.mock('react-i18next', () => ({
     t: (k: string, o?: Record<string, unknown>) => `${k}:${o ? Object.values(o).join(':') : ''}`,
   }),
 }));
-vi.mock('../../lib/logger', () => ({ log: { eventCard: vi.fn() }, LogLevel: { ERROR: 'ERROR' } }));
 
-// All mode leaves currentProfile null (useCurrentProfile: the ALL sentinel
-// matches no real profile); single mode resolves a real one.
-let mockCurrentProfile: { id: string } | null = { id: 'p1' };
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: mockCurrentProfile, settings: {}, hasProfile: !!mockCurrentProfile, isAllMode: !mockCurrentProfile }),
-}));
+import { useBulkDeleteEvents } from '../useBulkDeleteEvents';
+import { deleteEvent } from '../../api/events';
+import { eventSelectionKey } from '../../stores/deleteSelection';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { toast } from 'sonner';
+import { createHttpError } from '../../lib/http/types';
+import { usePermissionDenialStore, denialKey } from '../../stores/permissions';
+import { seedProfiles, resetProfileFixture, fakeApiClient, type FakeApiClient } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+const P1 = asProfileId('p1');
+const P2 = asProfileId('p2');
 
 const asMock = (fn: unknown) => fn as unknown as ReturnType<typeof vi.fn>;
 
 let qc: QueryClient;
+// Each profile gets its OWN client instance, so a delete that lands on the
+// wrong profile's session is a client identity the test can catch.
+let clientP1: FakeApiClient;
+let clientP2: FakeApiClient;
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <QueryClientProvider client={qc}>{children}</QueryClientProvider>
 );
@@ -57,7 +42,16 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 beforeEach(() => {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   vi.clearAllMocks();
-  mockCurrentProfile = { id: 'p1' };
+  seedProfiles([P1, P2], { current: P1 });
+  clientP1 = fakeApiClient();
+  clientP2 = fakeApiClient();
+  installApiClient(P1, clientP1);
+  installApiClient(P2, clientP2);
+});
+
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
 });
 
 describe('useBulkDeleteEvents - single mode', () => {
@@ -105,8 +99,9 @@ describe('useBulkDeleteEvents - single mode', () => {
 
     await act(async () => { await result.current.deleteEvents([eventSelectionKey(P2, '9')]); });
 
-    expect(asMock(getSession).mock.calls.map((c) => c[0])).toEqual(['p2']);
-    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p2' }, '9');
+    // clientP2 (P2's OWN installed client), not clientP1 (the current
+    // profile's), proves the key's own profile won over the current one.
+    expect(deleteEvent).toHaveBeenCalledWith(clientP2, '9');
   });
 
   it('removes the deleted events from a cached events list immediately', async () => {
@@ -123,7 +118,12 @@ describe('useBulkDeleteEvents - single mode', () => {
 });
 
 describe('useBulkDeleteEvents - All mode', () => {
-  beforeEach(() => { mockCurrentProfile = null; });
+  beforeEach(() => {
+    // The ALL sentinel as current profile: useCurrentProfile resolves no
+    // real profile for it (isAggregateProfileId), so currentProfile is null,
+    // matching what selecting All Servers actually leaves in the real store.
+    seedProfiles([P1, P2], { current: ALL_PROFILES_ID });
+  });
 
   it('routes each event to its OWN profile session instead of the ALL sentinel', async () => {
     asMock(deleteEvent).mockResolvedValue(undefined);
@@ -137,9 +137,8 @@ describe('useBulkDeleteEvents - All mode', () => {
       ]);
     });
 
-    expect(asMock(getSession).mock.calls.map((c) => c[0]).sort()).toEqual(['p1', 'p2']);
-    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p1' }, '1234');
-    expect(deleteEvent).toHaveBeenCalledWith({ profileId: 'p2' }, '77');
+    expect(deleteEvent).toHaveBeenCalledWith(clientP1, '1234');
+    expect(deleteEvent).toHaveBeenCalledWith(clientP2, '77');
     expect(deleted.sort()).toEqual([eventSelectionKey(P1, '1234'), eventSelectionKey(P2, '77')].sort());
     expect(toast.success).toHaveBeenCalledWith('events.delete_selected_success:2');
     expect(toast.error).not.toHaveBeenCalled();
@@ -161,8 +160,8 @@ describe('useBulkDeleteEvents - All mode', () => {
   });
 
   it('keeps the failed profile selected and reports the failure on partial success', async () => {
-    asMock(deleteEvent).mockImplementation((client: { profileId: string }) =>
-      client.profileId === 'p2' ? Promise.reject(new Error('boom')) : Promise.resolve(undefined));
+    asMock(deleteEvent).mockImplementation((client: unknown) =>
+      client === clientP2 ? Promise.reject(new Error('boom')) : Promise.resolve(undefined));
     const { result } = renderHook(() => useBulkDeleteEvents(), { wrapper });
 
     let deleted: string[] = [];
@@ -217,7 +216,7 @@ describe('useBulkDeleteEvents - All mode', () => {
 
     let deleted: string[] = [];
     await act(async () => {
-      deleted = await result.current.deleteEvents([eventSelectionKey(asProfileId('ALL'), '9')]);
+      deleted = await result.current.deleteEvents([eventSelectionKey(ALL_PROFILES_ID, '9')]);
     });
 
     expect(deleted).toEqual([]);

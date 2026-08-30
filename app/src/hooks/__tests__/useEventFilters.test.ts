@@ -4,7 +4,7 @@
  * Tests filter state management, URL sync, and settings persistence.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useEventFilters, ALL_TAGS_FILTER_ID } from '../useEventFilters';
 import { resolveOwnMonitorIds } from '../useScopedEvents';
@@ -20,78 +20,27 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => mockLocation,
 }));
 
-// Mock logger
-vi.mock('../../lib/logger', () => ({
-  log: {
-    time: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 'DEBUG',
-    INFO: 'INFO',
-    WARN: 'WARN',
-    ERROR: 'ERROR',
-  },
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-// Mock useCurrentProfile
-const mockCurrentProfile = { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 };
-const mockGetProfileSettings = vi.fn();
-const mockUpdateProfileSettings = vi.fn();
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useSettingsStore, DEFAULT_SETTINGS, type ProfileSettings } from '../../stores/settings';
+import { useProfileStore } from '../../stores/profile';
 
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-}));
+type EventsPageFilters = ProfileSettings['eventsPageFilters'];
 
-// Mock settings store
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: {
-    getState: vi.fn(),
-  },
-}));
-
-// Mock the profile store: the hook persists against currentProfileId, which is
-// the ALL sentinel in All mode and a real id in single mode.
-let mockCurrentProfileId: string | null = 'profile-1';
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfileId: string | null }) => unknown) =>
-    selector({ currentProfileId: mockCurrentProfileId }),
-}));
-
-import { useCurrentProfile } from '../useCurrentProfile';
-import { useSettingsStore } from '../../stores/settings';
-
-const defaultEventsPageFilters = {
-  monitorIds: [] as string[],
-  tagIds: [] as string[],
-  startDateTime: '',
-  endDateTime: '',
-  favoritesOnly: false,
-  onlyDetectedObjects: false,
-};
-
-const mockProfileSettings = {
-  defaultEventLimit: 100,
-  eventsPageFilters: { ...defaultEventsPageFilters },
-};
-
-function setupMocks(overrides?: Partial<typeof mockProfileSettings>) {
-  const settings = { ...mockProfileSettings, ...overrides };
-  mockCurrentProfileId = 'profile-1';
-
-  vi.mocked(useCurrentProfile).mockReturnValue({
-    currentProfile: mockCurrentProfile,
-    settings: settings as never,
-    hasProfile: true,
-    isAllMode: false,
+/** Seeds profile-1 as current, with its eventsPageFilters bucket overridden. */
+function setupMocks(overrides?: Partial<EventsPageFilters>) {
+  seedProfiles(['profile-1'], {
+    current: 'profile-1',
+    settings: {
+      'profile-1': {
+        defaultEventLimit: 100,
+        eventsPageFilters: { ...DEFAULT_SETTINGS.eventsPageFilters, ...overrides },
+      },
+    },
   });
-
-  mockGetProfileSettings.mockReturnValue(settings);
-  mockUpdateProfileSettings.mockImplementation(() => {});
-
-  vi.mocked(useSettingsStore.getState).mockReturnValue({
-    getProfileSettings: mockGetProfileSettings,
-    updateProfileSettings: mockUpdateProfileSettings,
-  } as never);
 }
 
 /** Captures the hook's value on every render, so first-render state is observable. */
@@ -107,11 +56,15 @@ function renderCapturingFilters() {
 
 describe('useEventFilters first-render hydration (refs #197)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
     // Collect keys before deleting: forEach walks by live index, so deleting
     // during iteration skips every other key once 2+ are set.
     Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
     setupMocks();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   // The Events page builds its React Query key from filters.monitorId on the
@@ -119,7 +72,7 @@ describe('useEventFilters first-render hydration (refs #197)', () => {
   // that first render fetches the unfiltered list, and useScrollRestoration
   // (a layout effect) restores against it before the filter narrows the list.
   it('applies the persisted monitor filter on the very first render', () => {
-    setupMocks({ eventsPageFilters: { ...defaultEventsPageFilters, monitorIds: ['3'] } });
+    setupMocks({ monitorIds: ['3'] });
 
     const { monitorIdPerRender, result } = renderCapturingFilters();
 
@@ -129,7 +82,7 @@ describe('useEventFilters first-render hydration (refs #197)', () => {
 
   it('lets a deep-link URL filter win over the persisted one, also on the first render', () => {
     mockSearchParams.set('monitorId', '7');
-    setupMocks({ eventsPageFilters: { ...defaultEventsPageFilters, monitorIds: ['3'] } });
+    setupMocks({ monitorIds: ['3'] });
 
     const { monitorIdPerRender, result } = renderCapturingFilters();
 
@@ -138,6 +91,7 @@ describe('useEventFilters first-render hydration (refs #197)', () => {
   });
 
   it('renders no monitor filter when neither settings nor URL carry one', () => {
+    setupMocks();
     const { monitorIdPerRender } = renderCapturingFilters();
     expect(monitorIdPerRender[0]).toBeUndefined();
   });
@@ -162,11 +116,13 @@ describe('useEventFilters first-render hydration (refs #197)', () => {
 
 describe('useEventFilters', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    // Reset search params. Collect keys first: forEach walks by live index, so
-    // deleting during iteration skips every other key once 2+ are set.
     Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
     setupMocks();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   describe('initial state', () => {
@@ -245,12 +201,9 @@ describe('useEventFilters', () => {
         result.current.setSelectedMonitorIds(['5']);
       });
 
-      expect(mockUpdateProfileSettings).toHaveBeenCalledWith(
-        'profile-1',
-        expect.objectContaining({
-          eventsPageFilters: expect.objectContaining({ monitorIds: ['5'] }),
-        }),
-      );
+      expect(useSettingsStore.getState().getProfileSettings('profile-1').eventsPageFilters.monitorIds).toEqual([
+        '5',
+      ]);
     });
   });
 
@@ -663,13 +616,7 @@ describe('useEventFilters', () => {
 
   describe('no profile', () => {
     it('does not crash when currentProfile is null', () => {
-      mockCurrentProfileId = null;
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: null,
-        settings: mockProfileSettings as never,
-        hasProfile: false,
-        isAllMode: false,
-      });
+      seedProfiles([], { current: null });
 
       const { result } = renderHook(() => useEventFilters());
 
@@ -679,8 +626,8 @@ describe('useEventFilters', () => {
       });
 
       expect(result.current.selectedMonitorIds).toEqual(['1']);
-      // Settings store should NOT be called because there is no profile ID
-      expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+      // Settings store should NOT be written because there is no profile ID
+      expect(useSettingsStore.getState().profileSettings).toEqual({});
     });
   });
 });
@@ -689,47 +636,31 @@ describe('useEventFilters', () => {
 // to persist against that sentinel's bucket, or every selection dies on
 // navigation away from the page (refs #337).
 describe('useEventFilters in All Servers mode', () => {
-  // A settings store that actually stores, so a filter written by one mount is
-  // what the next mount reads back. Asserting the write call alone would not
-  // show the restore path reading the same bucket.
-  let buckets: Record<string, typeof mockProfileSettings>;
-
-  function setupAllMode(saved?: Partial<typeof defaultEventsPageFilters>) {
-    mockCurrentProfileId = ALL_PROFILES_ID;
-    buckets = {
-      [ALL_PROFILES_ID]: {
-        defaultEventLimit: 100,
-        eventsPageFilters: { ...defaultEventsPageFilters, ...saved },
-      },
-      'profile-1': { defaultEventLimit: 100, eventsPageFilters: { ...defaultEventsPageFilters } },
-    };
-
-    // currentProfile is null in All mode; settings resolve to the ALL bucket,
-    // exactly as useCurrentProfile does through the sentinel profile id.
-    vi.mocked(useCurrentProfile).mockImplementation(() => ({
-      currentProfile: null,
-      settings: buckets[mockCurrentProfileId ?? ''] as never,
-      hasProfile: false,
-      isAllMode: mockCurrentProfileId === ALL_PROFILES_ID,
-    }));
-
-    mockGetProfileSettings.mockImplementation((id: string) => buckets[id]);
-    mockUpdateProfileSettings.mockImplementation((id: string, updates: Partial<typeof mockProfileSettings>) => {
-      buckets[id] = { ...buckets[id], ...updates };
-    });
-    vi.mocked(useSettingsStore.getState).mockReturnValue({
-      getProfileSettings: mockGetProfileSettings,
-      updateProfileSettings: mockUpdateProfileSettings,
-    } as never);
-  }
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
-    setupAllMode();
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
+  /** Seeds profile-1 (unused unless a test switches back to single mode) plus
+   *  the ALL sentinel as current, with the ALL bucket's eventsPageFilters
+   *  overridden. */
+  function setupAllMode(saved?: Partial<EventsPageFilters>) {
+    seedProfiles(['profile-1'], { current: ALL_PROFILES_ID });
+    useSettingsStore.setState({
+      profileSettings: {
+        ...useSettingsStore.getState().profileSettings,
+        [ALL_PROFILES_ID]: {
+          defaultEventLimit: 100,
+          eventsPageFilters: { ...DEFAULT_SETTINGS.eventsPageFilters, ...saved },
+        },
+      },
+    });
+  }
+
   it('writes a filter to the ALL bucket and restores it on the next mount', () => {
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
+    setupAllMode();
+
     const first = renderHook(() => useEventFilters());
     act(() => {
       first.result.current.setFavoritesOnly(true);
@@ -737,8 +668,10 @@ describe('useEventFilters in All Servers mode', () => {
     });
     first.unmount();
 
-    expect(mockUpdateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, expect.anything());
-    expect(buckets[ALL_PROFILES_ID].eventsPageFilters).toMatchObject({ favoritesOnly: true, activeQuickRange: 6 });
+    expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).eventsPageFilters).toMatchObject({
+      favoritesOnly: true,
+      activeQuickRange: 6,
+    });
 
     const second = renderHook(() => useEventFilters());
     expect(second.result.current.favoritesOnly).toBe(true);
@@ -751,6 +684,9 @@ describe('useEventFilters in All Servers mode', () => {
   // to profile-b's query too, since resolveOwnMonitorIds passes a ':'-less
   // token through to every profile in scope.
   it('round-trips a composite monitor token that no other profile matches', () => {
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
+    setupAllMode();
+
     const first = renderHook(() => useEventFilters());
     act(() => {
       first.result.current.setSelectedMonitorIds(['profile-a:3']);
@@ -766,16 +702,19 @@ describe('useEventFilters in All Servers mode', () => {
   });
 
   it('keeps the ALL bucket filter out of a single profile bucket', () => {
+    Array.from(mockSearchParams.keys()).forEach((key) => mockSearchParams.delete(key));
+    setupAllMode();
+
     const inAllMode = renderHook(() => useEventFilters());
     act(() => {
       inAllMode.result.current.setSelectedMonitorIds(['profile-a:3']);
     });
     inAllMode.unmount();
 
-    mockCurrentProfileId = 'profile-1';
+    useProfileStore.setState({ currentProfileId: asProfileId('profile-1') });
     const inSingleMode = renderHook(() => useEventFilters());
 
-    expect(buckets['profile-1'].eventsPageFilters.monitorIds).toEqual([]);
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').eventsPageFilters.monitorIds).toEqual([]);
     expect(inSingleMode.result.current.selectedMonitorIds).toEqual([]);
   });
 });

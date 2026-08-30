@@ -1,20 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useAlarmStates } from '../useAlarmStates';
-import { getAlarmStatus } from '../../api/monitors';
 
 vi.mock('../../api/monitors', () => ({ getAlarmStatus: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
-    selector({ isAuthenticated: true }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+import { useAlarmStates } from '../useAlarmStates';
+import { getAlarmStatus } from '../../api/monitors';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const mockStatus = vi.mocked(getAlarmStatus);
 
@@ -28,6 +24,12 @@ function wrapper({ children }: { children: ReactNode }) {
 describe('useAlarmStates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    seedProfiles(['p1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('returns a parsed state per monitor', async () => {

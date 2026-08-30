@@ -13,6 +13,11 @@ import { useTimelineData, type UseTimelineDataOptions } from '../useTimelineData
 import { getEvents } from '../../api/events';
 import { getMonitors } from '../../api/monitors';
 import { TIMELINE } from '../../lib/zmninja-ng-constants';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/events', () => ({
   getEvents: vi.fn(),
@@ -20,36 +25,6 @@ vi.mock('../../api/events', () => ({
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
-}));
-
-vi.mock('../../lib/logger', () => ({
-  log: {
-    timeline: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 'DEBUG',
-    INFO: 'INFO',
-    WARN: 'WARN',
-    ERROR: 'ERROR',
-  },
-}));
-
-vi.mock('../../stores/profile', () => {
-  const state = { currentProfileId: 'profile-1', profiles: [] };
-  return {
-    useProfileStore: Object.assign(
-      (selector: (s: typeof state) => unknown) => selector(state),
-      { getState: () => state },
-    ),
-  };
-});
-
-vi.mock('../useBandwidthSettings', () => ({
-  useBandwidthSettings: () => ({ timelineHeatmapInterval: 30000 }),
 }));
 
 // Manual notification store mock: callable as a hook with a selector, plus
@@ -146,12 +121,15 @@ describe('useTimelineData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     notificationStore.reset();
+    seedProfiles(['profile-1'], { current: 'profile-1' });
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [] } as never);
     vi.mocked(getEvents).mockResolvedValue({ events: [] } as never);
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('transforms API events into timeline events', async () => {

@@ -1,14 +1,18 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedEventTagMapping, useScopedTags } from '../useScopedEventTags';
-import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { getTags, getEventTags, extractUniqueTags } from '../../api/tags';
-import { getSession } from '../../services/sessions';
 import { queryKeys } from '../../lib/query/query-keys';
-import { asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, type Profile } from '../../api/types';
+import type { ApiClient } from '../../api/client';
 import type { Tag } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/tags', () => ({
   getTags: vi.fn(),
@@ -16,16 +20,7 @@ vi.mock('../../api/tags', () => ({
   extractUniqueTags: vi.fn(),
 }));
 
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-}));
-
-vi.mock('../useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-
-const profileA = {
+const profileA: Profile = {
   id: asProfileId('profile-a'),
   name: 'Home',
   apiUrl: 'http://a/api',
@@ -35,7 +30,7 @@ const profileA = {
   createdAt: 0,
 };
 
-const profileB = {
+const profileB: Profile = {
   id: asProfileId('profile-b'),
   name: 'Work',
   apiUrl: 'http://b/api',
@@ -56,26 +51,28 @@ function createWrapper() {
   };
 }
 
-function mockScope(profiles: Array<typeof profileA>, mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
-  const scope =
-    mode === 'single'
-      ? { mode: 'single' as const, profile: profiles[0], profiles: [profiles[0]] as [typeof profileA], settings: {} }
-      : { mode: 'all' as const, profile: null, profiles, settings: {} };
-  vi.mocked(useProfileScope).mockReturnValue(scope as unknown as ProfileScope);
+/** Seed the real profile store for the given scope and give each profile a
+ * distinguishable fake session client (getTags/getEventTags are mocked
+ * directly, so the client only needs to carry which profile it belongs to). */
+function setupScope(profiles: Profile[], mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
+  seedProfiles(profiles, { current: mode === 'single' ? profiles[0].id : ALL_PROFILES_ID });
+  for (const p of profiles) {
+    installApiClient(p.id, { profile: p.id } as unknown as ApiClient);
+  }
 }
 
 describe('useScopedEventTagMapping', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: { profile: id } as unknown as import('../../api/client').ApiClient,
-      timezone: 'UTC',
-    }));
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('attributes a colliding event id to the profile that owns it', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     // Both servers have an event 100. Each fetch must only ever answer for
     // its own profile's ids.
     vi.mocked(getEventTags).mockImplementation(async (client) => {
@@ -102,7 +99,7 @@ describe('useScopedEventTagMapping', () => {
   });
 
   it('asks each profile only for the event ids it owns', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEventTags).mockResolvedValue(new Map());
 
     renderHook(
@@ -127,7 +124,7 @@ describe('useScopedEventTagMapping', () => {
   });
 
   it('single mode keys the map by the bare event id and reads the shared cache slot', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const wrapper = function Wrapper({ children }: { children: React.ReactNode }) {
       return React.createElement(QueryClientProvider, { client: queryClient }, children);
@@ -148,7 +145,7 @@ describe('useScopedEventTagMapping', () => {
   });
 
   it('one profile failing still yields the other profile tags', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEventTags).mockImplementation(async (client) => {
       const owner = (client as unknown as { profile: string }).profile;
       if (owner === profileA.id) throw new Error('server down');
@@ -176,7 +173,7 @@ describe('useScopedEventTagMapping', () => {
   // identity remints every row object and defeats memo(EventItem) for every
   // card on every render.
   it('keeps eventTagMap identity across a rerender with unchanged data', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEventTags).mockResolvedValue(new Map([['100', [tag('1', 'person')]]]));
     const events = [{ profileId: profileA.id, eventId: '100' }];
 
@@ -194,7 +191,7 @@ describe('useScopedEventTagMapping', () => {
   });
 
   it('enabled:false fetches nothing', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getEventTags).mockResolvedValue(new Map());
 
     const { result } = renderHook(
@@ -216,11 +213,6 @@ describe('useScopedTags', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: { profile: id } as unknown as import('../../api/client').ApiClient,
-      timezone: 'UTC',
-    }));
     // The real extractUniqueTags dedupes the API's tag-per-event rows; the
     // fetch mock below already returns a flat list, so pass it through.
     vi.mocked(extractUniqueTags).mockImplementation(
@@ -232,8 +224,13 @@ describe('useScopedTags', () => {
     });
   });
 
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   it('offers each shared tag name once across servers', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
 
     const { result } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
 
@@ -246,7 +243,7 @@ describe('useScopedTags', () => {
   });
 
   it('resolves a selected name to each server own id for that name', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
 
     const { result } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.availableTags.length).toBe(3));
@@ -256,7 +253,7 @@ describe('useScopedTags', () => {
   });
 
   it('resolves to nothing on a server that lacks the selected tag', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
 
     const { result } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.availableTags.length).toBe(3));
@@ -268,7 +265,7 @@ describe('useScopedTags', () => {
   });
 
   it('single mode offers that profile own tags and passes its ids through untouched', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
 
     const { result } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
 
@@ -278,7 +275,7 @@ describe('useScopedTags', () => {
   });
 
   it('keeps availableTags and the resolver stable across a rerender', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
 
     const { result, rerender } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.availableTags.length).toBe(3));
@@ -294,7 +291,7 @@ describe('useScopedTags', () => {
   });
 
   it('reports tags unsupported when no profile answers the endpoint', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getTags).mockResolvedValue(null);
 
     const { result } = renderHook(() => useScopedTags(), { wrapper: createWrapper() });

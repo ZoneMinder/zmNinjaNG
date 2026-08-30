@@ -2,41 +2,21 @@
  * useTokenRefresh Hook Tests
  *
  * Tests for the token refresh hook that automatically manages
- * authentication token lifecycle.
+ * authentication token lifecycle. Runs against the real profile, settings
+ * and auth stores (tests/profile-fixture); only the store-gates client
+ * factory and secure storage are faked. The auth store's own
+ * getFreshAccessToken action is swapped for a spy so tests can assert
+ * exactly when it's called without exercising a real network refresh -
+ * that implementation has its own suite (stores/__tests__/auth.test.ts).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { ZM_INTEGRATION } from '../../lib/zmninja-ng-constants';
+import { ALL_PROFILES_ID } from '../../api/types';
 
-// Mock the auth store before importing the hook
-const mockGetFreshAccessToken = vi.fn();
-let mockStoreState = {
-  isAuthenticated: false,
-  accessTokenExpires: null as number | null,
-  getFreshAccessToken: mockGetFreshAccessToken as unknown as () => Promise<string | null>,
-};
-
-// Per-profile slices for All-mode tests, keyed by profile id. getAuthSlice
-// reads this directly (non-reactive), same shape as the real auth store.
-let mockAuthSlices: Record<string, { isAuthenticated: boolean; accessTokenExpires: number | null }> = {};
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (state: typeof mockStoreState) => unknown) => selector(mockStoreState),
-  useAuthSlice: () => mockStoreState,
-  getAuthSlice: (profileId: string | null) =>
-    (profileId && mockAuthSlices[profileId]) || { isAuthenticated: false, accessTokenExpires: null },
-}));
-
-let mockIsAllMode = false;
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {}, hasProfile: true, isAllMode: mockIsAllMode }),
-}));
-
-let mockScopeProfiles: Array<{ id: string }> = [];
-vi.mock('../useProfileScope', () => ({
-  useProfileScope: () => (mockScopeProfiles.length > 0 ? { mode: 'all', profile: null, profiles: mockScopeProfiles, settings: {} } : null),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../lib/logger', () => ({
   log: {
@@ -51,8 +31,32 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-// Import hook after mocks are set up
 import { useTokenRefresh } from '../useTokenRefresh';
+import { useAuthStore } from '../../stores/auth';
+import { seedProfiles, resetProfileFixture, asProfileId, type ProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+const mockGetFreshAccessToken = vi.fn();
+
+/** Patch one profile's real auth slice directly - the precise per-test
+ * expiry/authenticated control the old mock gave, applied to the real store. */
+function setAuthSlice(profileId: ProfileId, patch: { isAuthenticated: boolean; accessTokenExpires: number | null }) {
+  useAuthStore.setState((s) => ({
+    slices: {
+      ...s.slices,
+      [profileId]: {
+        accessToken: null,
+        refreshToken: null,
+        refreshTokenExpires: null,
+        version: null,
+        apiVersion: null,
+        requiresAuth: true,
+        ...(s.slices[profileId] ?? {}),
+        ...patch,
+      },
+    },
+  }));
+}
 
 describe('useTokenRefresh', () => {
   const NOW = new Date('2024-01-01T12:00:00Z').getTime();
@@ -61,23 +65,18 @@ describe('useTokenRefresh', () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     vi.clearAllMocks();
-
-    mockStoreState = {
-      isAuthenticated: false,
-      accessTokenExpires: null,
-      getFreshAccessToken: mockGetFreshAccessToken as unknown as () => Promise<string | null>,
-    };
-    mockIsAllMode = false;
-    mockScopeProfiles = [];
-    mockAuthSlices = {};
+    seedProfiles(['p1'], { current: 'p1', authenticated: false });
+    useAuthStore.setState({ getFreshAccessToken: mockGetFreshAccessToken as never });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('does not refresh when not authenticated', () => {
-    mockStoreState.isAuthenticated = false;
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: false, accessTokenExpires: null });
 
     renderHook(() => useTokenRefresh());
 
@@ -85,8 +84,7 @@ describe('useTokenRefresh', () => {
   });
 
   it('does not refresh when token is far from expiry', () => {
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW + 2 * 60 * 60 * 1000; // 2 hours away
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 }); // 2 hours away
 
     renderHook(() => useTokenRefresh());
 
@@ -95,8 +93,7 @@ describe('useTokenRefresh', () => {
 
   it('refreshes when token is within leeway window', async () => {
     mockGetFreshAccessToken.mockResolvedValue(undefined);
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW + 3 * 60 * 1000; // 3 minutes away (within 30-min leeway)
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }); // 3 minutes away (within 30-min leeway)
 
     renderHook(() => useTokenRefresh());
 
@@ -107,8 +104,7 @@ describe('useTokenRefresh', () => {
 
   it('refreshes when token has already expired', async () => {
     mockGetFreshAccessToken.mockResolvedValue(undefined);
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW - 60 * 1000; // Expired 1 minute ago
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW - 60 * 1000 }); // Expired 1 minute ago
 
     renderHook(() => useTokenRefresh());
 
@@ -119,8 +115,7 @@ describe('useTokenRefresh', () => {
 
   it('refreshes when token expired long ago (e.g., after background sleep)', async () => {
     mockGetFreshAccessToken.mockResolvedValue(undefined);
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW - 30 * 60 * 1000; // Expired 30 minutes ago
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW - 30 * 60 * 1000 }); // Expired 30 minutes ago
 
     renderHook(() => useTokenRefresh());
 
@@ -131,8 +126,7 @@ describe('useTokenRefresh', () => {
 
   it('checks token on interval', async () => {
     mockGetFreshAccessToken.mockResolvedValue(undefined);
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW + 2 * 60 * 60 * 1000; // 2 hours away
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 }); // 2 hours away
 
     renderHook(() => useTokenRefresh());
     expect(mockGetFreshAccessToken).not.toHaveBeenCalled();
@@ -150,8 +144,7 @@ describe('useTokenRefresh', () => {
 
   it('refreshes on visibility change to visible when token is expired', async () => {
     mockGetFreshAccessToken.mockResolvedValue(undefined);
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW - 10 * 1000; // Expired 10 seconds ago
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }); // Expired 10 seconds ago
 
     renderHook(() => useTokenRefresh());
 
@@ -183,8 +176,7 @@ describe('useTokenRefresh', () => {
     mockGetFreshAccessToken.mockImplementation(
       () => new Promise<void>((resolve) => { resolveRefresh = resolve; })
     );
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW - 10 * 1000; // Expired
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }); // Expired
 
     renderHook(() => useTokenRefresh());
 
@@ -209,8 +201,7 @@ describe('useTokenRefresh', () => {
 
   it('handles refresh failure without crashing', async () => {
     mockGetFreshAccessToken.mockRejectedValue(new Error('Network error'));
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW - 10 * 1000; // Expired
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }); // Expired
 
     // Should not throw
     renderHook(() => useTokenRefresh());
@@ -224,8 +215,7 @@ describe('useTokenRefresh', () => {
     const addEventSpy = vi.spyOn(document, 'addEventListener');
     const removeEventSpy = vi.spyOn(document, 'removeEventListener');
 
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = NOW + 2 * 60 * 60 * 1000;
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 });
 
     const { unmount } = renderHook(() => useTokenRefresh());
 
@@ -240,8 +230,7 @@ describe('useTokenRefresh', () => {
   });
 
   it('does not refresh when accessTokenExpires is null (no auth required)', () => {
-    mockStoreState.isAuthenticated = true;
-    mockStoreState.accessTokenExpires = null;
+    setAuthSlice(asProfileId('p1'), { isAuthenticated: true, accessTokenExpires: null });
 
     renderHook(() => useTokenRefresh());
 
@@ -250,47 +239,41 @@ describe('useTokenRefresh', () => {
 
   describe('All mode', () => {
     beforeEach(() => {
-      mockIsAllMode = true;
-      mockScopeProfiles = [{ id: 'profile-a' }, { id: 'profile-b' }];
+      seedProfiles(['profile-a', 'profile-b'], { current: ALL_PROFILES_ID, authenticated: false });
+      useAuthStore.setState({ getFreshAccessToken: mockGetFreshAccessToken as never });
     });
 
     it('refreshes every scope profile whose token is within the leeway window', async () => {
       mockGetFreshAccessToken.mockResolvedValue(undefined);
-      mockAuthSlices = {
-        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }, // within leeway
-        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }, // expired
-      };
+      setAuthSlice(asProfileId('profile-a'), { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }); // within leeway
+      setAuthSlice(asProfileId('profile-b'), { isAuthenticated: true, accessTokenExpires: NOW - 10 * 1000 }); // expired
 
       renderHook(() => useTokenRefresh());
 
       await vi.waitFor(() => {
-        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-a');
-        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-b');
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith(asProfileId('profile-a'));
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith(asProfileId('profile-b'));
       });
       expect(mockGetFreshAccessToken).toHaveBeenCalledTimes(2);
     });
 
     it('skips a scope profile whose token is far from expiry', async () => {
       mockGetFreshAccessToken.mockResolvedValue(undefined);
-      mockAuthSlices = {
-        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }, // within leeway
-        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 }, // 2 hours away
-      };
+      setAuthSlice(asProfileId('profile-a'), { isAuthenticated: true, accessTokenExpires: NOW + 3 * 60 * 1000 }); // within leeway
+      setAuthSlice(asProfileId('profile-b'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 }); // 2 hours away
 
       renderHook(() => useTokenRefresh());
 
       await vi.waitFor(() => {
-        expect(mockGetFreshAccessToken).toHaveBeenCalledWith('profile-a');
+        expect(mockGetFreshAccessToken).toHaveBeenCalledWith(asProfileId('profile-a'));
       });
-      expect(mockGetFreshAccessToken).not.toHaveBeenCalledWith('profile-b');
+      expect(mockGetFreshAccessToken).not.toHaveBeenCalledWith(asProfileId('profile-b'));
       expect(mockGetFreshAccessToken).toHaveBeenCalledTimes(1);
     });
 
     it('skips a scope profile that has never authenticated this session', async () => {
-      mockAuthSlices = {
-        'profile-a': { isAuthenticated: false, accessTokenExpires: null },
-        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
-      };
+      setAuthSlice(asProfileId('profile-a'), { isAuthenticated: false, accessTokenExpires: null });
+      setAuthSlice(asProfileId('profile-b'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 });
 
       renderHook(() => useTokenRefresh());
 
@@ -299,10 +282,8 @@ describe('useTokenRefresh', () => {
 
     it('checks every scope profile again on the next interval tick', async () => {
       mockGetFreshAccessToken.mockResolvedValue(undefined);
-      mockAuthSlices = {
-        'profile-a': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
-        'profile-b': { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 },
-      };
+      setAuthSlice(asProfileId('profile-a'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 });
+      setAuthSlice(asProfileId('profile-b'), { isAuthenticated: true, accessTokenExpires: NOW + 2 * 60 * 60 * 1000 });
 
       renderHook(() => useTokenRefresh());
       expect(mockGetFreshAccessToken).not.toHaveBeenCalled();
@@ -310,8 +291,8 @@ describe('useTokenRefresh', () => {
       // Advance time so both tokens are now within the leeway window.
       const later = NOW + (2 * 60 * 60 * 1000) - 3 * 60 * 1000;
       vi.setSystemTime(later);
-      mockAuthSlices['profile-a'].accessTokenExpires = later + 3 * 60 * 1000;
-      mockAuthSlices['profile-b'].accessTokenExpires = later + 3 * 60 * 1000;
+      setAuthSlice(asProfileId('profile-a'), { isAuthenticated: true, accessTokenExpires: later + 3 * 60 * 1000 });
+      setAuthSlice(asProfileId('profile-b'), { isAuthenticated: true, accessTokenExpires: later + 3 * 60 * 1000 });
 
       await act(async () => {
         vi.advanceTimersByTime(ZM_INTEGRATION.tokenCheckInterval);

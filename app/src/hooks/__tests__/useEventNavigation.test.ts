@@ -6,9 +6,8 @@
  * `/all/events/:profileId/:id`, staying in owning-profile context instead of
  * falling back to the single-mode `/events/:id` route.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { asProfileId } from '../../api/types';
 
 const navigateMock = vi.fn();
 let mockLocationState: Record<string, unknown> = {};
@@ -18,37 +17,36 @@ vi.mock('react-router-dom', () => ({
   useLocation: () => ({ state: mockLocationState }),
 }));
 
-const getSessionMock = vi.fn();
-const getCurrentSessionMock = vi.fn();
-vi.mock('../../services/sessions', () => ({
-  getSession: (id: string) => getSessionMock(id),
-  getCurrentSession: () => getCurrentSessionMock(),
-}));
-
-vi.mock('../../lib/logger', () => ({
-  log: { eventDetail: vi.fn() },
-  LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
-}));
-
 const getAdjacentEventMock = vi.fn();
 vi.mock('../../api/events', () => ({
   getAdjacentEvent: (...args: unknown[]) => getAdjacentEventMock(...args),
 }));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 import { useEventNavigation } from '../useEventNavigation';
+import { seedProfiles, resetProfileFixture, fakeApiClient, asProfileId } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
 
+const profileA = asProfileId('profile-a');
 const profileB = asProfileId('profile-b');
+const clientA = fakeApiClient();
+const clientB = fakeApiClient();
 
 describe('useEventNavigation All mode (refs #337)', () => {
   beforeEach(() => {
     navigateMock.mockClear();
     getAdjacentEventMock.mockReset();
-    getSessionMock.mockReset();
-    getCurrentSessionMock.mockReset();
-    getSessionMock.mockReturnValue({ client: 'client-b', profileId: profileB });
-    getCurrentSessionMock.mockReturnValue({ client: 'client-current', profileId: 'profile-a' });
+    seedProfiles([profileA, profileB], { current: profileA });
+    installApiClient(profileA, clientA);
+    installApiClient(profileB, clientB);
     mockLocationState = { from: '/all/events/profile-b/5' };
     getAdjacentEventMock.mockResolvedValue({ Event: { Id: '6' } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches the adjacent event via the given profile\'s session', async () => {
@@ -60,9 +58,9 @@ describe('useEventNavigation All mode (refs #337)', () => {
       await result.current.goToNextEvent();
     });
 
-    expect(getSessionMock).toHaveBeenCalledWith(profileB);
-    expect(getCurrentSessionMock).not.toHaveBeenCalled();
-    expect(getAdjacentEventMock).toHaveBeenCalledWith('client-b', profileB, 'next', '2026-01-01 00:00:00', undefined);
+    // clientB (profileB's OWN installed client), not clientA (the current
+    // profile's), proves the session came from the given profile.
+    expect(getAdjacentEventMock).toHaveBeenCalledWith(clientB, profileB, 'next', '2026-01-01 00:00:00', undefined);
   });
 
   it('navigates within /all/events/:profileId/... staying in owning-profile context', async () => {
@@ -89,8 +87,9 @@ describe('useEventNavigation All mode (refs #337)', () => {
       await result.current.goToNextEvent();
     });
 
-    expect(getCurrentSessionMock).toHaveBeenCalled();
-    expect(getSessionMock).not.toHaveBeenCalled();
+    // clientA (the CURRENT profile's client), proving getCurrentSession's
+    // resolution was used rather than a specific profileId's.
+    expect(getAdjacentEventMock).toHaveBeenCalledWith(clientA, profileA, 'next', '2026-01-01 00:00:00', undefined);
     expect(navigateMock).toHaveBeenCalledWith('/events/6', expect.objectContaining({ replace: true }));
   });
 });

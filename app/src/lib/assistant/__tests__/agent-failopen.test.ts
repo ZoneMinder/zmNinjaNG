@@ -7,12 +7,15 @@
  * correct instinct into an apology. Separate file because executing the REAL
  * registry tool needs the full api mock set (mirroring tools.test.ts).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { runAssistantTurn } from '../agent';
 import { MockProvider } from '../providers/mock';
 import type { AssistantHost } from '../types';
 import { asProfileId } from '../../../api/types';
 import { getEvents, getConsoleEvents } from '../../../api/events';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
 vi.mock('../../../api/monitors', () => ({
   getMonitors: vi.fn().mockResolvedValue({ monitors: [{ Monitor: { Id: '1', Name: 'Front Door' } }] }),
@@ -33,22 +36,34 @@ vi.mock('../../../api/server', () => ({
   getDiskPercent: vi.fn(),
   getDaemonCheck: vi.fn(),
   getStorages: vi.fn(),
-  getServers: vi.fn(),
+  // The real session registry's server-map bootstrap calls this on first
+  // getSession() for a profile and always awaits a promise from it; a bare
+  // vi.fn() answers undefined and getSession throws reading .then on it.
+  getServers: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
 vi.mock('../../../api/groups', () => ({ getGroups: vi.fn() }));
 vi.mock('../../../api/tags', () => ({ getTags: vi.fn(), getEventTags: vi.fn(), extractUniqueTags: vi.fn() }));
-vi.mock('../../../services/sessions', () => ({
-  getSession: vi.fn(() => ({ client: {} })),
-  getCurrentSession: vi.fn(() => ({ client: {} })),
-}));
+
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const host: AssistantHost = { navigate: vi.fn(), onActivity: vi.fn() };
 
 describe('fail-open tool routing', () => {
   // Mocks are module-level; clear call history so one test's tool run does not
-  // count against another's "not called" assertion.
-  beforeEach(() => vi.clearAllMocks());
+  // count against another's "not called" assertion. Real profile store, so
+  // ctx.profileId 'p1' resolves through the real session registry; only
+  // api/* stays mocked above.
+  beforeEach(() => {
+    vi.clearAllMocks();
+    seedProfiles(['p1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
 
   it('runs a registry read tool after the model insists through one pushback', async () => {
     const p = new MockProvider();

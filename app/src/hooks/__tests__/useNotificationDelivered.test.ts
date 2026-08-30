@@ -5,9 +5,15 @@
  * resolves after effect cleanup must be removed immediately.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { useNotificationDelivered } from '../useNotificationDelivered';
+import { resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 // Mock Platform (mutable so individual tests can flip isNative)
 const mockPlatform = vi.hoisted(() => ({ isDesktopOrWeb: false, isNative: true }));
@@ -53,17 +59,16 @@ vi.mock('../../stores/notifications', () => ({
   },
 }));
 
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: vi.fn(() => ({ profiles: [] })),
-  },
-}));
-
 describe('useNotificationDelivered', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPlatform.isNative = true;
     mockAppAddListener.mockResolvedValue({ remove: vi.fn() });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('does not register the appStateChange listener on non-native platforms', async () => {

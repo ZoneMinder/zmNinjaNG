@@ -1,103 +1,65 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useProfileScope } from '../useProfileScope';
 import { useProfileStore } from '../../stores/profile';
 import { useSettingsStore } from '../../stores/settings';
 import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 
-// Mock the stores
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: vi.fn(),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-vi.mock('../../stores/settings', () => {
-  const DEFAULT_SETTINGS = {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'system',
-    snapshotRefreshInterval: 3,
-    streamMaxFps: 10,
-    streamScale: 50,
-    montageByGroup: {},
-    eventMontageByGroup: {},
-    monitorDetailCycleSeconds: 0,
-    defaultEventLimit: 300,
-    eventsThumbnailFit: 'contain',
-    disableLogRedaction: false,
-    dashboardRefreshInterval: 30,
-  };
-  return {
-    useSettingsStore: vi.fn(),
-    DEFAULT_SETTINGS,
-    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw }),
-  };
-});
+import { seedProfiles, resetProfileFixture, makeProfile, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
-}));
-
-const mockProfile = {
-  id: 'profile-1',
-  name: 'Home Server',
-  apiUrl: 'http://localhost/api',
-  portalUrl: 'http://localhost',
-  cgiUrl: 'http://localhost/cgi-bin',
-  isDefault: true,
-  createdAt: Date.now(),
-};
-
-const mockProfile2 = {
-  id: 'profile-2',
-  name: 'Work Server',
-  apiUrl: 'http://work/api',
-  portalUrl: 'http://work',
-  cgiUrl: 'http://work/cgi-bin',
-  isDefault: false,
-  createdAt: Date.now(),
-};
-
-function mockStores(profileState: Record<string, unknown>, settingsState: Record<string, unknown>) {
-  vi.mocked(useProfileStore).mockImplementation((selector) => selector(profileState as never));
-  vi.mocked(useSettingsStore).mockImplementation((selector) => selector(settingsState as never));
+/** Adds a raw settings bucket for an id seedProfiles doesn't seed (an
+ *  aggregate id, real or virtual), merging with whatever seedProfiles already
+ *  wrote so the seeded profiles' own buckets survive. */
+function seedAggregateSettings(bucketId: string, settings: Record<string, unknown>) {
+  useSettingsStore.setState({
+    profileSettings: { ...useSettingsStore.getState().profileSettings, [bucketId]: settings as never },
+  });
 }
 
 describe('useProfileScope', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('returns single mode with the profile and its own settings', () => {
-    mockStores(
-      { profiles: [mockProfile, mockProfile2], currentProfileId: 'profile-1' },
-      { profileSettings: { 'profile-1': { streamMaxFps: 15 } } }
-    );
+    seedProfiles(['profile-1', 'profile-2'], {
+      current: 'profile-1',
+      settings: { 'profile-1': { streamMaxFps: 15 } },
+    });
 
     const { result } = renderHook(() => useProfileScope());
 
+    // Compared against the live store entry, not seedProfiles' returned
+    // snapshot: setting an auth token for the current profile also fires the
+    // profile store's auth-subscribe effect, which stamps refreshToken onto
+    // it after seeding returns.
+    const stored = useProfileStore.getState().profiles.find((p) => p.id === asProfileId('profile-1'));
     expect(result.current?.mode).toBe('single');
-    expect(result.current?.profile).toEqual(mockProfile);
-    expect(result.current?.profiles).toEqual([mockProfile]);
+    expect(result.current?.profile).toEqual(stored);
+    expect(result.current?.profiles).toEqual([stored]);
     expect(result.current?.settings.streamMaxFps).toBe(15);
   });
 
   it('returns all mode with every profile and the ALL settings bucket', () => {
-    mockStores(
-      { profiles: [mockProfile, mockProfile2], currentProfileId: ALL_PROFILES_ID },
-      { profileSettings: { [ALL_PROFILES_ID]: { streamMaxFps: 42 } } }
-    );
+    const profiles = seedProfiles(['profile-1', 'profile-2'], { current: ALL_PROFILES_ID });
+    seedAggregateSettings(ALL_PROFILES_ID, { streamMaxFps: 42 });
 
     const { result } = renderHook(() => useProfileScope());
 
     expect(result.current?.mode).toBe('all');
     expect(result.current?.profile).toBeNull();
-    expect(result.current?.profiles).toEqual([mockProfile, mockProfile2]);
+    expect(result.current?.profiles).toEqual(profiles);
     // Value round-trip: a setting written to the ALL bucket comes back.
     expect(result.current?.settings.streamMaxFps).toBe(42);
   });
 
   it('returns null when no profiles are selected', () => {
-    mockStores({ profiles: [], currentProfileId: null }, { profileSettings: {} });
+    seedProfiles([], { current: null });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -105,10 +67,7 @@ describe('useProfileScope', () => {
   });
 
   it('returns null when currentProfileId matches no profile', () => {
-    mockStores(
-      { profiles: [mockProfile], currentProfileId: 'non-existent-profile' },
-      { profileSettings: {} }
-    );
+    seedProfiles(['profile-1'], { current: 'non-existent-profile' });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -120,7 +79,7 @@ describe('useProfileScope', () => {
     // selected with an empty profiles list (deleteProfile only resets
     // currentProfileId when it equals the deleted id, never for the
     // sentinel). null must mean "route to setup" here too.
-    mockStores({ profiles: [], currentProfileId: ALL_PROFILES_ID }, { profileSettings: {} });
+    seedProfiles([], { current: ALL_PROFILES_ID });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -128,10 +87,7 @@ describe('useProfileScope', () => {
   });
 
   it('is not in all mode for a single-profile selection', () => {
-    mockStores(
-      { profiles: [mockProfile], currentProfileId: 'profile-1' },
-      { profileSettings: {} }
-    );
+    seedProfiles(['profile-1'], { current: 'profile-1' });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -139,10 +95,7 @@ describe('useProfileScope', () => {
   });
 
   it('is in all mode for the ALL_PROFILES_ID sentinel', () => {
-    mockStores(
-      { profiles: [mockProfile], currentProfileId: ALL_PROFILES_ID },
-      { profileSettings: {} }
-    );
+    seedProfiles(['profile-1'], { current: ALL_PROFILES_ID });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -151,24 +104,18 @@ describe('useProfileScope', () => {
 
   // refs #337: profile disable toggle
   it('excludes a disabled profile from the All mode profiles list', () => {
-    const disabledProfile = { ...mockProfile2, disabled: true };
-    mockStores(
-      { profiles: [mockProfile, disabledProfile], currentProfileId: ALL_PROFILES_ID },
-      { profileSettings: {} }
-    );
+    const profiles = seedProfiles(['profile-1', makeProfile('profile-2', { disabled: true })], {
+      current: ALL_PROFILES_ID,
+    });
 
     const { result } = renderHook(() => useProfileScope());
 
     expect(result.current?.mode).toBe('all');
-    expect(result.current?.profiles).toEqual([mockProfile]);
+    expect(result.current?.profiles).toEqual([profiles[0]]);
   });
 
   it('is still All mode with a single enabled profile left after filtering (existing mode semantics)', () => {
-    const disabledProfile = { ...mockProfile2, disabled: true };
-    mockStores(
-      { profiles: [mockProfile, disabledProfile], currentProfileId: ALL_PROFILES_ID },
-      { profileSettings: {} }
-    );
+    seedProfiles(['profile-1', makeProfile('profile-2', { disabled: true })], { current: ALL_PROFILES_ID });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -177,11 +124,7 @@ describe('useProfileScope', () => {
   });
 
   it('treats a disabled persisted current profile as null scope', () => {
-    const disabledProfile = { ...mockProfile, disabled: true };
-    mockStores(
-      { profiles: [disabledProfile, mockProfile2], currentProfileId: 'profile-1' },
-      { profileSettings: {} }
-    );
+    seedProfiles([makeProfile('profile-1', { disabled: true }), 'profile-2'], { current: 'profile-1' });
 
     const { result } = renderHook(() => useProfileScope());
 
@@ -195,35 +138,23 @@ describe('useProfileScope', () => {
     const group = (memberProfileIds: string[]) => ({
       id: VIRTUAL_ID,
       name: 'Upstairs',
-      memberProfileIds,
+      memberProfileIds: memberProfileIds.map(asProfileId),
     });
 
     it('aggregates over the group members only', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, mockProfile2],
-          virtualProfiles: [group(['profile-2'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      const profiles = seedProfiles(['profile-1', 'profile-2'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-2'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
       expect(result.current?.mode).toBe('all');
-      expect(result.current?.profiles).toEqual([mockProfile2]);
+      expect(result.current?.profiles).toEqual([profiles[1]]);
       expect(result.current?.profile).toBeNull();
     });
 
     it('names the aggregate so consumers can label it', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, mockProfile2],
-          virtualProfiles: [group(['profile-1', 'profile-2'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      seedProfiles(['profile-1', 'profile-2'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-1', 'profile-2'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
@@ -232,10 +163,7 @@ describe('useProfileScope', () => {
     });
 
     it('leaves All Servers unnamed, so consumers use the localized label', () => {
-      mockStores(
-        { profiles: [mockProfile], currentProfileId: ALL_PROFILES_ID },
-        { profileSettings: {} }
-      );
+      seedProfiles(['profile-1'], { current: ALL_PROFILES_ID });
 
       const { result } = renderHook(() => useProfileScope());
 
@@ -244,19 +172,10 @@ describe('useProfileScope', () => {
     });
 
     it('reads the group\'s own settings bucket, not the All bucket', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, mockProfile2],
-          virtualProfiles: [group(['profile-1'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        {
-          profileSettings: {
-            [VIRTUAL_ID]: { streamMaxFps: 11 },
-            [ALL_PROFILES_ID]: { streamMaxFps: 42 },
-          },
-        }
-      );
+      seedProfiles(['profile-1', 'profile-2'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-1'])] });
+      seedAggregateSettings(VIRTUAL_ID, { streamMaxFps: 11 });
+      seedAggregateSettings(ALL_PROFILES_ID, { streamMaxFps: 42 });
 
       const { result } = renderHook(() => useProfileScope());
 
@@ -264,44 +183,28 @@ describe('useProfileScope', () => {
     });
 
     it('filters a disabled member out of the group', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, { ...mockProfile2, disabled: true }],
-          virtualProfiles: [group(['profile-1', 'profile-2'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      const profiles = seedProfiles(['profile-1', makeProfile('profile-2', { disabled: true })], {
+        current: VIRTUAL_ID,
+      });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-1', 'profile-2'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
-      expect(result.current?.profiles).toEqual([mockProfile]);
+      expect(result.current?.profiles).toEqual([profiles[0]]);
     });
 
     it('filters a member id no profile answers to (hand-edited storage)', () => {
-      mockStores(
-        {
-          profiles: [mockProfile],
-          virtualProfiles: [group(['profile-1', 'ghost'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      const profiles = seedProfiles(['profile-1'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-1', 'ghost'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
-      expect(result.current?.profiles).toEqual([mockProfile]);
+      expect(result.current?.profiles).toEqual([profiles[0]]);
     });
 
     it('collapses to null when every member is gone or disabled', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, { ...mockProfile2, disabled: true }],
-          virtualProfiles: [group(['profile-2'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      seedProfiles(['profile-1', makeProfile('profile-2', { disabled: true })], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-2'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
@@ -309,10 +212,8 @@ describe('useProfileScope', () => {
     });
 
     it('collapses to null for a virtual id with no group behind it', () => {
-      mockStores(
-        { profiles: [mockProfile], virtualProfiles: [], currentProfileId: VIRTUAL_ID },
-        { profileSettings: {} }
-      );
+      seedProfiles(['profile-1'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [] });
 
       const { result } = renderHook(() => useProfileScope());
 
@@ -320,18 +221,12 @@ describe('useProfileScope', () => {
     });
 
     it('keeps member order stable with the profile list, not the member list', () => {
-      mockStores(
-        {
-          profiles: [mockProfile, mockProfile2],
-          virtualProfiles: [group(['profile-2', 'profile-1'])],
-          currentProfileId: VIRTUAL_ID,
-        },
-        { profileSettings: {} }
-      );
+      const profiles = seedProfiles(['profile-1', 'profile-2'], { current: VIRTUAL_ID });
+      useProfileStore.setState({ virtualProfiles: [group(['profile-2', 'profile-1'])] });
 
       const { result } = renderHook(() => useProfileScope());
 
-      expect(result.current?.profiles).toEqual([mockProfile, mockProfile2]);
+      expect(result.current?.profiles).toEqual(profiles);
     });
   });
 });

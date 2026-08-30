@@ -9,6 +9,12 @@ import { getMonitor, getMonitors } from '../../../api/monitors';
 import { getStorages, getServers } from '../../../api/server';
 import { DEFAULT_THUMBNAIL_FALLBACK_CHAIN } from '../../../stores/settings';
 import { log } from '../../logger';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import { getSession } from '../../../services/sessions';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
 const { mockMonitor, mockMonitorStatus } = vi.hoisted(() => ({
   mockMonitor: {
@@ -84,11 +90,6 @@ vi.mock('../../../api/auth', () => ({
   getVersion: vi.fn().mockResolvedValue({ version: '1.37.0', apiversion: '2.0' }),
 }));
 
-vi.mock('../../../services/sessions', () => ({
-  getSession: vi.fn(() => ({ client: {} })),
-  getCurrentSession: vi.fn(() => ({ client: {} })),
-}));
-
 vi.mock('../../../api/groups', () => ({
   getGroups: vi.fn().mockResolvedValue({
     groups: [
@@ -144,6 +145,22 @@ function ctxWithDisplay(): ToolContext {
     dateTimeFormat: { dateFormat: 'MMM d, yyyy', timeFormat: '24h', customDateFormat: '', customTimeFormat: '' },
   };
 }
+
+// Real profile store, so ctx()'s profileId 'p1' resolves through the real
+// session registry; only api/* stays mocked above. The session is built here
+// rather than left to the first tool call: getSession's first build for a
+// profile fires a background getServers() call (server-map bootstrap) that
+// would otherwise steal a test's own mockRejectedValueOnce/mockResolvedValueOnce
+// queued for getServers, which real usage never sees (the session already
+// exists from login by the time a tool runs).
+beforeEach(() => {
+  seedProfiles(['p1']);
+  getSession(asProfileId('p1'));
+});
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
 
 describe('read-only tools', () => {
   beforeEach(() => vi.clearAllMocks());

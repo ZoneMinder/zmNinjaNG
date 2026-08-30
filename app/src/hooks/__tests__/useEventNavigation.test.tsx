@@ -1,8 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useEventNavigation } from '../useEventNavigation';
-import * as eventsApi from '../../api/events';
-import type { EventData } from '../../api/types';
 
 const mockNavigate = vi.fn();
 const mockLocation = { state: undefined as unknown };
@@ -13,11 +10,17 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('../../api/events', async () => {
-  const actual = await vi.importActual<typeof eventsApi>('../../api/events');
+  const actual = await vi.importActual<typeof import('../../api/events')>('../../api/events');
   return { ...actual, getAdjacentEvent: vi.fn() };
 });
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {} })) }));
+import { useEventNavigation } from '../useEventNavigation';
+import * as eventsApi from '../../api/events';
+import type { EventData } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const getAdjacentEvent = vi.mocked(eventsApi.getAdjacentEvent);
 
@@ -30,6 +33,12 @@ describe('useEventNavigation.goToNextEvent', () => {
     mockNavigate.mockClear();
     getAdjacentEvent.mockReset();
     mockLocation.state = undefined;
+    seedProfiles(['p1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('resolves true and navigates when a next event exists', async () => {

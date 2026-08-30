@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import {
   bootstrapAuth,
   bootstrapTimezone,
@@ -10,11 +14,17 @@ import {
 } from '../../services/profile-bootstrap';
 import type { Profile } from '../../api/types';
 import { asProfileId } from '../../api/types';
+import { useAuthStore } from '../auth';
+import { useSettingsStore } from '../settings';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
   log: {
     profileService: vi.fn(),
+    auth: vi.fn(),
+    sslTrust: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     info: vi.fn(),
@@ -40,34 +50,14 @@ vi.mock('../../api/auth', () => ({
 
 vi.mock('../../api/server', () => ({
   fetchMinStreamingPort: vi.fn(),
+  // getSession's fire-and-forget server-map bootstrap (services/sessions.ts)
+  // calls this on every session it creates; unstubbed it's undefined and
+  // getSession throws before bootstrapTimezone/ZmsPath/etc even run.
+  getServers: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(() => ({ client: {} })),
-}));
-
-// Mock stores - these need to be dynamic imports in the actual code
-vi.mock('../auth', () => ({
-  useAuthStore: {
-    getState: vi.fn(() => ({
-      login: vi.fn().mockResolvedValue(undefined),
-      setTokens: vi.fn(),
-    })),
-  },
-  getAuthSlice: vi.fn(() => ({ accessToken: 'mock-token' })),
-}));
-
-vi.mock('../settings', () => ({
-  useSettingsStore: {
-    getState: vi.fn(() => ({
-      profileSettings: {},
-      updateProfileSettings: vi.fn(),
-    })),
-  },
 }));
 
 describe('Profile Bootstrap', () => {
@@ -93,36 +83,43 @@ describe('Profile Bootstrap', () => {
       username: 'admin',
       password: 'stored-securely',
     };
+
+    // getSession(profile.id) needs the real sessions gate (registered by
+    // stores/profile.ts, pulled in transitively by profile-fixture) to find
+    // a profile; the client it returns is never actually used, since every
+    // api/* call it's passed to is mocked below.
+    seedProfiles([mockProfile]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   describe('bootstrapAuth', () => {
     it('skips authentication when no credentials are stored and marks as authenticated', async () => {
-      const { useAuthStore } = await import('../auth');
-      const mockSetTokens = vi.fn();
-      vi.mocked(useAuthStore.getState).mockReturnValue({
-        login: vi.fn(),
-        setTokens: mockSetTokens,
-      } as any);
-
+      const setTokensSpy = vi.spyOn(useAuthStore.getState(), 'setTokens');
       const profileWithoutCreds = { ...mockProfile, username: undefined, password: undefined };
 
       await bootstrapAuth(profileWithoutCreds, mockContext);
 
       expect(mockContext.getDecryptedPassword).not.toHaveBeenCalled();
-      expect(mockSetTokens).toHaveBeenCalledWith(mockProfile.id, {});
+      expect(setTokensSpy).toHaveBeenCalledWith(mockProfile.id, {});
+      expect(useAuthStore.getState().slices[mockProfile.id]?.isAuthenticated).toBe(true);
+      expect(useAuthStore.getState().slices[mockProfile.id]?.requiresAuth).toBe(false);
     });
 
     it('authenticates with stored credentials', async () => {
-      const { useAuthStore } = await import('../auth');
-      const mockLogin = vi.fn().mockResolvedValue(undefined);
-      vi.mocked(useAuthStore.getState).mockReturnValue({
-        login: mockLogin,
-      } as any);
+      // login itself (the actual server round-trip) is covered by
+      // auth.test.ts; stubbing it here isolates what bootstrapAuth is
+      // responsible for - decrypting the stored password and calling login
+      // with the right arguments.
+      const loginSpy = vi.spyOn(useAuthStore.getState(), 'login').mockResolvedValue(undefined);
 
       await bootstrapAuth(mockProfile, mockContext);
 
       expect(mockContext.getDecryptedPassword).toHaveBeenCalledWith('test-profile');
-      expect(mockLogin).toHaveBeenCalledWith(mockProfile.id, 'admin', 'decrypted-password');
+      expect(loginSpy).toHaveBeenCalledWith(mockProfile.id, 'admin', 'decrypted-password');
     });
 
     it('handles password decryption failure gracefully', async () => {
@@ -135,12 +132,7 @@ describe('Profile Bootstrap', () => {
     });
 
     it('handles authentication failure gracefully', async () => {
-      const { useAuthStore } = await import('../auth');
-      const mockLogin = vi.fn().mockRejectedValue(new Error('Auth failed'));
-      vi.mocked(useAuthStore.getState).mockReturnValue({
-        login: mockLogin,
-        accessToken: null,
-      } as any);
+      vi.spyOn(useAuthStore.getState(), 'login').mockRejectedValue(new Error('Auth failed'));
 
       // Should not throw
       await bootstrapAuth(mockProfile, mockContext);
@@ -298,11 +290,7 @@ describe('Profile Bootstrap', () => {
     it('logs the force-disabled override when the profile setting is on', async () => {
       const { fetchMinStreamingPort } = await import('../../api/server');
       vi.mocked(fetchMinStreamingPort).mockResolvedValue(31000);
-      const { useSettingsStore } = await import('../settings');
-      vi.mocked(useSettingsStore.getState).mockReturnValue({
-        profileSettings: { 'test-profile': { forceDisableMultiPort: true } },
-        updateProfileSettings: vi.fn(),
-      } as any);
+      useSettingsStore.getState().updateProfileSettings('test-profile', { forceDisableMultiPort: true });
       const { log } = await import('../../lib/logger');
 
       await bootstrapMultiPortStreaming(mockProfile, mockContext);
@@ -330,6 +318,7 @@ describe('Profile Bootstrap', () => {
       vi.mocked(fetchZmsPath).mockResolvedValue('/cgi-bin');
       vi.mocked(fetchGo2RTCPath).mockResolvedValue(null);
       vi.mocked(fetchMinStreamingPort).mockResolvedValue(null);
+      vi.spyOn(useAuthStore.getState(), 'login').mockResolvedValue(undefined);
 
       await performBootstrap(mockProfile, mockContext);
 

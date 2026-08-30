@@ -4,14 +4,22 @@
  * Tests kiosk lock/unlock flow, PIN set/confirm/change, and cancel behavior.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { useKioskLock } from '../useKioskLock';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 // Mock logger
 vi.mock('../../lib/logger', () => ({
   log: {
     kiosk: vi.fn(),
+    profileService: vi.fn(),
+    auth: vi.fn(),
   },
   LogLevel: {
     DEBUG: 'DEBUG',
@@ -51,24 +59,10 @@ vi.mock('../../stores/kioskStore', () => ({
   useKioskStore: vi.fn(),
 }));
 
-// Mock settings store
-const mockGetProfileSettings = vi.fn();
-const mockUpdateProfileSettings = vi.fn();
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: vi.fn(),
-}));
-
-// Mock profile store
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: vi.fn(),
-}));
-
 import { useKioskStore } from '../../stores/kioskStore';
 import { useSettingsStore } from '../../stores/settings';
-import { useProfileStore } from '../../stores/profile';
 
-function setupStoreMocks(options?: { isLocked?: boolean; hasInsomnia?: boolean; profileId?: string }) {
+function setupStoreMocks(options?: { isLocked?: boolean; hasInsomnia?: boolean; profileId?: string | null }) {
   mockIsLocked = options?.isLocked ?? false;
 
   vi.mocked(useKioskStore).mockImplementation((selector) => {
@@ -76,28 +70,23 @@ function setupStoreMocks(options?: { isLocked?: boolean; hasInsomnia?: boolean; 
     return (selector as unknown as (s: typeof state) => unknown)(state);
   });
 
-  vi.mocked(useProfileStore).mockImplementation((selector) => {
-    const state = { currentProfileId: options?.profileId ?? 'profile-1' };
-    return (selector as (s: typeof state) => unknown)(state);
-  });
-
-  mockGetProfileSettings.mockReturnValue({
-    insomnia: options?.hasInsomnia ?? false,
-  });
-
-  vi.mocked(useSettingsStore).mockImplementation((selector) => {
-    const state = {
-      getProfileSettings: mockGetProfileSettings,
-      updateProfileSettings: mockUpdateProfileSettings,
-    };
-    return (selector as unknown as (s: typeof state) => unknown)(state);
-  });
+  const profileId = options?.profileId === undefined ? 'profile-1' : options.profileId;
+  if (profileId === null) {
+    seedProfiles([], { current: null });
+  } else {
+    seedProfiles([profileId], { settings: { [profileId]: { insomnia: options?.hasInsomnia ?? false } } });
+  }
 }
 
 describe('useKioskLock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupStoreMocks();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   describe('initial state', () => {
@@ -181,7 +170,7 @@ describe('useKioskLock', () => {
 
     it('enables insomnia in profile settings when not already enabled', async () => {
       mockHasPinStored.mockResolvedValue(true);
-      mockGetProfileSettings.mockReturnValue({ insomnia: false });
+      setupStoreMocks({ hasInsomnia: false });
 
       const { result } = renderHook(() => useKioskLock());
 
@@ -189,12 +178,13 @@ describe('useKioskLock', () => {
         await result.current.handleLockToggle();
       });
 
-      expect(mockUpdateProfileSettings).toHaveBeenCalledWith('profile-1', { insomnia: true });
+      expect(useSettingsStore.getState().getProfileSettings('profile-1').insomnia).toBe(true);
     });
 
     it('does not update insomnia setting when already enabled', async () => {
       mockHasPinStored.mockResolvedValue(true);
-      mockGetProfileSettings.mockReturnValue({ insomnia: true });
+      setupStoreMocks({ hasInsomnia: true });
+      const updateSpy = vi.spyOn(useSettingsStore.getState(), 'updateProfileSettings');
 
       const { result } = renderHook(() => useKioskLock());
 
@@ -202,7 +192,8 @@ describe('useKioskLock', () => {
         await result.current.handleLockToggle();
       });
 
-      expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(useSettingsStore.getState().getProfileSettings('profile-1').insomnia).toBe(true);
     });
   });
 
@@ -374,11 +365,7 @@ describe('useKioskLock', () => {
   describe('no active profile', () => {
     it('activateKioskMode does nothing when no profileId', async () => {
       mockHasPinStored.mockResolvedValue(true);
-
-      vi.mocked(useProfileStore).mockImplementation((selector) => {
-        const state = { currentProfileId: null };
-        return (selector as (s: typeof state) => unknown)(state);
-      });
+      setupStoreMocks({ profileId: null });
 
       const { result } = renderHook(() => useKioskLock());
 
