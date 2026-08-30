@@ -8,7 +8,7 @@
  * Runs against the real profile, settings and auth stores and the real
  * session registry; only the HTTP client is fake (tests/profile-fixture).
  */
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';

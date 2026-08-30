@@ -25,7 +25,7 @@ vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secur
 
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
-import { useSettingsStore, DEFAULT_SETTINGS, type ProfileSettings } from '../../stores/settings';
+import { useSettingsStore, DEFAULT_SETTINGS, type ProfileSettings, mergeProfileSettings } from '../../stores/settings';
 import { useProfileStore } from '../../stores/profile';
 
 type EventsPageFilters = ProfileSettings['eventsPageFilters'];
@@ -649,10 +649,10 @@ describe('useEventFilters in All Servers mode', () => {
     useSettingsStore.setState({
       profileSettings: {
         ...useSettingsStore.getState().profileSettings,
-        [ALL_PROFILES_ID]: {
+        [ALL_PROFILES_ID]: mergeProfileSettings({
           defaultEventLimit: 100,
           eventsPageFilters: { ...DEFAULT_SETTINGS.eventsPageFilters, ...saved },
-        },
+        }),
       },
     });
   }

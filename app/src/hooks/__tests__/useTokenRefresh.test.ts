@@ -40,17 +40,21 @@ const mockGetFreshAccessToken = vi.fn();
 
 /** Patch one profile's real auth slice directly - the precise per-test
  * expiry/authenticated control the old mock gave, applied to the real store. */
+const EMPTY_SLICE = {
+  accessToken: null,
+  refreshToken: null,
+  refreshTokenExpires: null,
+  version: null,
+  apiVersion: null,
+  requiresAuth: true,
+};
+
 function setAuthSlice(profileId: ProfileId, patch: { isAuthenticated: boolean; accessTokenExpires: number | null }) {
   useAuthStore.setState((s) => ({
     slices: {
       ...s.slices,
       [profileId]: {
-        accessToken: null,
-        refreshToken: null,
-        refreshTokenExpires: null,
-        version: null,
-        apiVersion: null,
-        requiresAuth: true,
+        ...EMPTY_SLICE,
         ...(s.slices[profileId] ?? {}),
         ...patch,
       },

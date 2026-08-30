@@ -5,7 +5,7 @@ vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gate
 vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
 import { DashboardConfig } from '../DashboardConfig';
-import { mintVirtualProfileId } from '../../../api/types';
+import { asProfileId, mintVirtualProfileId } from '../../../api/types';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 import { useProfileStore } from '../../../stores/profile';

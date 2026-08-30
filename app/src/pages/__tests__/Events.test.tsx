@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import Events from '../Events';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { eventInstant } from '../../lib/event/event-instant';
 import type { EventData } from '../../api/types';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
@@ -161,8 +161,8 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [mockSearchParams, setSearchParamsMock],
 }));
 
-const profileA = { id: 'profile-1', name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
-const profileB = { id: 'profile-2', name: 'Office', portalUrl: 'https://b', apiUrl: 'https://b/api', timezone: 'America/New_York' };
+const profileA = { id: asProfileId('profile-1'), name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
+const profileB = { id: asProfileId('profile-2'), name: 'Office', portalUrl: 'https://b', apiUrl: 'https://b/api', timezone: 'America/New_York' };
 
 function singleScope() {
   seedProfiles([makeProfile('profile-1', profileA)], { current: 'profile-1' });
@@ -546,7 +546,7 @@ describe('Events Page', () => {
 
     it('the server filter chip row hides a profile\'s slice when toggled off', () => {
       allScope();
-      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: ['profile-1'] });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -565,7 +565,7 @@ describe('Events Page', () => {
 
     it('drops a deleted profile\'s id from the persisted server filter instead of silently hiding everything (refs #337)', () => {
       allScope();
-      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: ['deleted-profile-id'] });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('deleted-profile-id')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -582,7 +582,7 @@ describe('Events Page', () => {
 
     it('keeps a persisted filter\'s live ids while dropping only the deleted one', () => {
       allScope();
-      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: ['profile-1', 'deleted-profile-id'] });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1'), asProfileId('deleted-profile-id')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -599,7 +599,7 @@ describe('Events Page', () => {
 
     it('"Showing X of Y" reflects only the server-filtered profiles, not every profile in scope (refs #337)', () => {
       allScope();
-      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: ['profile-1'] });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1')] });
       scopedEvents({
         events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
         totalCount: 5,

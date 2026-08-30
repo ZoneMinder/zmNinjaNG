@@ -9,8 +9,8 @@ import enTranslation from '../../locales/en/translation.json';
 import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
 import { useAuthStore } from '../../stores/auth';
-import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../tests/profile-fixture';
-import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
 vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
