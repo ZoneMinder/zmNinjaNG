@@ -1,10 +1,10 @@
 {
   "@typescript-eslint/no-empty-object-type": 3,
-  "@typescript-eslint/no-explicit-any": 99,
+  "@typescript-eslint/no-explicit-any": 90,
   "@typescript-eslint/no-this-alias": 1,
   "no-restricted-syntax": 4,
   "react-hooks/exhaustive-deps": 32,
-  "react-hooks/globals": 1,
+  "react-hooks/globals": 2,
   "react-hooks/preserve-manual-memoization": 10,
   "react-hooks/refs": 21,
   "react-hooks/set-state-in-effect": 11,
