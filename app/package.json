@@ -26,6 +26,7 @@
     "test:coverage": "vitest --coverage",
     "test:watch": "vitest --watch",
     "test:unit": "vitest run",
+    "test:mutation": "node scripts/mutation-smoke.mjs",
     "test:e2e": "bddgen && playwright test",
     "test:e2e:ui": "bddgen && playwright test --ui",
     "test:e2e:android": "bash ../scripts/test-android.sh",
