@@ -17,6 +17,7 @@ vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secur
 import { handleProfileRehydration } from '../profile-initialization';
 import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { useDashboardStore, type DashboardWidget } from '../../stores/dashboard';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
@@ -29,12 +30,6 @@ const logSpy = vi.fn();
 vi.mock('../../lib/logger', () => ({
   log: { profileService: (...args: unknown[]) => logSpy(...args), auth: vi.fn() },
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
-}));
-
-const clearDashboardProfile = vi.fn();
-
-vi.mock('../../stores/dashboard', () => ({
-  useDashboardStore: { getState: () => ({ clearProfile: clearDashboardProfile }) },
 }));
 
 vi.mock('../../stores/query-cache', () => ({
@@ -50,12 +45,12 @@ vi.mock('../profile-bootstrap', () => ({
 describe('handleProfileRehydration', () => {
   beforeEach(() => {
     logSpy.mockClear();
-    clearDashboardProfile.mockClear();
   });
 
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   // I2: this rewrites persisted user state, so it has to be exact - the
@@ -66,7 +61,16 @@ describe('handleProfileRehydration', () => {
     const storeGet = vi.fn();
     // Give the ALL bucket something to remove, so a real deletion is observable.
     useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {});
+    const allWidget: DashboardWidget = {
+      id: 'w1',
+      type: 'events',
+      title: 'Recent',
+      settings: {},
+      layout: { i: 'w1', x: 0, y: 0, w: 1, h: 1 },
+    };
+    useDashboardStore.setState({ widgets: { [ALL_PROFILES_ID]: [allWidget] } });
     const removeProfileSettingsSpy = vi.spyOn(useSettingsStore.getState(), 'removeProfileSettings');
+    const clearDashboardProfileSpy = vi.spyOn(useDashboardStore.getState(), 'clearProfile');
 
     await handleProfileRehydration(
       {
@@ -84,10 +88,11 @@ describe('handleProfileRehydration', () => {
 
     expect(storeSet).toHaveBeenCalledWith(expect.objectContaining({ currentProfileId: null }));
     expect(useSettingsStore.getState().profileSettings[ALL_PROFILES_ID]).toBeUndefined();
-    expect(clearDashboardProfile).toHaveBeenCalledWith(ALL_PROFILES_ID);
+    expect(useDashboardStore.getState().widgets[ALL_PROFILES_ID]).toBeUndefined();
+    expect(clearDashboardProfileSpy).toHaveBeenCalledWith(ALL_PROFILES_ID);
     // Once per rehydrate, not once per store read.
     expect(removeProfileSettingsSpy).toHaveBeenCalledTimes(1);
-    expect(clearDashboardProfile).toHaveBeenCalledTimes(1);
+    expect(clearDashboardProfileSpy).toHaveBeenCalledTimes(1);
     expect(storeSet).toHaveBeenCalledWith(
       expect.objectContaining({ isInitialized: true, isBootstrapping: false })
     );
@@ -114,6 +119,7 @@ describe('handleProfileRehydration', () => {
     // through the real session registry, which needs this profile in the
     // real profile store to find it.
     seedProfiles([profile]);
+    const clearDashboardProfileSpy = vi.spyOn(useDashboardStore.getState(), 'clearProfile');
 
     for (const currentProfileId of [profile.id, mintVirtualProfileId(), null]) {
       await handleProfileRehydration(
@@ -132,7 +138,7 @@ describe('handleProfileRehydration', () => {
     }
 
     expect(useSettingsStore.getState().profileSettings[ALL_PROFILES_ID]).toBeUndefined();
-    expect(clearDashboardProfile).not.toHaveBeenCalled();
+    expect(clearDashboardProfileSpy).not.toHaveBeenCalled();
   });
 
   it('treats a virtual profile as initialized, skipping bootstrap, with no ERROR (refs #337)', async () => {

@@ -1,35 +1,30 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
-import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { DEFAULT_SETTINGS, useSettingsStore, mergeProfileSettings } from '../../stores/settings';
 import type { ProfileSettings } from '../../stores/settings';
+import { ALL_PROFILES_ID } from '../../api/types';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 // Isolates the two All-mode guardrails (the watched-pair cap and the poll
 // floor, both read from the ALL settings bucket) from the rest of
-// useLiveActivityAllMode's fanout: mocks every dependency and spies on what
-// useScopedAlarmStates is actually called with.
+// useLiveActivityAllMode's fanout: mocks the monitor/alarm fanout hooks and
+// spies on what useScopedAlarmStates is actually called with. Runs against
+// the real profile and settings stores (profile-fixture) so the ALL bucket's
+// settings resolve exactly as useProfileScope resolves them for the app.
 const scopedAlarmStatesSpy = vi.hoisted(() =>
   vi.fn((_pairs: unknown, _options: unknown) => ({ states: {}, isLoading: false, error: null }))
 );
 const scopedMonitorsSpy = vi.hoisted(() =>
   vi.fn(() => ({ monitors: [] as unknown[], errors: [], isLoading: false, refetchProfile: vi.fn() }))
 );
-// The ALL bucket the page's guardrails read. Mutable so a test can turn a
-// guardrail down and assert the fanout follows the setting rather than the
-// constant it used to hardcode.
-const allSettings = vi.hoisted(() => ({ current: null as ProfileSettings | null }));
 
-vi.mock('../useProfileScope', () => ({
-  useProfileScope: () =>
-    allSettings.current
-      ? { mode: 'all', profile: null, profiles: [], settings: allSettings.current }
-      : null,
-}));
 vi.mock('../useScopedMonitors', () => ({ useScopedMonitors: () => scopedMonitorsSpy() }));
 vi.mock('../useAlarmStates', () => ({ useScopedAlarmStates: scopedAlarmStatesSpy }));
-vi.mock('../../stores/notifications', () => ({
-  useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
-    selector({ profileEvents: {} }),
-}));
 
 import { useLiveActivityAllMode } from '../useLiveActivityAllMode';
 
@@ -45,15 +40,29 @@ const scopedMonitor = (profileId: string, id: string) => ({
   item: { Monitor: { Id: id, Name: `Monitor ${id}` }, Monitor_Status: undefined },
 });
 
+/** Seed the ALL bucket the page's guardrails read - the key useProfileScope
+ *  resolves `scope.settings` from while an aggregate is current. */
+function setAllSettings(overrides: Partial<ProfileSettings> = {}): void {
+  useSettingsStore.setState((state) => ({
+    profileSettings: { ...state.profileSettings, [ALL_PROFILES_ID]: mergeProfileSettings(overrides) },
+  }));
+}
+
 describe('useLiveActivityAllMode guardrails', () => {
   beforeEach(() => {
-    allSettings.current = { ...DEFAULT_SETTINGS };
+    seedProfiles([makeProfile('profile-a'), makeProfile('profile-b')], { current: ALL_PROFILES_ID });
+    setAllSettings();
     scopedMonitorsSpy.mockReturnValue({
       monitors: [],
       errors: [],
       isLoading: false,
       refetchProfile: vi.fn(),
     });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('clamps a configured interval below the floor up to the floor, in All mode', () => {
@@ -70,7 +79,7 @@ describe('useLiveActivityAllMode guardrails', () => {
   });
 
   it('floors at the seconds the ALL bucket sets, not the shipped default', () => {
-    allSettings.current = { ...DEFAULT_SETTINGS, allModePollFloorSeconds: 45 };
+    setAllSettings({ allModePollFloorSeconds: 45 });
     renderHook(() => useLiveActivityAllMode(true, 30_000, 1_000, emptyActive));
     const [, options] = scopedAlarmStatesSpy.mock.calls.at(-1)!;
     expect((options as { pollIntervalMs: number }).pollIntervalMs).toBe(45_000);
@@ -79,14 +88,14 @@ describe('useLiveActivityAllMode guardrails', () => {
   it('still leaves a slower configured interval alone when the floor is raised', () => {
     // The floor clamps the bandwidth-derived interval, it never replaces it:
     // a user who asked for a slow poll keeps the slow poll.
-    allSettings.current = { ...DEFAULT_SETTINGS, allModePollFloorSeconds: 20 };
+    setAllSettings({ allModePollFloorSeconds: 20 });
     renderHook(() => useLiveActivityAllMode(true, 30_000, 60_000, emptyActive));
     const [, options] = scopedAlarmStatesSpy.mock.calls.at(-1)!;
     expect((options as { pollIntervalMs: number }).pollIntervalMs).toBe(60_000);
   });
 
   it('watches only as many pairs as the ALL bucket allows, reporting the rest as overflow', () => {
-    allSettings.current = { ...DEFAULT_SETTINGS, allModeMaxWatched: 2 };
+    setAllSettings({ allModeMaxWatched: 2 });
     scopedMonitorsSpy.mockReturnValue({
       monitors: [
         scopedMonitor('profile-a', '1'),

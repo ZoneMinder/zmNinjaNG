@@ -12,6 +12,7 @@ import { ALL_PROFILES_ID } from '../../../api/types';
 import type { DashboardWidget } from '../../../stores/dashboard';
 import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
 import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import { useDashboardStore } from '../../../stores/dashboard';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -40,12 +41,6 @@ vi.mock('../../ui/select', () => ({
   },
 }));
 
-const updateWidget = vi.fn();
-vi.mock('../../../stores/dashboard', () => ({
-  useDashboardStore: (selector: (s: { updateWidget: typeof updateWidget }) => unknown) =>
-    selector({ updateWidget }),
-}));
-
 const profileA = makeProfile('profile-a', { name: 'Home' });
 const profileB = makeProfile('profile-b', { name: 'Work' });
 
@@ -67,11 +62,13 @@ describe('WidgetEditDialog', () => {
     seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
     installApiClient(profileA.id, fakeApiClient({ '/monitors.json': monitorsFor(profileA.id), '/servers.json': { servers: [] } }));
     installApiClient(profileB.id, fakeApiClient({ '/monitors.json': monitorsFor(profileB.id), '/servers.json': { servers: [] } }));
+    useDashboardStore.setState({ widgets: { [profileA.id]: [widget] } });
   });
 
   afterEach(() => {
     resetProfileFixture();
     resetFakeStoreGates();
+    useDashboardStore.setState({ widgets: {}, isEditing: false });
   });
 
   it('picking profile B and saving pins the monitor widget to B (refs #337)', async () => {
@@ -93,10 +90,9 @@ describe('WidgetEditDialog', () => {
 
     fireEvent.click(screen.getByTestId('widget-edit-save-button'));
 
-    expect(updateWidget).toHaveBeenCalledWith(
-      profileA.id,
-      'widget-1',
-      expect.objectContaining({ settings: expect.objectContaining({ profileId: profileB.id }) })
-    );
+    await waitFor(() => {
+      const saved = useDashboardStore.getState().widgets[profileA.id]?.find((w) => w.id === 'widget-1');
+      expect(saved?.settings.profileId).toBe(profileB.id);
+    });
   });
 });
