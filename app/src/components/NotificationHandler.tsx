@@ -139,7 +139,13 @@ export function NotificationHandler() {
     return unsubscribe;
   }, []);
 
-  // Get settings for current profile
+  // Subscribe to the settings slice so enabling/disabling notifications
+  // re-renders this component. Direct mode opens no websocket, so nothing in
+  // `connections` changes: without this, the delegated hooks below keep the
+  // settings object from the render before the toggle and FCM registration
+  // never runs. Selecting the raw slice (not a mapped object) keeps the
+  // subscription stable; getProfileSettings spreads a fresh object per call.
+  useNotificationStore((state) => state.profileSettings);
   const settings = currentProfile ? getProfileSettings(currentProfile.id) : null;
 
   // --- Delegated hooks ---
