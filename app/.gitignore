@@ -44,3 +44,4 @@ android/app/src/main/assets/public/
 android/keystore.properties
 *.jks
 *.keystore
+.e2e-last-run.json
