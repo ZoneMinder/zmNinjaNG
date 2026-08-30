@@ -342,7 +342,7 @@ describe('discovery returns the login it performed', () => {
       status: 200,
       data: { access_token: 'tok', access_token_expires: 3600, refresh_token: 'ref', refresh_token_expires: 86400, version: '1.36.0', apiversion: '2.0' },
     });
-    (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+    vi.mocked(createStoreApiClient).mockReturnValue({ get: mockGet, post: mockPost } as unknown as ApiClient);
 
     const result = await discoverZoneminder('http://zm.example.com', { username: 'admin', password: 'pw' });
 
@@ -355,7 +355,7 @@ describe('discovery returns the login it performed', () => {
   it('omits the login when the server answered without tokens', async () => {
     const mockGet = vi.fn().mockResolvedValueOnce({ status: 200, data: { version: '1.36.0' } });
     const mockPost = vi.fn().mockResolvedValueOnce({ status: 200, data: {} });
-    (createStoreApiClient as any).mockReturnValue({ get: mockGet, post: mockPost });
+    vi.mocked(createStoreApiClient).mockReturnValue({ get: mockGet, post: mockPost } as unknown as ApiClient);
 
     const result = await discoverZoneminder('http://zm.example.com', { username: 'admin', password: 'pw' });
 
