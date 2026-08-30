@@ -1,21 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import NotificationHistory from '../NotificationHistory';
-import { useCurrentProfile } from '../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../hooks/useProfileScope';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
-import type { Profile } from '../../api/types';
+import { ALL_PROFILES_ID } from '../../api/types';
 import type { HistoryEvent } from '../../components/notifications/NotificationHistoryItem';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string, opts?: { count?: number }) => `${key}${opts?.count !== undefined ? `:${opts.count}` : ''}` }),
-}));
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-}));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
 }));
 vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,
@@ -25,8 +21,8 @@ const markEventRead = vi.fn();
 const markAllRead = vi.fn();
 const clearEvents = vi.fn();
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' } as Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work' } as Profile;
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
 const eventFrom = (_profileId: string, eventId: number, receivedAt: number, read = false) => ({
   EventId: eventId,
@@ -79,12 +75,14 @@ describe('NotificationHistory page (refs #337)', () => {
     vi.clearAllMocks();
   });
 
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   describe('single mode (unchanged)', () => {
     beforeEach(() => {
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
-      });
-      vi.mocked(useProfileScope).mockReturnValue(null);
+      seedProfiles([profileA], { current: profileA.id });
       storeState = { profileEvents: { [profileA.id]: [eventFrom(profileA.id, 1, 100)] } };
     });
 
@@ -97,12 +95,7 @@ describe('NotificationHistory page (refs #337)', () => {
 
   describe('All mode', () => {
     beforeEach(() => {
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: null, settings: {} as never, hasProfile: false, isAllMode: true,
-      });
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
-      });
+      seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
       storeState = {
         profileEvents: {
           [profileA.id]: [eventFrom(profileA.id, 1, 100), eventFrom(profileA.id, 2, 300)],

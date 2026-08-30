@@ -1,14 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import Server from '../Server';
-import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../hooks/useProfileScope';
-import { getSession } from '../../services/sessions';
-import { getServers } from '../../api/server';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { seedProfiles, resetProfileFixture, fakeApiClient } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 // The permission probe reaches the profile store, which this suite's session
 // mock cannot satisfy; permissions are not what it tests (refs #344).
@@ -18,36 +19,6 @@ vi.mock('../../hooks/usePermissions', () => ({
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
-}));
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../hooks/useBandwidthSettings', () => ({
-  useBandwidthSettings: () => ({ daemonCheckInterval: 30000 }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ isAuthenticated: true, version: '1.36', apiVersion: '2.0' }),
-}));
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
-}));
-vi.mock('../../api/server', () => ({
-  getServers: vi.fn().mockResolvedValue([]),
-  getLoad: vi.fn().mockResolvedValue({}),
-  getDiskPercent: vi.fn().mockResolvedValue({}),
-  getDaemonCheck: vi.fn().mockResolvedValue(true),
-  getStorages: vi.fn().mockResolvedValue([]),
-}));
-vi.mock('../../api/time', () => ({
-  getServerTimeZone: vi.fn().mockResolvedValue('UTC'),
-}));
-vi.mock('../../api/states', () => ({
-  getStates: vi.fn().mockResolvedValue([]),
-  changeState: vi.fn(),
 }));
 vi.mock('../../hooks/use-toast', () => ({
   useToast: () => ({ toast: vi.fn() }),
@@ -76,8 +47,19 @@ vi.mock('../../components/ui/select', () => ({
   },
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
+// Every endpoint the page's queries touch, so an unrouted request fails loud
+// rather than the page silently rendering an error state.
+function serverRoutes() {
+  return {
+    '/servers.json': [],
+    '/host/daemonCheck.json': true,
+    '/host/getLoad.json': {},
+    '/host/getDiskPercent.json': {},
+    '/states.json': [],
+    '/host/getTimeZone.json': 'UTC',
+    '/storage.json': [],
+  };
+}
 
 function renderServer() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -89,47 +71,37 @@ function renderServer() {
 }
 
 describe('Server page - profile picker (refs #337)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: { profile: id } as never,
-      timezone: 'UTC',
-    }));
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('single mode: no picker, fetches via the current profile', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
-    });
-    vi.mocked(useProfileById).mockReturnValue({ profile: null, settings: {} as never });
-    vi.mocked(useProfileScope).mockReturnValue({ mode: 'single', profile: profileA, profiles: [profileA], settings: {} as never });
+    const [profileA] = seedProfiles(['profile-a']);
+    const clientA = fakeApiClient(serverRoutes());
+    installApiClient(profileA.id, clientA);
 
     renderServer();
 
-    await waitFor(() => expect(getServers).toHaveBeenCalled());
-    expect(getSession).toHaveBeenCalledWith(profileA.id);
+    await waitFor(() => expect(clientA.calls.map((c) => c.url)).toContain('/servers.json'));
     expect(screen.queryByTestId('page-profile-picker')).toBeNull();
   });
 
   it('All mode: shows picker defaulted to first profile, and picking B fetches via B', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null, settings: {} as never, hasProfile: false, isAllMode: true,
-    });
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: {} as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({ mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never });
+    const [profileA, profileB] = seedProfiles(['profile-a', 'profile-b'], { current: ALL_PROFILES_ID });
+    const clientA = fakeApiClient(serverRoutes());
+    const clientB = fakeApiClient(serverRoutes());
+    installApiClient(profileA.id, clientA);
+    installApiClient(profileB.id, clientB);
 
     renderServer();
 
-    await waitFor(() => expect(getServers).toHaveBeenCalled());
-    expect(getSession).toHaveBeenCalledWith(profileA.id);
+    await waitFor(() => expect(clientA.calls.map((c) => c.url)).toContain('/servers.json'));
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
+    expect(clientB.calls).toEqual([]);
 
-    fireEvent.click(screen.getByTestId('page-profile-picker-option-profile-b'));
+    fireEvent.click(screen.getByTestId(`page-profile-picker-option-${profileB.id}`));
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileB.id));
+    await waitFor(() => expect(clientB.calls.map((c) => c.url)).toContain('/servers.json'));
   });
 });

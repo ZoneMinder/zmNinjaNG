@@ -6,9 +6,16 @@
  * prop's identity, and the resulting render count.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React from 'react';
 import Monitors from '../Monitors';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 // Its own tests cover the button's two gates; stubbing keeps useAssistantEnabled's
 // settings-store reads out of this file's mock surface, as with the analysis
@@ -41,40 +48,12 @@ vi.mock('../../hooks/useScopedMonitors', () => ({
   }),
 }));
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'profile-1', name: 'Home' },
-    settings: {
-      monitorsViewMode: 'list',
-      monitorsFeedFit: 'contain',
-      monitorGridCols: 2,
-      monitorsGroupByServer: false,
-    },
-    isAllMode: false,
-  }),
-}));
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => ({ profiles: [{ id: 'profile-1' }] }),
-}));
-
 vi.mock('../../hooks/useGroupFilter', () => ({
   useGroupFilter: () => ({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true }),
 }));
 
 vi.mock('../../components/filters/GroupFilterSelect', () => ({
   GroupFilterSelect: () => <div data-testid="group-filter-select-stub" />,
-}));
-
-// The permission probe is a React Query call; this suite renders without a
-// QueryClientProvider and is not about permissions (refs #344).
-vi.mock('../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: { system: 'Edit' }, isLoading: false }),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: (selector: (state: { updateProfileSettings: (...args: unknown[]) => void }) => unknown) =>
-    selector({ updateProfileSettings: vi.fn() }),
 }));
 
 vi.mock('../../hooks/useMonitorNewEvents', () => ({
@@ -102,17 +81,6 @@ vi.mock('../../components/monitors/MonitorCard', async () => {
   return { MonitorCard: memo(Card) };
 });
 
-vi.mock('../../stores/profile', () => ({
-  // `profiles` is read by usePermissions for the account name (refs #344).
-  useProfileStore: (
-    selector: (state: { currentProfileId: string; profiles: { id: string; username?: string }[] }) => unknown,
-  ) => selector({ currentProfileId: 'profile-1', profiles: [{ id: 'profile-1', username: 'admin' }] }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ version: '1.38.0' }),
-}));
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
@@ -129,13 +97,40 @@ vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
 }));
 
 describe('Monitors page memo stability', () => {
+  // No username on the seeded profile, so usePermissions' real
+  // fetchAccountPermissions short-circuits to UNRESTRICTED_PERMISSIONS
+  // (system: 'Edit') without any network call - matching the old mock's
+  // value while exercising the real hook.
   beforeEach(() => {
     mockState.renderCount.clear();
     mockState.settingsProps.length = 0;
+    seedProfiles([makeProfile('profile-1', { name: 'Home' })], {
+      current: 'profile-1',
+      settings: {
+        'profile-1': {
+          monitorsViewMode: 'list',
+          monitorsFeedFit: 'contain',
+          monitorGridCols: 2,
+          monitorsGroupByServer: false,
+        },
+      },
+    });
   });
 
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
+  function renderMonitors() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(<Monitors />, {
+      wrapper: ({ children }) => React.createElement(QueryClientProvider, { client: queryClient }, children),
+    });
+  }
+
   it('passes a reference-stable onShowSettings to every card across re-renders', () => {
-    const { rerender } = render(<Monitors />);
+    const { rerender } = renderMonitors();
     const firstPass = [...mockState.settingsProps];
     expect(firstPass).toHaveLength(2);
 
@@ -148,7 +143,7 @@ describe('Monitors page memo stability', () => {
   });
 
   it('does not re-render memoized cards when the parent re-renders with unchanged data', () => {
-    const { rerender } = render(<Monitors />);
+    const { rerender } = renderMonitors();
     expect(mockState.renderCount.get('1')).toBe(1);
     expect(mockState.renderCount.get('2')).toBe(1);
 

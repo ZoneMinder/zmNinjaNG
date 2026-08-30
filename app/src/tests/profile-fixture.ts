@@ -18,6 +18,7 @@
  * Both mocks are one-liners because vi.mock is hoisted and cannot be called
  * from inside a helper.
  */
+import { cleanup } from '@testing-library/react';
 import { useProfileStore } from '../stores/profile';
 import { useSettingsStore, mergeProfileSettings, type ProfileSettings } from '../stores/settings';
 import { useAuthStore } from '../stores/auth';
@@ -79,6 +80,11 @@ export function seedProfiles(profiles: Array<string | Profile>, opts: SeedOption
 }
 
 export function resetProfileFixture(): void {
+  // Unmount first. afterEach hooks run last-registered-first, so a file's own
+  // reset fires before the global RTL cleanup; emptying the stores under a
+  // still-mounted page re-renders it against nothing and throws "no session"
+  // as an unhandled error that fails no test but poisons the next one.
+  cleanup();
   dropAllSessions();
   useAuthStore.getState().logoutAll();
   useProfileStore.setState({ profiles: [], virtualProfiles: [], currentProfileId: null, isInitialized: false });

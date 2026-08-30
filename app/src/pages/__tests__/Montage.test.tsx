@@ -12,29 +12,24 @@ import { Children, cloneElement, isValidElement } from 'react';
 import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import Montage from '../Montage';
 import { ALL_PROFILES_ID } from '../../api/types';
-import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { DEFAULT_SETTINGS, useSettingsStore, mergeProfileSettings } from '../../stores/settings';
 import { MONTAGE_GRID } from '../../lib/zmninja-ng-constants';
 import {
   installMockIntersectionObserver,
   latestIntersectionObserver,
 } from '../../tests/mock-intersection-observer';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const useScopedMonitorsMock = vi.fn();
-const useCurrentProfileMock = vi.fn();
-const useProfileScopeMock = vi.fn();
 const useMontageGridMock = vi.fn();
 const useGroupFilterMock = vi.fn();
 
 vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: () => useScopedMonitorsMock(),
-}));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => useCurrentProfileMock(),
-}));
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
 }));
 
 vi.mock('../../hooks/useGroupFilter', () => ({
@@ -226,36 +221,10 @@ vi.mock('../../components/ui/select', () => ({
 
 // The page's settings-write target: the real profile id in single mode, the
 // ALL sentinel in All mode (where currentProfile is null). Set by
-// singleProfile()/allMode() below.
+// singleProfile()/allMode() below, and mirrored into the real profile store.
 let currentProfileId = 'profile-1';
 
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
-    selector({ currentProfileId }),
-}));
-
 const updateMontageGroupLayoutMock = vi.fn();
-const updateProfileSettingsMock = vi.fn();
-
-// Everything except the store itself stays REAL: SETTINGS below is built on
-// DEFAULT_SETTINGS, and a stubbed-out module would make that spread empty.
-vi.mock('../../stores/settings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../stores/settings')>()),
-  useSettingsStore: (
-    selector: (state: {
-      updateProfileSettings: (...args: unknown[]) => void;
-      updateMontageGroupLayout: (...args: unknown[]) => void;
-    }) => unknown
-  ) =>
-    selector({
-      updateProfileSettings: updateProfileSettingsMock,
-      updateMontageGroupLayout: updateMontageGroupLayoutMock,
-    }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ version: '1.38.0', accessToken: 'test-token' }),
-}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -290,14 +259,11 @@ const SETTINGS = {
   tvMode: false,
 };
 
-function singleProfile() {
+function singleProfile(settingsOverrides: Partial<typeof SETTINGS> = {}) {
   currentProfileId = 'profile-1';
-  useCurrentProfileMock.mockReturnValue({
-    currentProfile: { id: 'profile-1', name: 'Home' },
-    settings: SETTINGS,
-    isAllMode: false,
+  seedProfiles([makeProfile('profile-1', { name: 'Home' })], {
+    settings: { 'profile-1': { ...SETTINGS, ...settingsOverrides } },
   });
-  useProfileScopeMock.mockReturnValue({ profiles: [{ id: 'profile-1', name: 'Home' }] });
 }
 
 function allMode(
@@ -305,12 +271,16 @@ function allMode(
   settingsOverrides: Partial<typeof SETTINGS> = {}
 ) {
   currentProfileId = ALL_PROFILES_ID;
-  useCurrentProfileMock.mockReturnValue({
-    currentProfile: null,
-    settings: { ...SETTINGS, ...settingsOverrides },
-    isAllMode: true,
-  });
-  useProfileScopeMock.mockReturnValue({ profiles });
+  seedProfiles(
+    profiles.map((p) => makeProfile(p.id, { name: p.name })),
+    { current: ALL_PROFILES_ID }
+  );
+  useSettingsStore.setState((state) => ({
+    profileSettings: {
+      ...state.profileSettings,
+      [ALL_PROFILES_ID]: mergeProfileSettings({ ...SETTINGS, ...settingsOverrides }),
+    },
+  }));
 }
 
 const monitor = (id: string, name: string, sequence?: string) => ({
@@ -323,10 +293,7 @@ describe('Montage Page', () => {
     hiddenMonitorIds = [];
     pausedRenders.length = 0;
     updateMontageGroupLayoutMock.mockClear();
-    updateProfileSettingsMock.mockClear();
     useScopedMonitorsMock.mockReset();
-    useCurrentProfileMock.mockReset();
-    useProfileScopeMock.mockReset();
     useMontageGridMock.mockReset();
     useGroupFilterMock.mockReset();
     useGroupFilterMock.mockReturnValue({ isFilterActive: false, filteredMonitorIds: [], isFilterReady: true });
@@ -344,6 +311,11 @@ describe('Montage Page', () => {
       togglePinMonitor: vi.fn(),
       isMonitorPinned: () => false,
     });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows the empty state when no monitors are available', () => {
@@ -485,9 +457,7 @@ describe('Montage Page', () => {
     it('persists the feed-fit choice', () => {
       renderAllMode();
       fireEvent.click(screen.getByTestId('montage-fit-select'));
-      expect(updateProfileSettingsMock).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-        montageFeedFit: 'contain',
-      });
+      expect(useSettingsStore.getState().profileSettings[ALL_PROFILES_ID].montageFeedFit).toBe('contain');
     });
 
     it('clears the active saved-layout name when a column count is applied', () => {
@@ -922,12 +892,7 @@ describe('Montage Page', () => {
     });
 
     it('never pauses in single mode, whatever the ALL bucket says', () => {
-      singleProfile();
-      useCurrentProfileMock.mockReturnValue({
-        currentProfile: { id: 'profile-1', name: 'Home' },
-        settings: { ...SETTINGS, allModePauseHidden: true },
-        isAllMode: false,
-      });
+      singleProfile({ allModePauseHidden: true });
       oneMonitor();
 
       render(<Montage />);
@@ -983,12 +948,7 @@ describe('Montage Page', () => {
     });
 
     it('never downgrades in single mode, whatever the ALL bucket says', () => {
-      singleProfile();
-      useCurrentProfileMock.mockReturnValue({
-        currentProfile: { id: 'profile-1', name: 'Home' },
-        settings: { ...SETTINGS, allModeIdleMinutes: IDLE_MINUTES },
-        isAllMode: false,
-      });
+      singleProfile({ allModeIdleMinutes: IDLE_MINUTES });
       oneMonitor();
 
       render(<Montage />);
@@ -1105,12 +1065,7 @@ describe('Montage Page', () => {
     });
 
     it('never gates in single mode, whatever the ALL bucket says', () => {
-      singleProfile();
-      useCurrentProfileMock.mockReturnValue({
-        currentProfile: { id: 'profile-1', name: 'Home' },
-        settings: { ...SETTINGS, allModeViewportGating: true },
-        isAllMode: false,
-      });
+      singleProfile({ allModeViewportGating: true });
       oneMonitor();
 
       render(<Montage />);
@@ -1258,12 +1213,7 @@ describe('Montage Page', () => {
     // The knob lives in the ALL bucket, but a single profile's own settings
     // carry the same key. Reading it outside All mode would throttle a server
     // the user never asked to throttle.
-    singleProfile();
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: { id: 'profile-1', name: 'Home' },
-      settings: { ...SETTINGS, allModeStreamTuning: 'reduced' },
-      isAllMode: false,
-    });
+    singleProfile({ allModeStreamTuning: 'reduced' });
     useScopedMonitorsMock.mockReturnValue({
       monitors: [{ profileId: 'profile-1', profileName: 'Home', item: monitor('1', 'Front Door') }],
       errors: [],
@@ -1453,11 +1403,8 @@ describe('Montage Page', () => {
   });
 
   it('All mode groups tiles into per-server sections when monitorsGroupByServer is on', () => {
-    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }]);
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: null,
-      settings: { ...SETTINGS, monitorsGroupByServer: true },
-      isAllMode: true,
+    allMode([{ id: 'profile-1', name: 'Home' }, { id: 'profile-2', name: 'Office' }], {
+      monitorsGroupByServer: true,
     });
     useScopedMonitorsMock.mockReturnValue({
       monitors: [

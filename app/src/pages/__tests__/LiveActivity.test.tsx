@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -6,48 +6,25 @@ import type { ReactNode } from 'react';
 import LiveActivity from '../LiveActivity';
 import { getMonitors, getAlarmStatus } from '../../api/monitors';
 import enTranslation from '../../locales/en/translation.json';
-import { ALL_PROFILES_ID } from '../../api/types';
-import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
+import { useSettingsStore } from '../../stores/settings';
+import { useAuthStore } from '../../stores/auth';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
   getAlarmStatus: vi.fn(),
 }));
 
-vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
-}));
-
-// useProfileScope/useScopedMonitors pull in the real stores/profile.ts the
-// same way stores/notifications does (see the comment below) - useLiveActivityAllMode
-// calls both unconditionally (React hooks rules), so every single-mode test
-// needs a safe default even though isAllMode is false. All-mode tests below
-// override both per test via vi.resetModules()+vi.doMock with real scope data.
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => null,
-}));
+// useScopedMonitors is All-mode's monitor fanout; kept mocked so each test
+// controls exactly which (profile, monitor) pairs are in play. Overridden
+// per All-mode test via vi.resetModules()+vi.doMock.
 vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
-}));
-
-// Mutable so a test can set a page preference or the server version before it
-// renders. vi.hoisted because the mock factories below are hoisted above
-// ordinary module scope.
-const env = vi.hoisted(() => ({
-  settings: {
-    liveActivityPollSeconds: 5,
-    liveActivityDwellSeconds: 30,
-    liveActivityMaxTiles: 12,
-    liveActivityIgnoredMonitorIds: [] as string[],
-    liveActivityIsFullscreen: false,
-    bandwidthMode: 'normal',
-    monitorGridCols: 2,
-  },
-  zmVersion: '1.36.33' as string | null,
-  // The raw store value LiveActivity.tsx now reads directly (currentProfileId)
-  // for view-level writes that must still work in All mode: 'p1' by default,
-  // set to the ALL_PROFILES_ID sentinel by All-mode tests before rendering.
-  currentProfileId: 'p1' as string | null,
 }));
 
 // Its own tests cover the toggle (including how it resolves the page's
@@ -57,42 +34,70 @@ vi.mock('../../components/monitors/AnalysisFramesToggle', () => ({
   AnalysisFramesToggle: () => <div data-testid="analysis-frames-toggle-stub" />,
 }));
 
-// Async so the real defaults can be pulled in: `env` is vi.hoisted and runs
-// before imports, so it cannot name one itself. The page reads nested settings
-// such as hoverPreview, and a fixture listing only what today's tests touch
-// breaks on the next key that lands (testing playbook).
-vi.mock('../../hooks/useCurrentProfile', async () => {
-  const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
-    '../../stores/settings',
-  );
+// The default single-mode profile every test seeds unless it needs something
+// else: real useCurrentProfile/useProfileScope/useProfileStore/useAuthSlice
+// and the real session registry (services/sessions) all run for real now,
+// backed by the fake HTTP boundary (tests/profile-fixture, fake-store-gates).
+const P1_SETTINGS = {
+  liveActivityPollSeconds: 5,
+  liveActivityDwellSeconds: 30,
+  liveActivityMaxTiles: 12,
+  liveActivityIgnoredMonitorIds: [] as string[],
+  liveActivityIsFullscreen: false,
+  bandwidthMode: 'normal' as const,
+  monitorGridCols: 2,
+};
+
+function seedSingleProfile(version = '1.36.33') {
+  seedProfiles([makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+    settings: { p1: { ...P1_SETTINGS } },
+    authenticated: false,
+  });
+  useAuthStore.getState().setTokens(asProfileId('p1'), {
+    access_token: 'access-p1',
+    access_token_expires: 3600,
+    refresh_token: 'refresh-p1',
+    refresh_token_expires: 86400,
+    version,
+  });
+}
+
+/**
+ * Some tests need a different stores/notifications poll interval or a
+ * different useScopedMonitors fanout, both static top-level mocks - the only
+ * way to change one is vi.resetModules()+vi.doMock, then re-import. That
+ * discards the module graph entirely, so the profile/session fixtures (bound
+ * to the OLD graph's store instances) must be re-imported too, or seeding
+ * would write to stores the freshly re-imported page never reads from.
+ */
+async function freshImports() {
+  // A fresh stores/profile.ts rehydrates from localStorage on import (real
+  // persist middleware), which a prior test's seedProfiles() call wrote real
+  // profile/token data into. Clearing first stops that stray rehydration
+  // from bootstrapping a stale profile session before this test seeds its own.
+  localStorage.clear();
+  const { default: LiveActivityFresh } = await import('../LiveActivity');
+  const monitorsApi = await import('../../api/monitors');
+  const fixture = await import('../../tests/profile-fixture');
+  // Imported through the mocked specifier itself (not tests/fake-store-gates
+  // directly): vi.mock's own dynamic-import factory does not reliably
+  // re-resolve to a fresh fake-store-gates instance across
+  // vi.resetModules() calls, so a direct import here silently returned a
+  // stale gates instance whose `clients` map the real session registry
+  // (imported through '../../api/store-gates') never actually reads from.
+  const gates = (await import('../../api/store-gates')) as unknown as typeof import('../../tests/fake-store-gates');
+  const settingsModule = await import('../../stores/settings');
   return {
-    useCurrentProfile: () => ({
-      currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-      settings: { ...DEFAULT_SETTINGS, ...env.settings },
-    }),
+    LiveActivityFresh,
+    getMonitors: vi.mocked(monitorsApi.getMonitors),
+    getAlarmStatus: vi.mocked(monitorsApi.getAlarmStatus),
+    seedProfiles: fixture.seedProfiles,
+    makeProfile: fixture.makeProfile,
+    fakeApiClient: fixture.fakeApiClient,
+    installApiClient: gates.installApiClient,
+    useSettingsStore: settingsModule.useSettingsStore,
   };
-});
-
-// LiveActivity.tsx reads currentProfileId via useProfileStore directly (not
-// through useCurrentProfile, which resolves to null in All mode) - same
-// rabbit hole as useProfileScope/useScopedMonitors above: the real
-// stores/profile.ts pulls in registerSessionsGate against the bare
-// services/sessions mock.
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (s: { currentProfileId: string | null }) => unknown) =>
-    selector({ currentProfileId: env.currentProfileId }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (
-    selector: (s: {
-      isAuthenticated: boolean;
-      accessToken: string | null;
-      version: string | null;
-    }) => unknown
-  ) => selector({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
-  useAuthSlice: () => ({ isAuthenticated: true, accessToken: 't', version: env.zmVersion }),
-}));
+}
 
 // The real stores/notifications.ts module is heavy: importing it for real
 // pulls in stores/profile.ts, which subscribes to the auth store at module
@@ -189,11 +194,14 @@ describe('LiveActivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tileRenders.count = 0;
-    env.settings.liveActivityIgnoredMonitorIds = [];
-    env.settings.liveActivityIsFullscreen = false;
-    env.zmVersion = '1.36.33';
-    env.currentProfileId = 'p1';
     mockMonitors.mockResolvedValue(MONITORS as never);
+    seedSingleProfile();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+    localStorage.clear();
   });
 
   it('shows only the alarming monitor, named without its id', async () => {
@@ -253,7 +261,13 @@ describe('LiveActivity', () => {
     });
 
     it('watches one reported through the 1.38 Recording field', async () => {
-      env.zmVersion = '1.38.0';
+      useAuthStore.getState().setTokens(asProfileId('p1'), {
+        access_token: 'access-p1',
+        access_token_expires: 3600,
+        refresh_token: 'refresh-p1',
+        refresh_token_expires: 86400,
+        version: '1.38.0',
+      });
       mockMonitors.mockResolvedValue({
         monitors: [
           ...MONITORS.monitors,
@@ -277,7 +291,7 @@ describe('LiveActivity', () => {
     });
 
     it('keeps a continuous recorder out when it is ignored', async () => {
-      env.settings.liveActivityIgnoredMonitorIds = ['5'];
+      useSettingsStore.getState().updateProfileSettings(asProfileId('p1'), { liveActivityIgnoredMonitorIds: ['5'] });
 
       render(<LiveActivity />, { wrapper });
 
@@ -378,19 +392,20 @@ describe('LiveActivity', () => {
         selector({ profileEvents: {} }),
     }));
 
-    const { default: LiveActivityFast } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+    const f = await freshImports();
+    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS } },
+    });
+    f.getMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
+    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       return { status: 2 } as never;
     });
 
-    render(<LiveActivityFast />, { wrapper });
+    render(<f.LiveActivityFresh />, { wrapper });
 
     const dismiss = await screen.findByTestId('live-activity-dismiss-3');
     const callsAtDismiss = monitorThreeCalls;
@@ -417,22 +432,23 @@ describe('LiveActivity', () => {
         selector({ profileEvents: {} }),
     }));
 
-    const { default: LiveActivityFast } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+    const f = await freshImports();
+    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS } },
+    });
+    f.getMonitors.mockResolvedValue(MONITORS as never);
 
     // Alarming, then quiet once dismissed, then alarming again: the second
     // alarm is new information and has to show.
     let quiet = false;
     let alarmAgain = false;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
+    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       if (alarmAgain) return { status: 2 } as never;
       return { status: quiet ? 0 : 2 } as never;
     });
 
-    render(<LiveActivityFast />, { wrapper });
+    render(<f.LiveActivityFresh />, { wrapper });
 
     const dismiss = await screen.findByTestId('live-activity-dismiss-3');
     act(() => {
@@ -477,13 +493,14 @@ describe('LiveActivity', () => {
         }),
     }));
 
-    const { default: LiveActivityWithEvent } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
-    vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+    const f = await freshImports();
+    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS } },
+    });
+    f.getMonitors.mockResolvedValue(MONITORS as never);
+    f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-    render(<LiveActivityWithEvent />, { wrapper });
+    render(<f.LiveActivityFresh />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByTestId('live-activity-cause-3')).toHaveTextContent('Motion: All');
@@ -495,7 +512,7 @@ describe('LiveActivity', () => {
     // A wall display should show tiles, not the heading, the grid controls and
     // the gear. The tiles themselves still render, so the assertion below is
     // about the chrome rather than about the page having gone blank.
-    env.settings.liveActivityIsFullscreen = true;
+    useSettingsStore.getState().updateProfileSettings(asProfileId('p1'), { liveActivityIsFullscreen: true });
     mockStatus.mockImplementation(async (_client: unknown, id: string) =>
       (id === '3' ? { status: 2 } : { status: 0 }) as never
     );
@@ -550,7 +567,7 @@ describe('LiveActivity', () => {
       // One skeleton tile per column, times two rows - tied to this fixture's
       // monitorGridCols: 2, not a magic number.
       expect(screen.getByTestId('live-activity-loading').children).toHaveLength(
-        env.settings.monitorGridCols * 2
+        P1_SETTINGS.monitorGridCols * 2
       );
     });
     expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
@@ -618,43 +635,15 @@ describe('LiveActivity', () => {
   });
 
   it('drops an ignored monitor id from polling', async () => {
-    // The module-level vi.mock factories above are hoisted and shared across
-    // this file's tests, so overriding just the settings mock for one test
-    // needs a fresh module graph: reset it, doMock the override, then
-    // re-import both the page and the mocked API functions it will resolve to.
-    vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', async () => {
-      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
-        '../../stores/settings',
-      );
-      return {
-      useCurrentProfile: () => ({
-        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-        settings: {
-          ...DEFAULT_SETTINGS,
-          liveActivityPollSeconds: 5,
-          liveActivityDwellSeconds: 30,
-          liveActivityMaxTiles: 12,
-          liveActivityIgnoredMonitorIds: ['4'],
-          bandwidthMode: 'normal',
-          monitorGridCols: 2,
-        },
-      }),
-      };
-    });
+    useSettingsStore.getState().updateProfileSettings(asProfileId('p1'), { liveActivityIgnoredMonitorIds: ['4'] });
+    mockStatus.mockResolvedValue({ status: 0 } as never);
 
-    const { default: LiveActivityWithIgnore } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
-    vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
-
-    render(<LiveActivityWithIgnore />, { wrapper });
+    render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(reimportedGetAlarmStatus).toHaveBeenCalled();
+      expect(mockStatus).toHaveBeenCalled();
     });
-    expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => c[1])).toEqual(['3']);
+    expect(mockStatus.mock.calls.map((c) => c[1])).toEqual(['3']);
   });
 
   it('keeps the short enter duration on the tile', async () => {
@@ -691,38 +680,20 @@ describe('LiveActivity', () => {
     // tail: exactly the window before a tile dwells out. Winding down is
     // signalled by the state icon dropping out of the header instead. refs #313
     vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', async () => {
-      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
-        '../../stores/settings',
-      );
-      return {
-      useCurrentProfile: () => ({
-        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-        settings: {
-          ...DEFAULT_SETTINGS,
-          liveActivityPollSeconds: 5,
-          liveActivityDwellSeconds: 30,
-          liveActivityMaxTiles: 12,
-          liveActivityIgnoredMonitorIds: [],
-          bandwidthMode: 'normal',
-          monitorGridCols: 2,
-        },
-      }),
-      };
-    });
     vi.doMock('../../stores/notifications', () => ({
       resolvePollIntervalMs: () => 20,
       useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
         selector({ profileEvents: {} }),
     }));
 
-    const { default: LiveActivityFast } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+    const f = await freshImports();
+    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      settings: { p1: { ...P1_SETTINGS } },
+    });
+    f.getMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
+    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarms once to enter the list, then stays quiet inside the 30s dwell,
@@ -730,7 +701,7 @@ describe('LiveActivity', () => {
       return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
     });
 
-    render(<LiveActivityFast />, { wrapper });
+    render(<f.LiveActivityFresh />, { wrapper });
 
     // The tile is keyed by monitor id, so this is the same DOM node throughout;
     // capture how it looks while the monitor is still alarming.
@@ -752,46 +723,28 @@ describe('LiveActivity', () => {
     // back to a plain update). A tile that stopped alarming still has to
     // leave, which is what proves the fallback path publishes anything at all.
     vi.resetModules();
-    vi.doMock('../../hooks/useCurrentProfile', async () => {
-      const { DEFAULT_SETTINGS } = await vi.importActual<typeof import('../../stores/settings')>(
-        '../../stores/settings',
-      );
-      return {
-      useCurrentProfile: () => ({
-        currentProfile: { id: 'p1', portalUrl: 'https://zm.test' },
-        settings: {
-          ...DEFAULT_SETTINGS,
-          liveActivityPollSeconds: 5,
-          // 10ms of dwell, so the window closes between two fast polls.
-          liveActivityDwellSeconds: 0.01,
-          liveActivityMaxTiles: 12,
-          liveActivityIgnoredMonitorIds: [],
-          bandwidthMode: 'normal',
-          monitorGridCols: 2,
-        },
-      }),
-      };
-    });
     vi.doMock('../../stores/notifications', () => ({
       resolvePollIntervalMs: () => 20,
       useNotificationStore: (selector: (s: { profileEvents: Record<string, unknown[]> }) => unknown) =>
         selector({ profileEvents: {} }),
     }));
 
-    const { default: LiveActivityFast } = await import('../LiveActivity');
-    const { getMonitors: reimportedGetMonitors, getAlarmStatus: reimportedGetAlarmStatus } =
-      await import('../../api/monitors');
-    vi.mocked(reimportedGetMonitors).mockResolvedValue(MONITORS as never);
+    const f = await freshImports();
+    f.seedProfiles([f.makeProfile('p1', { portalUrl: 'https://zm.test' })], {
+      // 10ms of dwell, so the window closes between two fast polls.
+      settings: { p1: { ...P1_SETTINGS, liveActivityDwellSeconds: 0.01 } },
+    });
+    f.getMonitors.mockResolvedValue(MONITORS as never);
 
     let monitorThreeCalls = 0;
-    vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) => {
+    f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) => {
       if (id !== '3') return { status: 0 } as never;
       monitorThreeCalls += 1;
       // Alarming on the first poll only, quiet from then on.
       return { status: monitorThreeCalls === 1 ? 2 : 0 } as never;
     });
 
-    render(<LiveActivityFast />, { wrapper });
+    render(<f.LiveActivityFresh />, { wrapper });
 
     await waitFor(() => {
       expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
@@ -815,37 +768,36 @@ describe('LiveActivity', () => {
     // ALL-bucket settings read off this object now (useLiveActivityAllMode),
     // so a hand-listed subset would leave them undefined and quietly cap the
     // watched set at nothing.
-    const ALL_SETTINGS = {
-      ...DEFAULT_SETTINGS,
+    const ALL_SETTINGS_OVERRIDE = {
       liveActivityPollSeconds: 5,
       liveActivityDwellSeconds: 30,
       liveActivityMaxTiles: 12,
-      liveActivityIgnoredMonitorIds: [],
+      liveActivityIgnoredMonitorIds: [] as string[],
       liveActivityIsFullscreen: false,
-      bandwidthMode: 'normal',
+      bandwidthMode: 'normal' as const,
       monitorGridCols: 2,
     };
 
-    function mockAllMode() {
-      env.currentProfileId = ALL_PROFILES_ID;
-      vi.doMock('../../hooks/useCurrentProfile', () => ({
-        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
-      }));
-      vi.doMock('../../hooks/useProfileScope', () => ({
-        useProfileScope: () => ({
-          mode: 'all',
-          profile: null,
-          profiles: [
-            { id: 'p1', name: 'One' },
-            { id: 'p2', name: 'Two' },
-          ],
-          settings: ALL_SETTINGS,
-        }),
-      }));
-      vi.doMock('../../services/sessions', () => ({
-        getCurrentSession: vi.fn(() => ({ client: {} })),
-        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
-      }));
+    /** Seeds the real profile/settings stores for a fresh (post-resetModules)
+     * module graph: every scope profile plus the ALL bucket's own settings. */
+    function seedAllMode(f: Awaited<ReturnType<typeof freshImports>>, profiles: Array<{ id: string; name: string }>) {
+      f.seedProfiles(profiles.map((p) => f.makeProfile(p.id, { name: p.name })), { current: ALL_PROFILES_ID });
+      f.useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { ...ALL_SETTINGS_OVERRIDE });
+    }
+
+    /** Installs one distinct fake client per profile and returns a lookup
+     * from that client (the first arg getAlarmStatus is called with, since
+     * useLiveActivityAllMode's fanout polls through getSession(profileId).client)
+     * back to its owning profile id - real getSession no longer stamps a
+     * `profileId` field onto the client the way the old bare mock did. */
+    function installTrackedClients(f: Awaited<ReturnType<typeof freshImports>>, ids: string[]) {
+      const byClient = new Map<unknown, string>();
+      for (const id of ids) {
+        const client = f.fakeApiClient();
+        f.installApiClient(asProfileId(id), client);
+        byClient.set(client, id);
+      }
+      return byClient;
     }
 
     function scopedMonitor(profileId: string, profileName: string, id: string, name: string) {
@@ -854,7 +806,6 @@ describe('LiveActivity', () => {
 
     it('aggregates monitors across every scope profile and keeps colliding ids distinct', async () => {
       vi.resetModules();
-      mockAllMode();
       // Both profiles happen to number their monitor "3" - the composite key
       // (monitorCacheKey) is what keeps these from colliding into one tile.
       vi.doMock('../../hooks/useScopedMonitors', () => ({
@@ -866,11 +817,11 @@ describe('LiveActivity', () => {
         }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 2 } as never);
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      f.getAlarmStatus.mockResolvedValue({ status: 2 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       // No gate notice: the whole point of this task is that All mode
       // renders like single mode, not a "switch profile" wall.
@@ -886,30 +837,6 @@ describe('LiveActivity', () => {
 
     it("respects each profile's own ignore list independently", async () => {
       vi.resetModules();
-      env.currentProfileId = ALL_PROFILES_ID;
-      vi.doMock('../../hooks/useCurrentProfile', () => ({
-        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
-      }));
-      vi.doMock('../../hooks/useProfileScope', () => ({
-        useProfileScope: () => ({
-          mode: 'all',
-          profile: null,
-          profiles: [
-            { id: 'p1', name: 'One' },
-            { id: 'p2', name: 'Two' },
-          ],
-          settings: ALL_SETTINGS,
-        }),
-      }));
-      vi.doMock('../../services/sessions', () => ({
-        getCurrentSession: vi.fn(() => ({ client: {} })),
-        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
-      }));
-      // p1 ignores monitor "4" on ITS OWN settings bucket; p2 does not.
-      // scope.settings (the ALL bucket, ALL_SETTINGS above) never carries an
-      // ignore list that would apply cross-server.
-      const { useSettingsStore } = await import('../../stores/settings');
-      useSettingsStore.getState().updateProfileSettings('p1', { liveActivityIgnoredMonitorIds: ['4'] });
       vi.doMock('../../hooks/useScopedMonitors', () => ({
         useScopedMonitors: () => ({
           monitors: [
@@ -922,25 +849,24 @@ describe('LiveActivity', () => {
         }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 2 } as never);
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      // p1 ignores monitor "4" on ITS OWN settings bucket; p2 does not.
+      // scope.settings (the ALL bucket, seeded above) never carries an
+      // ignore list that would apply cross-server.
+      f.useSettingsStore.getState().updateProfileSettings(asProfileId('p1'), { liveActivityIgnoredMonitorIds: ['4'] });
+      f.getAlarmStatus.mockResolvedValue({ status: 2 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       await waitFor(() => {
         expect(screen.getByText('p2-cam4')).toHaveTextContent('p2-cam4');
       });
       expect(screen.queryByText('p1-cam4')).not.toBeInTheDocument();
-
-      act(() => {
-        useSettingsStore.getState().updateProfileSettings('p1', { liveActivityIgnoredMonitorIds: [] });
-      });
     });
 
     it('caps the total watched set round-robin and shows the overflow notice', async () => {
       vi.resetModules();
-      mockAllMode();
       // 3 profiles contributing 10 monitors each (30 total), well past the
       // 24-pair cap: proves the cap is enforced AND that no single profile's
       // monitors are fully excluded by a naive profile-order truncation.
@@ -951,22 +877,25 @@ describe('LiveActivity', () => {
         useScopedMonitors: () => ({ monitors, errors: [], isLoading: false, refetchProfile: vi.fn() }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const f = await freshImports();
+      seedAllMode(f, [
+        { id: 'p1', name: 'Profile 0' },
+        { id: 'p2', name: 'Profile 1' },
+        { id: 'p3', name: 'Profile 2' },
+      ]);
+      const byClient = installTrackedClients(f, ['p1', 'p2', 'p3']);
+      f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       // Cap is 24 of 30 requested: 6 dropped.
       await waitFor(() => {
         expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('6');
       });
-      expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.length).toBe(24);
+      expect(f.getAlarmStatus.mock.calls.length).toBe(24);
       // Round-robin, not profile-order truncation: every profile still has
       // at least one polled monitor.
-      const polledProfiles = new Set(
-        vi.mocked(reimportedGetAlarmStatus).mock.calls.map((c) => (c[0] as unknown as { profileId: string }).profileId)
-      );
+      const polledProfiles = new Set(f.getAlarmStatus.mock.calls.map((c) => byClient.get(c[0])));
       expect(polledProfiles).toEqual(new Set(['p1', 'p2', 'p3']));
     });
 
@@ -977,7 +906,6 @@ describe('LiveActivity', () => {
       // now can lose its slot and vanish - the #313 failure mode reached
       // through the cap instead of the poll.
       vi.resetModules();
-      mockAllMode();
 
       // p1 alone fills the cap exactly (24 = 24): nothing dropped yet, and
       // monitor "23" (the last one drawn) is the one that alarms.
@@ -986,13 +914,14 @@ describe('LiveActivity', () => {
         useScopedMonitors: () => ({ monitors, errors: [], isLoading: false, refetchProfile: vi.fn() }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockImplementation(async (_client: unknown, id: string) =>
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      const byClient = installTrackedClients(f, ['p1', 'p2']);
+      f.getAlarmStatus.mockImplementation(async (_client: unknown, id: string) =>
         (id === '23' ? { status: 2 } : { status: 0 }) as never
       );
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       await waitFor(() => {
         expect(screen.getByText('p1-23')).toHaveTextContent('p1-23');
@@ -1016,9 +945,7 @@ describe('LiveActivity', () => {
       // produce a fresh call inside this test's short window).
       await waitFor(
         () => {
-          const p2Polled = vi
-            .mocked(reimportedGetAlarmStatus)
-            .mock.calls.some((c) => (c[0] as unknown as { profileId: string }).profileId === 'p2');
+          const p2Polled = f.getAlarmStatus.mock.calls.some((c) => byClient.get(c[0]) === 'p2');
           expect(p2Polled).toBe(true);
         },
         { timeout: 5000 }
@@ -1041,25 +968,6 @@ describe('LiveActivity', () => {
 
     it("promotes only the owning profile's tile on a live hint, not another profile's same-id monitor", async () => {
       vi.resetModules();
-      env.currentProfileId = ALL_PROFILES_ID;
-      vi.doMock('../../hooks/useCurrentProfile', () => ({
-        useCurrentProfile: () => ({ currentProfile: null, isAllMode: true, settings: ALL_SETTINGS }),
-      }));
-      vi.doMock('../../hooks/useProfileScope', () => ({
-        useProfileScope: () => ({
-          mode: 'all',
-          profile: null,
-          profiles: [
-            { id: 'p1', name: 'One' },
-            { id: 'p2', name: 'Two' },
-          ],
-          settings: ALL_SETTINGS,
-        }),
-      }));
-      vi.doMock('../../services/sessions', () => ({
-        getCurrentSession: vi.fn(() => ({ client: {} })),
-        getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
-      }));
       vi.doMock('../../hooks/useScopedMonitors', () => ({
         useScopedMonitors: () => ({
           monitors: [scopedMonitor('p1', 'One', '3', 'p1-cam3'), scopedMonitor('p2', 'Two', '3', 'p2-cam3')],
@@ -1082,12 +990,12 @@ describe('LiveActivity', () => {
           }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
       // Both idle by poll; the hint alone must promote p1's tile.
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       await waitFor(() => {
         expect(screen.getByText('p1-cam3')).toHaveTextContent('p1-cam3');
@@ -1102,7 +1010,6 @@ describe('LiveActivity', () => {
     // the ALL_PROFILES_ID sentinel here) is what unlocks them.
     it('opens the settings dialog in All mode, with the ignore-list profile picker', async () => {
       vi.resetModules();
-      mockAllMode();
       vi.doMock('../../hooks/useScopedMonitors', () => ({
         useScopedMonitors: () => ({
           monitors: [scopedMonitor('p1', 'One', '3', 'p1-cam3')],
@@ -1112,11 +1019,11 @@ describe('LiveActivity', () => {
         }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       const settingsButton = await screen.findByTestId('live-activity-settings-btn');
       fireEvent.click(settingsButton);
@@ -1130,39 +1037,27 @@ describe('LiveActivity', () => {
     });
 
     it('toggles fullscreen in All mode and persists it to the ALL bucket', async () => {
-      // useCurrentProfile's `settings` is a static mock snapshot in this test
-      // file (see ALL_SETTINGS/env above), so the click's effect on-screen
-      // isn't observable here the way a real store-connected read would be -
-      // single mode's own fullscreen tests follow the same pattern (pre-set
-      // the mocked setting rather than round-tripping through a click). What
-      // this proves is the fix itself: before it, handleToggleFullscreen's
-      // `if (!currentProfile) return` made this click a complete no-op, so
-      // the real store below would never have been written at all.
+      // Before the fix, handleToggleFullscreen's `if (!currentProfile)
+      // return` made this click a complete no-op in All mode (currentProfile
+      // is null there), so the real store below would never have been
+      // written at all.
       vi.resetModules();
-      mockAllMode();
       vi.doMock('../../hooks/useScopedMonitors', () => ({
         useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
-      const { useSettingsStore } = await import('../../stores/settings');
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       const fullscreenButton = await screen.findByTestId('live-activity-fullscreen-btn');
       fireEvent.click(fullscreenButton);
 
       expect(
-        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).liveActivityIsFullscreen
+        f.useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).liveActivityIsFullscreen
       ).toBe(true);
-
-      act(() => {
-        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, {
-          liveActivityIsFullscreen: false,
-        });
-      });
     });
 
     it('changes the grid column count in All mode, persisting to the ALL bucket', async () => {
@@ -1171,7 +1066,6 @@ describe('LiveActivity', () => {
       // captures the onGridChange callback useEventMontageGrid was given and
       // calls it directly, exactly as a real column click would.
       vi.resetModules();
-      mockAllMode();
       vi.doMock('../../hooks/useScopedMonitors', () => ({
         useScopedMonitors: () => ({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() }),
       }));
@@ -1191,12 +1085,11 @@ describe('LiveActivity', () => {
         },
       }));
 
-      const { default: LiveActivityAllMode } = await import('../LiveActivity');
-      const { getAlarmStatus: reimportedGetAlarmStatus } = await import('../../api/monitors');
-      vi.mocked(reimportedGetAlarmStatus).mockResolvedValue({ status: 0 } as never);
-      const { useSettingsStore } = await import('../../stores/settings');
+      const f = await freshImports();
+      seedAllMode(f, [{ id: 'p1', name: 'One' }, { id: 'p2', name: 'Two' }]);
+      f.getAlarmStatus.mockResolvedValue({ status: 0 } as never);
 
-      render(<LiveActivityAllMode />, { wrapper });
+      render(<f.LiveActivityFresh />, { wrapper });
 
       await waitFor(() => expect(typeof captured.onGridChange).toBe('function'));
       act(() => {
@@ -1204,12 +1097,8 @@ describe('LiveActivity', () => {
       });
 
       expect(
-        useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).monitorGridCols
+        f.useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).monitorGridCols
       ).toBe(4);
-
-      act(() => {
-        useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { monitorGridCols: 2 });
-      });
     });
   });
 });

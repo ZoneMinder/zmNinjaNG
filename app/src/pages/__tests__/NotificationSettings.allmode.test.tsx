@@ -5,12 +5,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import NotificationSettings from '../NotificationSettings';
-import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../hooks/useProfileScope';
-import { getSession } from '../../services/sessions';
 import { getMonitors } from '../../api/monitors';
-import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { useProfileStore } from '../../stores/profile';
+import { seedProfiles, resetProfileFixture, fakeApiClient, makeProfile, type FakeApiClient } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 // Interpolation values are appended so a test can assert which aggregate a
 // label named, not just which key it used.
@@ -19,23 +22,6 @@ vi.mock('react-i18next', () => ({
     t: (k: string, params?: Record<string, unknown>) =>
       params ? `${k}:${JSON.stringify(params)}` : k,
   }),
-}));
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { getDecryptedPassword: () => null }) => unknown) =>
-    selector({ getDecryptedPassword: vi.fn() }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
 }));
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn().mockResolvedValue({ monitors: [] }),
@@ -121,8 +107,8 @@ vi.mock('../../components/ui/select', () => ({
   },
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
 function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -136,36 +122,34 @@ function renderPage() {
 }
 
 describe('NotificationSettings page - All mode profile picker (refs #337)', () => {
+  let clientA: FakeApiClient;
+  let clientB: FakeApiClient;
+
   beforeEach(() => {
-    vi.clearAllMocks();
     Object.keys(notificationSettingsFixture).forEach((key) => delete notificationSettingsFixture[key]);
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: { profile: id } as never,
-      timezone: 'UTC',
-    }));
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null, settings: {} as never, hasProfile: false, isAllMode: true,
-    });
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: {} as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
-    });
+    seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
+    clientA = fakeApiClient({ '/servers.json': { servers: [] } });
+    clientB = fakeApiClient({ '/servers.json': { servers: [] } });
+    installApiClient(profileA.id, clientA);
+    installApiClient(profileB.id, clientB);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('gates the whole (server-scoped) page behind a picker defaulted to the first profile, and switching fetches via B', async () => {
     renderPage();
 
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
-    await waitFor(() => expect(getMonitors).toHaveBeenCalled());
-    expect(getSession).toHaveBeenCalledWith(profileA.id);
+    // The real session registry hands the query the client installed for the
+    // picked profile - proof it resolved via that profile, not another.
+    await waitFor(() => expect(vi.mocked(getMonitors)).toHaveBeenCalledWith(clientA, profileA.id));
 
     fireEvent.click(screen.getByTestId('page-profile-picker-option-profile-b'));
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileB.id));
+    await waitFor(() => expect(vi.mocked(getMonitors)).toHaveBeenCalledWith(clientB, profileB.id));
   });
 
   it('renders a per-profile overview row for each profile with correct enabled/mode/host values', async () => {
@@ -194,26 +178,21 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
 
     renderPage();
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
-    expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('a.zm.local');
+    await waitFor(() => expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('a.zm.local'));
     expect(screen.getByTestId('notification-overview-row-profile-a')).toHaveAttribute('aria-current', 'true');
 
     fireEvent.click(screen.getByTestId('notification-overview-row-profile-b'));
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileB.id));
-    expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('b.zm.local');
+    await waitFor(() => expect(screen.getByTestId('mock-server-config-host')).toHaveTextContent('b.zm.local'));
     expect(screen.getByTestId('notification-overview-row-profile-b')).toHaveAttribute('aria-current', 'true');
   });
 
   it('single mode: shows the per-profile caption and no overview list', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
-    });
+    useProfileStore.setState({ currentProfileId: profileA.id });
 
     renderPage();
 
-    await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
-    expect(screen.getByTestId('notification-per-profile-caption')).toBeInTheDocument();
+    expect(await screen.findByTestId('notification-per-profile-caption')).toBeInTheDocument();
     expect(screen.queryByTestId('notification-overview')).not.toBeInTheDocument();
     expect(screen.queryByTestId('page-profile-picker')).not.toBeInTheDocument();
   });
@@ -224,10 +203,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     });
 
     it('reflects the ALL-bucket setting and is not shown in single mode', async () => {
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB],
-        settings: { allModeNotifications: 'muted' } as never,
-      });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { allModeNotifications: 'muted' });
       renderPage();
 
       const mutedOption = await screen.findByTestId('all-mode-notifications-option-muted');
@@ -237,10 +213,7 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     });
 
     it('selecting Off updates the real settings store under ALL_PROFILES_ID', async () => {
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB],
-        settings: { allModeNotifications: 'live' } as never,
-      });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { allModeNotifications: 'live' });
       renderPage();
 
       const offOption = await screen.findByTestId('all-mode-notifications-option-off');
@@ -264,10 +237,10 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     });
 
     it('names an active group in its label', async () => {
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: mintVirtualProfileId(), aggregateName: 'Backyard', profile: null,
-        profiles: [profileA, profileB], settings: { allModeNotifications: 'live' } as never,
-      });
+      const group = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: [profileA.id, profileB.id] };
+      useProfileStore.setState({ virtualProfiles: [group], currentProfileId: group.id });
+      useSettingsStore.getState().updateProfileSettings(group.id, { allModeNotifications: 'live' });
+
       renderPage();
 
       expect(
@@ -280,18 +253,17 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     // Each aggregate owns its own bucket: muting a group must not mute All
     // Servers (refs #337).
     it("selecting Off updates the active group's bucket, leaving the ALL sentinel's alone", async () => {
-      const group = mintVirtualProfileId();
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: group, aggregateName: 'Backyard', profile: null,
-        profiles: [profileA, profileB],
-        settings: { allModeNotifications: 'live' } as never,
-      });
+      const group = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: [profileA.id, profileB.id] };
+      useProfileStore.setState({ virtualProfiles: [group], currentProfileId: group.id });
+      useSettingsStore.getState().updateProfileSettings(group.id, { allModeNotifications: 'live' });
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { allModeNotifications: 'live' });
+
       renderPage();
 
       fireEvent.click(await screen.findByTestId('all-mode-notifications-option-off'));
 
       await waitFor(() =>
-        expect(useSettingsStore.getState().getProfileSettings(group).allModeNotifications).toBe('off')
+        expect(useSettingsStore.getState().getProfileSettings(group.id).allModeNotifications).toBe('off')
       );
       expect(
         useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeNotifications
@@ -299,12 +271,10 @@ describe('NotificationSettings page - All mode profile picker (refs #337)', () =
     });
 
     it('does not render in single mode', async () => {
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: profileA, settings: {} as never, hasProfile: true, isAllMode: false,
-      });
+      useProfileStore.setState({ currentProfileId: profileA.id });
       renderPage();
 
-      await waitFor(() => expect(getSession).toHaveBeenCalledWith(profileA.id));
+      await screen.findByTestId('notification-per-profile-caption');
       expect(screen.queryByTestId('all-mode-notifications-select')).not.toBeInTheDocument();
     });
   });

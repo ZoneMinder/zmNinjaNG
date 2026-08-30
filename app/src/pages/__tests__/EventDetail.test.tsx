@@ -12,22 +12,21 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import EventDetail from '../EventDetail';
 import { useEventFavoritesStore } from '../../stores/eventFavorites';
 import { useSettingsStore } from '../../stores/settings';
+import { getEvent } from '../../api/events';
+import { seedProfiles, resetProfileFixture, fakeApiClient, asProfileId, type FakeApiClient } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const useQueryMock = vi.fn();
 const toastSuccess = vi.fn();
 const toastInfo = vi.fn();
 
 // Mutable knobs read by the mocks below so individual tests can vary the
-// continuous-play setting and the next-event result (#250).
+// next-event result (#250). Settings that drive the page (continuous play,
+// forced ZMS monitors) now live in the real settings store, seeded per test.
 const h = vi.hoisted(() => ({
-  settings: {
-    thumbnailFallbackChain: 'snapshot',
-    forceDisableMultiPort: false,
-    eventVideoAutoplay: false,
-    eventContinuousPlay: false,
-    eventPlaybackRate: 1,
-    forceZmsMonitorIds: [] as string[],
-  } as Record<string, unknown>,
   goToNextEvent: vi.fn(),
   locationState: {} as Record<string, unknown>,
   routeParams: { id: '101' } as Record<string, string | undefined>,
@@ -85,33 +84,6 @@ vi.mock('../../api/events', () => ({
 vi.mock('../../api/monitors', () => ({ getMonitor: vi.fn() }));
 
 vi.mock('../../services/download', () => ({ downloadEventVideo: vi.fn() }));
-
-const getSessionMock = vi.fn((id: string) => ({ client: `client-${id}`, profileId: id }));
-const tryGetCurrentSessionMock = vi.fn(() => ({ client: 'client-current', profileId: 'profile-1' }));
-vi.mock('../../services/sessions', () => ({
-  getSession: (id: string) => getSessionMock(id),
-  tryGetCurrentSession: () => tryGetCurrentSessionMock(),
-  // stores/profile.ts (pulled in transitively, real in this test) registers
-  // its gate at module load - the mock needs the export even though this
-  // suite never exercises it.
-  registerSessionsGate: vi.fn(),
-}));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  // The scroll pad reads the remembered setting through this one; the page
-  // itself only ever calls useProfileById.
-  useCurrentProfile: () => ({ settings: h.settings }),
-  useProfileById: (profileId?: string) => ({
-    profile: profileId === 'unknown-profile'
-      ? null
-      : { id: profileId ?? 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' },
-    settings: h.settings,
-  }),
-}));
-
-vi.mock('../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: 'token-1', isFresh: true }),
-}));
 
 vi.mock('../../hooks/useEventTags', () => ({
   useEventTagMapping: () => ({ getTagsForEvent: () => [] }),
@@ -215,6 +187,29 @@ function star() {
   return favoriteButton().querySelector('svg') as SVGElement;
 }
 
+const PROFILE_1 = asProfileId('profile-1');
+const PROFILE_B = asProfileId('profile-b');
+
+function setSettings(profileId: string, overrides: Record<string, unknown>) {
+  useSettingsStore.getState().updateProfileSettings(profileId, overrides);
+}
+
+let clientA: FakeApiClient;
+let clientB: FakeApiClient;
+
+beforeEach(() => {
+  seedProfiles(['profile-1', 'profile-b'], { current: 'profile-1' });
+  clientA = fakeApiClient({ '/servers.json': { servers: [] } });
+  clientB = fakeApiClient({ '/servers.json': { servers: [] } });
+  installApiClient(PROFILE_1, clientA);
+  installApiClient(PROFILE_B, clientB);
+});
+
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
+
 describe('EventDetail favorite toggle', () => {
   beforeEach(() => {
     useEventFavoritesStore.setState({ profileFavorites: {} });
@@ -271,11 +266,9 @@ describe('EventDetail favorite toggle', () => {
 describe('EventDetail continuous playback (#250)', () => {
   beforeEach(() => {
     toastInfo.mockClear();
-    h.settings.eventContinuousPlay = false;
     h.goToNextEvent.mockReset();
     h.locationState = {};
     h.translate.mockClear();
-    useSettingsStore.setState({ profileSettings: {} });
     useQueryMock.mockReset();
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
       if (queryKey[0] === 'event') return { data: event, isLoading: false, error: null };
@@ -293,7 +286,7 @@ describe('EventDetail continuous playback (#250)', () => {
   });
 
   it('advances to the next event when a video ends and continuous play is on', async () => {
-    h.settings.eventContinuousPlay = true;
+    setSettings(PROFILE_1, { eventContinuousPlay: true });
     h.goToNextEvent.mockResolvedValue(true);
     render(<EventDetail />);
 
@@ -316,7 +309,7 @@ describe('EventDetail continuous playback (#250)', () => {
   });
 
   it('shows "no more videos" and stops when there is no next event', async () => {
-    h.settings.eventContinuousPlay = true;
+    setSettings(PROFILE_1, { eventContinuousPlay: true });
     h.goToNextEvent.mockResolvedValue(false);
     render(<EventDetail />);
 
@@ -326,7 +319,6 @@ describe('EventDetail continuous playback (#250)', () => {
   });
 
   it('does not advance when continuous play is off', () => {
-    h.settings.eventContinuousPlay = false;
     render(<EventDetail />);
 
     fireEvent.click(screen.getByTestId('zms-fire-ended'));
@@ -348,8 +340,6 @@ describe('EventDetail forced ZMS playback (#313)', () => {
   };
 
   beforeEach(() => {
-    h.settings.forceZmsMonitorIds = [];
-    h.settings.eventContinuousPlay = false;
     h.routeParams = { id: '101' };
     h.locationState = {};
     h.logEventDetail.mockClear();
@@ -395,7 +385,7 @@ describe('EventDetail forced ZMS playback (#313)', () => {
   });
 
   it('never mounts the MP4 player for a monitor on the list', () => {
-    h.settings.forceZmsMonitorIds = ['1'];
+    setSettings(PROFILE_1, { forceZmsMonitorIds: ['1'] });
     render(<EventDetail />);
 
     expect(screen.getByTestId('zms-player')).toBeTruthy();
@@ -404,7 +394,7 @@ describe('EventDetail forced ZMS playback (#313)', () => {
   });
 
   it('logs that the setting is why MP4 was skipped, naming the monitor', () => {
-    h.settings.forceZmsMonitorIds = ['1'];
+    setSettings(PROFILE_1, { forceZmsMonitorIds: ['1'] });
     render(<EventDetail />);
 
     const forcedCall = h.logEventDetail.mock.calls.find(
@@ -419,7 +409,7 @@ describe('EventDetail forced ZMS playback (#313)', () => {
   });
 
   it('leaves other monitors on MP4 while one monitor is forced', () => {
-    h.settings.forceZmsMonitorIds = ['7'];
+    setSettings(PROFILE_1, { forceZmsMonitorIds: ['7'] });
     render(<EventDetail />);
 
     expect(screen.getByTestId('mp4-player')).toBeTruthy();
@@ -438,10 +428,7 @@ describe('EventDetail forced ZMS playback (#313)', () => {
  */
 describe('EventDetail All-mode deep route (refs #337)', () => {
   beforeEach(() => {
-    h.settings.forceZmsMonitorIds = [];
     h.locationState = {};
-    getSessionMock.mockClear();
-    tryGetCurrentSessionMock.mockClear();
     useQueryMock.mockReset();
   });
 
@@ -479,13 +466,21 @@ describe('EventDetail All-mode deep route (refs #337)', () => {
   it('fetches the event via the route profileId\'s client and query key', () => {
     h.routeParams = { profileId: 'profile-b', eventId: '101' };
     const seenKeys: unknown[][] = [];
+    // queryFn fires once, like the real react-query cache (which memoizes per
+    // key) rather than on every render - a re-render past the point the
+    // session was resolved must not re-run resolveClient.
+    let queryFnCalled = false;
     useQueryMock.mockImplementation(({ queryKey, queryFn }: { queryKey: readonly unknown[]; queryFn: () => unknown }) => {
       seenKeys.push([...queryKey]);
       if (queryKey[0] === 'event') {
         // Actually invoke the queryFn so we can assert it resolves the
         // client via the route's profileId (getSession), not the current
-        // session (tryGetCurrentSession never called).
-        queryFn();
+        // session (tryGetCurrentSession never called): the real session
+        // registry hands back the client installed for profile-b.
+        if (!queryFnCalled) {
+          queryFnCalled = true;
+          queryFn();
+        }
         return { data: event, isLoading: false, error: null };
       }
       if (queryKey[0] === 'monitor') {
@@ -497,15 +492,18 @@ describe('EventDetail All-mode deep route (refs #337)', () => {
     render(<EventDetail />);
 
     expect(seenKeys).toContainEqual(['event', 'profile-b', '101']);
-    expect(getSessionMock).toHaveBeenCalledWith('profile-b');
-    expect(tryGetCurrentSessionMock).not.toHaveBeenCalled();
+    expect(vi.mocked(getEvent)).toHaveBeenCalledWith(clientB, '101');
   });
 
   it('falls back to the current session and single-mode key when the route has no profileId', () => {
     h.routeParams = { id: '101' };
+    let queryFnCalled = false;
     useQueryMock.mockImplementation(({ queryKey, queryFn }: { queryKey: readonly unknown[]; queryFn: () => unknown }) => {
       if (queryKey[0] === 'event') {
-        queryFn();
+        if (!queryFnCalled) {
+          queryFnCalled = true;
+          queryFn();
+        }
         return { data: event, isLoading: false, error: null };
       }
       if (queryKey[0] === 'monitor') {
@@ -516,8 +514,9 @@ describe('EventDetail All-mode deep route (refs #337)', () => {
 
     render(<EventDetail />);
 
-    expect(tryGetCurrentSessionMock).toHaveBeenCalled();
-    expect(getSessionMock).not.toHaveBeenCalled();
+    // No route profileId falls back to the current profile (profile-1), so
+    // the client that resolved is the one installed for it, not profile-b's.
+    expect(vi.mocked(getEvent)).toHaveBeenCalledWith(clientA, '101');
   });
 
   it('renders the existing error state instead of crashing for an unknown route profileId', () => {
@@ -527,6 +526,5 @@ describe('EventDetail All-mode deep route (refs #337)', () => {
     render(<EventDetail />);
 
     expect(screen.getByText('event_detail.load_error')).toBeTruthy();
-    expect(getSessionMock).not.toHaveBeenCalledWith('unknown-profile');
   });
 });

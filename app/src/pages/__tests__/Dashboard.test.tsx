@@ -4,11 +4,20 @@
  * widgets. Each aggregate keeps its own dashboard, so reading the wrong
  * bucket while a group is active shows an empty dashboard with no way to edit
  * it (refs #337).
+ *
+ * Runs against the real profile, settings and auth stores; only the
+ * dashboard store (out of scope here) and the HTTP client stay faked.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import Dashboard from '../Dashboard';
 import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { useProfileStore } from '../../stores/profile';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const widget = {
   id: 'widget-1',
@@ -19,15 +28,10 @@ const widget = {
 };
 
 let widgetBuckets: Record<string, Array<typeof widget>> = {};
-let profileState: Record<string, unknown> = {};
 
 vi.mock('../../stores/dashboard', () => ({
   useDashboardStore: (selector: (state: Record<string, unknown>) => unknown) =>
     selector({ widgets: widgetBuckets, isEditing: false, toggleEditMode: vi.fn() }),
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: Record<string, unknown>) => unknown) => selector(profileState),
 }));
 
 vi.mock('zustand/react/shallow', () => ({
@@ -51,20 +55,19 @@ vi.mock('../../components/common/RefreshButton', () => ({
   RefreshButton: () => <button type="button" data-testid="dashboard-refresh-button" />,
 }));
 
-const profile = { id: 'profile-1', name: 'Home' };
-
 describe('Dashboard page', () => {
   beforeEach(() => {
     widgetBuckets = {};
-    profileState = {
-      profiles: [profile],
-      currentProfileId: 'profile-1',
-      virtualProfiles: [],
-    };
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it("shows the edit chrome for the current profile's own widgets", () => {
-    widgetBuckets = { 'profile-1': [widget] };
+    const [profile] = seedProfiles(['profile-1']);
+    widgetBuckets = { [profile.id]: [widget] };
 
     render(<Dashboard />);
 
@@ -72,13 +75,13 @@ describe('Dashboard page', () => {
   });
 
   it("reads the active group's own bucket, not the ALL sentinel's", () => {
+    const [profile] = seedProfiles(['profile-1']);
     const group = mintVirtualProfileId();
-    widgetBuckets = { [group]: [widget], [ALL_PROFILES_ID]: [] };
-    profileState = {
-      profiles: [profile],
+    useProfileStore.setState({
       currentProfileId: group,
-      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
-    };
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [profile.id] }],
+    });
+    widgetBuckets = { [group]: [widget], [ALL_PROFILES_ID]: [] };
 
     render(<Dashboard />);
 
@@ -86,13 +89,13 @@ describe('Dashboard page', () => {
   });
 
   it('shows no edit chrome when the active bucket is empty', () => {
+    const [profile] = seedProfiles(['profile-1']);
     const group = mintVirtualProfileId();
-    widgetBuckets = { [ALL_PROFILES_ID]: [widget] };
-    profileState = {
-      profiles: [profile],
+    useProfileStore.setState({
       currentProfileId: group,
-      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
-    };
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [profile.id] }],
+    });
+    widgetBuckets = { [ALL_PROFILES_ID]: [widget] };
 
     render(<Dashboard />);
 
