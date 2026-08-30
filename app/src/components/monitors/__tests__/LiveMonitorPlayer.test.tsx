@@ -10,10 +10,22 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { LiveMonitorPlayer } from '../LiveMonitorPlayer';
 import { MONTAGE_GRID, GO2RTC_FRAME_POLL_MS } from '../../../lib/zmninja-ng-constants';
-import type { Monitor, Profile } from '../../../api/types';
+import { asProfileId, type Monitor, type Profile } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
+
+function withQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
+}
 
 let mockMjpegReturn: {
   streamUrl: string;
@@ -75,27 +87,10 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: { videoPlayer: vi.fn() },
-  LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
-}));
-
-// The owning profile's own stream preferences. Only the keys these tests vary
-// are set; every other read is optional-chained in the player.
-let mockSettings: { streamMaxFps?: number; streamScale?: number } | undefined;
-
-// Permission probe (refs #344). Individual tests override the verdict.
-let mockStreamPermission: string | undefined;
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({
-    permissions: mockStreamPermission === undefined ? undefined : { stream: mockStreamPermission },
-    isLoading: false,
-  }),
-}));
-
-vi.mock('../../../stores/settings', () => ({
-  useSettingsStore: () => mockSettings,
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, videoPlayer: vi.fn() } };
+});
 
 const monitor = { Id: '1', Name: 'Front Door', Go2RTCEnabled: false } as unknown as Monitor;
 const profile = {
@@ -107,6 +102,20 @@ const profile = {
   isDefault: false,
   createdAt: 0,
 } as Profile;
+
+// Real profile/settings/auth stores, seeded for every profile id used across
+// this file's describes. No username on any of them by default, so
+// usePermissions resolves UNRESTRICTED_PERMISSIONS with no network call -
+// never denied, the same "not denied" outcome the old blanket permission
+// mock gave every describe but the one that overrides it below.
+beforeEach(() => {
+  seedProfiles([makeProfile('profile-1'), makeProfile('profile-a'), makeProfile('profile-b')]);
+});
+
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
 
 describe('LiveMonitorPlayer MJPEG recovery', () => {
   beforeEach(() => {
@@ -122,7 +131,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
   });
 
   it('re-renders the MJPEG <img> after an error once a new connkey arrives', () => {
-    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const { rerender } = render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     // Stream is up: the <img> is mounted.
     expect(screen.getByTestId('video-player-mjpeg')).toHaveAttribute(
@@ -141,7 +150,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
       streamUrl: 'https://t/stream?connkey=2',
       imageSrc: 'https://t/stream?connkey=2',
     };
-    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     // The tile must recover with the new stream, not stay on VideoOff.
     expect(screen.getByTestId('video-player-mjpeg')).toHaveAttribute(
@@ -157,15 +166,15 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
   // backoff burns at error-loop speed until the stream is released for good.
   // Every page that streams is affected, not only Live Activity.
   it('keeps the MJPEG error latched across re-renders that bring no new connkey', () => {
-    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const { rerender } = render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     fireEvent.error(screen.getByTestId('video-player-mjpeg'));
     expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
 
     // Unrelated re-renders: imageSrc is unchanged, so the connection is still
     // the dead one and the <img> must stay unmounted.
-    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
-    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
+    rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
     expect(screen.getByTestId('video-player-loading')).toBeInTheDocument();
@@ -174,7 +183,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
   });
 
   it('asks the stream hook to auto-reconnect when the MJPEG <img> errors', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
     fireEvent.error(screen.getByTestId('video-player-mjpeg'));
     expect(mockMjpegReturn.reportStreamError).toHaveBeenCalledTimes(1);
   });
@@ -186,7 +195,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
   // the length of the fade. The element itself has to stop presenting the
   // broken image inside the handler.
   it('leaves the errored MJPEG <img> unpaintable rather than showing a broken image', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
     const img = screen.getByTestId('video-player-mjpeg');
 
     fireEvent.error(img);
@@ -196,7 +205,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
   });
 
   it('restores a visible MJPEG <img> across repeated reconnects', () => {
-    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const { rerender } = render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     for (const connkey of ['2', '3']) {
       fireEvent.error(screen.getByTestId('video-player-mjpeg'));
@@ -206,7 +215,7 @@ describe('LiveMonitorPlayer MJPEG recovery', () => {
         streamUrl: `https://t/stream?connkey=${connkey}`,
         imageSrc: `https://t/stream?connkey=${connkey}`,
       };
-      rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+      rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
       const recovered = screen.getByTestId('video-player-mjpeg');
       expect(recovered).toBeVisible();
@@ -241,20 +250,20 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
 
     // A montage tile fails Go2RTC and records the failure in the shared cache.
     go2rtc.state = 'error';
-    const montage = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    const montage = render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />));
     montage.unmount();
 
     // The single-monitor view opts out of the shared cache: it must still try
     // Go2RTC even though the montage run just marked this monitor failed.
     go2rtc.state = 'connecting';
-    render(
+    render(withQuery(
       <LiveMonitorPlayer
         monitor={rtcMonitor}
         profile={go2rtcProfile}
         bypassGo2rtcFailureCache
         forceViewMode="streaming"
       />,
-    );
+    ));
 
     expect(latestEnabled('cache-a')).toBe(true);
   });
@@ -264,12 +273,12 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
 
     // First montage tile fails and records the failure.
     go2rtc.state = 'error';
-    const first = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    const first = render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />));
     first.unmount();
 
     // A subsequent montage tile for the same monitor skips Go2RTC (MJPEG fallback).
     go2rtc.state = 'connecting';
-    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />));
 
     expect(latestEnabled('cache-b')).toBe(false);
   });
@@ -284,12 +293,12 @@ describe('LiveMonitorPlayer Go2RTC failure cache scoping', () => {
 
     // Profile A's tile fails Go2RTC and records the failure.
     go2rtc.state = 'error';
-    const a = render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileA} />);
+    const a = render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileA} />));
     a.unmount();
 
     // Profile B's tile for the SAME monitor id must still try Go2RTC.
     go2rtc.state = 'connecting';
-    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileB} />);
+    render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={profileB} />));
 
     expect(latestEnabled('cache-c')).toBe(true);
   });
@@ -309,20 +318,20 @@ describe('LiveMonitorPlayer reduced stream tuning', () => {
       reportStreamLoad: vi.fn(),
       hasFrame: true,
     };
-    mockSettings = { streamMaxFps: 10, streamScale: 50 };
+    seedProfiles([makeProfile('profile-1')], { settings: { 'profile-1': { streamMaxFps: 10, streamScale: 50 } } });
     streamCalls.length = 0;
   });
 
   const latestOptions = () => streamCalls[streamCalls.length - 1]?.streamOptions;
 
   it('asks for the owning profile\'s own frame rate and scale by default', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(latestOptions()).toEqual({ maxfps: 10, scale: 50 });
   });
 
   it('asks for less when the tile is told to reduce', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />));
 
     expect(latestOptions()).toEqual({
       maxfps: MONTAGE_GRID.reducedMaxFps,
@@ -331,9 +340,9 @@ describe('LiveMonitorPlayer reduced stream tuning', () => {
   });
 
   it('keeps a profile already streaming below the ceiling where it is', () => {
-    mockSettings = { streamMaxFps: 2, streamScale: 10 };
+    seedProfiles([makeProfile('profile-1')], { settings: { 'profile-1': { streamMaxFps: 2, streamScale: 10 } } });
 
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} reduceStream />));
 
     expect(latestOptions()).toEqual({ maxfps: 2, scale: 10 });
   });
@@ -357,7 +366,6 @@ describe('LiveMonitorPlayer paused tiles', () => {
       reportStreamLoad: vi.fn(),
       hasFrame: true,
     };
-    mockSettings = undefined;
     streamCalls.length = 0;
     go2rtc.state = 'connecting';
     go2rtc.optionsLog = [];
@@ -368,29 +376,29 @@ describe('LiveMonitorPlayer paused tiles', () => {
     [...go2rtc.optionsLog].reverse().find((o) => o.monitorId === monitorId)?.enabled;
 
   it('streams while not paused', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(latestStreamEnabled()).toBe(true);
   });
 
   it('drops the MJPEG connection while paused', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} paused />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} paused />));
 
     expect(latestStreamEnabled()).toBe(false);
   });
 
   it('drops the go2rtc connection while paused', () => {
-    render(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+    render(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />));
 
     expect(latestGo2rtcEnabled('paused-rtc')).toBe(false);
   });
 
   it('reconnects when the pause lifts', () => {
-    const { rerender } = render(
-      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />,
-    );
+    const { rerender } = render(withQuery(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />
+    ));
 
-    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />));
 
     expect(latestGo2rtcEnabled('paused-rtc')).toBe(true);
     expect(latestStreamEnabled()).toBe(true);
@@ -417,7 +425,6 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
       reportStreamLoad: vi.fn(),
       hasFrame: true,
     };
-    mockSettings = undefined;
     streamCalls.length = 0;
     go2rtc.state = 'connected';
     go2rtc.optionsLog = [];
@@ -441,13 +448,13 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
   };
 
   it('shows the placeholder while paused even though the go2rtc hook still reports frames', () => {
-    const { rerender } = render(
-      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />,
-    );
+    const { rerender } = render(withQuery(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />
+    ));
     letFramesArrive();
     expect(isShowingPlaceholder()).toBe(false);
 
-    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />));
     // The real hook stops on the way into a pause, but it does so in its own
     // effect, and its last reported state outlives the render that paused the
     // tile. Nothing the hook says can put live video on a paused tile.
@@ -457,16 +464,16 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
   });
 
   it('comes back from a pause on the cold-start path, not mid-stream', () => {
-    const { rerender } = render(
-      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />,
-    );
+    const { rerender } = render(withQuery(
+      <LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />
+    ));
     letFramesArrive();
 
-    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} paused />));
     // The connection is gone: go2rtc reports idle and there is no video.
     go2rtc.state = 'idle';
     go2rtc.video = null;
-    rerender(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={rtcMonitor} profile={go2rtcProfile} />));
 
     // Still on the placeholder, waiting for the first frame of the new
     // connection. Carrying the old "has frames" across the pause would instead
@@ -487,7 +494,6 @@ describe('LiveMonitorPlayer paused WebRTC frames', () => {
  */
 describe('LiveMonitorPlayer without streaming permission', () => {
   beforeEach(() => {
-    mockStreamPermission = undefined;
     mockMjpegReturn = {
       streamUrl: 'https://t/stream?connkey=1',
       imageSrc: 'https://t/stream?connkey=1',
@@ -499,41 +505,48 @@ describe('LiveMonitorPlayer without streaming permission', () => {
     };
   });
 
-  afterEach(() => {
-    mockStreamPermission = undefined;
-  });
+  // Real usePermissions probe: 'profile-1' needs a username (else the probe
+  // short-circuits to unrestricted with no request at all) and a scripted
+  // /users.json naming its Stream column.
+  function seedStreamPermission(stream: string) {
+    seedProfiles([makeProfile('profile-1', { username: 'bob' })]);
+    installApiClient(asProfileId('profile-1'), fakeApiClient({ '/users.json': { users: [{ User: { Username: 'bob', Stream: stream } }] } }));
+  }
 
-  it('explains the refusal instead of showing a tile that can never load', () => {
-    mockStreamPermission = 'None';
+  it('explains the refusal instead of showing a tile that can never load', async () => {
+    seedStreamPermission('None');
 
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
-    expect(screen.getByTestId('video-player-no-permission')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('video-player-no-permission')).toBeInTheDocument());
     expect(screen.queryByTestId('video-player-mjpeg')).not.toBeInTheDocument();
   });
 
-  it('does not ask ZoneMinder for a stream it will refuse', () => {
-    mockStreamPermission = 'None';
-    streamCalls.length = 0;
+  // The probe is inherently async (a real network round trip), so the very
+  // first render - before any verdict is known - still asks for a stream;
+  // what matters is that once ZoneMinder answers "None", the request stops.
+  it('does not ask ZoneMinder for a stream it will refuse', async () => {
+    seedStreamPermission('None');
 
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
-    expect(streamCalls.every((call) => call.enabled === false)).toBe(true);
+    await waitFor(() => expect(screen.getByTestId('video-player-no-permission')).toBeInTheDocument());
+    expect(streamCalls.at(-1)?.enabled).toBe(false);
   });
 
-  it('streams normally when the account may stream', () => {
-    mockStreamPermission = 'View';
+  it('streams normally when the account may stream', async () => {
+    seedStreamPermission('View');
 
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
+    await waitFor(() => expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument());
     expect(screen.queryByTestId('video-player-no-permission')).not.toBeInTheDocument();
-    expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument();
   });
 
   it('streams while the permission is still unknown', () => {
     // Unknown must never withhold video: an account that can stream would lose
     // it for no reason.
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(screen.queryByTestId('video-player-no-permission')).not.toBeInTheDocument();
     expect(screen.getByTestId('video-player-mjpeg')).toBeInTheDocument();
@@ -547,8 +560,6 @@ describe('LiveMonitorPlayer without streaming permission', () => {
 // <img> is only allowed to paint once the src it holds has produced a frame.
 describe('LiveMonitorPlayer MJPEG frame gating', () => {
   beforeEach(() => {
-    mockSettings = undefined;
-    mockStreamPermission = undefined;
     mockMjpegReturn = {
       streamUrl: 'https://t/stream?connkey=1',
       imageSrc: 'https://t/stream?connkey=1',
@@ -561,7 +572,7 @@ describe('LiveMonitorPlayer MJPEG frame gating', () => {
   });
 
   it('keeps a connected but frameless <img> unpaintable and shows the placeholder', () => {
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     // Mounted, because an unmounted element can never load.
     const img = screen.getByTestId('video-player-mjpeg');
@@ -571,10 +582,10 @@ describe('LiveMonitorPlayer MJPEG frame gating', () => {
   });
 
   it('paints the <img> and drops the placeholder once a frame arrives', () => {
-    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const { rerender } = render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
-    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(screen.getByTestId('video-player-mjpeg')).toBeVisible();
     expect(screen.queryByTestId('video-player-loading')).not.toBeInTheDocument();
@@ -582,13 +593,13 @@ describe('LiveMonitorPlayer MJPEG frame gating', () => {
 
   it('hides the picture again when the stream loses its frame', () => {
     mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
-    const { rerender } = render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    const { rerender } = render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
     expect(screen.getByTestId('video-player-mjpeg')).toBeVisible();
 
     // A resume withdraws the frame without any error event and before the new
     // connkey lands, so imageSrc is still the old one here.
     mockMjpegReturn = { ...mockMjpegReturn, hasFrame: false };
-    rerender(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    rerender(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(screen.getByTestId('video-player-mjpeg')).not.toBeVisible();
     expect(screen.getByTestId('video-player-loading')).toBeInTheDocument();
@@ -599,7 +610,7 @@ describe('LiveMonitorPlayer MJPEG frame gating', () => {
   // carries the monitor name.
   it('gives the stream image no alt text to render on failure', () => {
     mockMjpegReturn = { ...mockMjpegReturn, hasFrame: true };
-    render(<LiveMonitorPlayer monitor={monitor} profile={profile} />);
+    render(withQuery(<LiveMonitorPlayer monitor={monitor} profile={profile} />));
 
     expect(screen.getByTestId('video-player-mjpeg')).toHaveAttribute('alt', '');
   });

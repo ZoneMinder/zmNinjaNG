@@ -7,44 +7,25 @@
  * object would cause in production (testing playbook).
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+
+vi.mock('../../api/users', () => ({ fetchAccountPermissions: vi.fn() }));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { usePermissions } from '../usePermissions';
 import { fetchAccountPermissions } from '../../api/users';
 import { useProfileStore } from '../../stores/profile';
-import { asProfileId, VIRTUAL_PROFILE_ID_PREFIX, type Profile } from '../../api/types';
+import { VIRTUAL_PROFILE_ID_PREFIX } from '../../api/types';
 import { SYSTEM_NONE_PERMISSIONS } from '../../lib/permissions/zm-permissions';
-
-vi.mock('../../api/users', () => ({ fetchAccountPermissions: vi.fn() }));
-
-// Partial for the same reason as sessions below: the real profile store wires
-// itself to this module's registration functions at import time.
-vi.mock('../../stores/auth', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../stores/auth')>()),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
-
-// Partial: the profile store registers its own gate against this module on
-// import, so the real exports have to survive the mock.
-vi.mock('../../services/sessions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../services/sessions')>()),
-  getSession: vi.fn(() => ({ client: {} })),
-}));
+import { seedProfiles, resetProfileFixture, makeProfile, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const profileId = asProfileId('profile-1');
-
-const profile: Profile = {
-  id: profileId,
-  name: 'Home',
-  portalUrl: 'https://zm.test/zm',
-  apiUrl: 'https://zm.test/zm/api',
-  cgiUrl: 'https://zm.test/zm/cgi-bin',
-  username: 'viewer',
-  isDefault: true,
-  createdAt: 0,
-};
+const profile = makeProfile('profile-1', { username: 'viewer' });
 
 function createWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -56,7 +37,12 @@ function createWrapper() {
 describe('usePermissions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useProfileStore.setState({ profiles: [profile], currentProfileId: profileId });
+    seedProfiles([profile]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('reports the account permissions for the requested profile', async () => {

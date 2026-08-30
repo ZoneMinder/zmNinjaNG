@@ -3,12 +3,19 @@
  * three ways a group can be invalid have to land in the dialog, next to the
  * fields, instead of throwing out of the store into a console. Refs #337.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { VirtualProfileDialog } from '../VirtualProfileDialog';
 import { mintVirtualProfileId } from '../../../api/types';
-import type { Profile, ProfileId } from '../../../api/types';
+import type { ProfileId } from '../../../api/types';
+import { useProfileStore } from '../../../stores/profile';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -17,47 +24,27 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-const addVirtualProfileMock = vi.fn(() => mintVirtualProfileId());
-const updateVirtualProfileMock = vi.fn();
-const profileExistsMock = vi.fn(() => false);
+const HOME = makeProfile('p1', { name: 'Home', isDefault: true });
+const OFFICE = makeProfile('p2', { name: 'Office' });
 
-const useProfileStoreMock = vi.fn();
-vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: unknown) => unknown) => selector(useProfileStoreMock()),
-}));
-
-const HOME: Profile = {
-  id: 'p1' as ProfileId,
-  name: 'Home',
-  portalUrl: 'https://home.test',
-  apiUrl: 'https://api.home.test',
-  cgiUrl: 'https://home.test/cgi-bin',
-  isDefault: true,
-  createdAt: 1,
-};
-const OFFICE = { ...HOME, id: 'p2' as ProfileId, name: 'Office', isDefault: false, createdAt: 2 };
-
-function storeState(profiles = [HOME, OFFICE]) {
-  return {
-    profiles,
-    addVirtualProfile: addVirtualProfileMock,
-    updateVirtualProfile: updateVirtualProfileMock,
-    profileExists: profileExistsMock,
-  };
+function seedVirtualProfileFixture(profiles = [HOME, OFFICE]) {
+  seedProfiles(profiles);
 }
 
 describe('VirtualProfileDialog', () => {
   beforeEach(() => {
-    addVirtualProfileMock.mockClear();
-    updateVirtualProfileMock.mockClear();
-    profileExistsMock.mockReset();
-    profileExistsMock.mockReturnValue(false);
-    useProfileStoreMock.mockReturnValue(storeState());
+    seedVirtualProfileFixture();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('creates a group from the typed name and the checked members', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={onClose} />);
 
@@ -65,13 +52,19 @@ describe('VirtualProfileDialog', () => {
     await user.click(screen.getByTestId('virtual-profile-member-p2'));
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(addVirtualProfileMock).toHaveBeenCalledWith('Backyard', ['p2']);
+    expect(addVirtualProfileSpy).toHaveBeenCalledWith('Backyard', ['p2']);
     expect(onClose).toHaveBeenCalled();
+    expect(useProfileStore.getState().virtualProfiles?.[0]).toMatchObject({
+      name: 'Backyard',
+      memberProfileIds: ['p2'],
+    });
   });
 
   it('opens in edit mode with the group name and members already applied', async () => {
     const user = userEvent.setup();
     const group = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: ['p2' as ProfileId] };
+    useProfileStore.setState({ virtualProfiles: [group] });
+    const updateVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'updateVirtualProfile');
 
     render(<VirtualProfileDialog group={group} onClose={vi.fn()} />);
 
@@ -82,7 +75,7 @@ describe('VirtualProfileDialog', () => {
     await user.click(screen.getByTestId('virtual-profile-member-p1'));
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(updateVirtualProfileMock).toHaveBeenCalledWith(group.id, {
+    expect(updateVirtualProfileSpy).toHaveBeenCalledWith(group.id, {
       name: 'Backyard',
       memberProfileIds: ['p2', 'p1'],
     });
@@ -93,6 +86,8 @@ describe('VirtualProfileDialog', () => {
   // save is how two identical-looking names get past it (spec section 6).
   it('trims the name before storing it and before checking availability', async () => {
     const user = userEvent.setup();
+    const profileExistsSpy = vi.spyOn(useProfileStore.getState(), 'profileExists');
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
 
@@ -100,12 +95,13 @@ describe('VirtualProfileDialog', () => {
     await user.click(screen.getByTestId('virtual-profile-member-p1'));
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(profileExistsMock).toHaveBeenCalledWith('Backyard', undefined);
-    expect(addVirtualProfileMock).toHaveBeenCalledWith('Backyard', ['p1']);
+    expect(profileExistsSpy).toHaveBeenCalledWith('Backyard', undefined);
+    expect(addVirtualProfileSpy).toHaveBeenCalledWith('Backyard', ['p1']);
   });
 
   it('refuses a blank name and writes nothing', async () => {
     const user = userEvent.setup();
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
 
@@ -116,24 +112,26 @@ describe('VirtualProfileDialog', () => {
     expect(screen.getByTestId('virtual-profile-error')).toHaveTextContent(
       'profiles.group_name_required'
     );
-    expect(addVirtualProfileMock).not.toHaveBeenCalled();
+    expect(addVirtualProfileSpy).not.toHaveBeenCalled();
   });
 
   it('refuses a name another profile already uses', async () => {
     const user = userEvent.setup();
-    profileExistsMock.mockReturnValue(true);
+    const profileExistsSpy = vi.spyOn(useProfileStore.getState(), 'profileExists');
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
 
+    // 'Home' is HOME's own real name, seeded above - a genuine clash.
     await user.type(screen.getByTestId('virtual-profile-name'), 'Home');
     await user.click(screen.getByTestId('virtual-profile-member-p1'));
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(profileExistsMock).toHaveBeenCalledWith('Home', undefined);
+    expect(profileExistsSpy).toHaveBeenCalledWith('Home', undefined);
     expect(screen.getByTestId('virtual-profile-error')).toHaveTextContent(
       'profiles.group_name_taken'
     );
-    expect(addVirtualProfileMock).not.toHaveBeenCalled();
+    expect(addVirtualProfileSpy).not.toHaveBeenCalled();
   });
 
   // A group keeps its own name across an edit, so the availability check has
@@ -142,16 +140,20 @@ describe('VirtualProfileDialog', () => {
   it('lets a group keep its own name while editing', async () => {
     const user = userEvent.setup();
     const group = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: ['p2' as ProfileId] };
+    useProfileStore.setState({ virtualProfiles: [group] });
+    const profileExistsSpy = vi.spyOn(useProfileStore.getState(), 'profileExists');
+    const updateVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'updateVirtualProfile');
 
     render(<VirtualProfileDialog group={group} onClose={vi.fn()} />);
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(profileExistsMock).toHaveBeenCalledWith('Backyard', group.id);
-    expect(updateVirtualProfileMock).toHaveBeenCalled();
+    expect(profileExistsSpy).toHaveBeenCalledWith('Backyard', group.id);
+    expect(updateVirtualProfileSpy).toHaveBeenCalled();
   });
 
   it('refuses a group with no members', async () => {
     const user = userEvent.setup();
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
 
@@ -161,14 +163,15 @@ describe('VirtualProfileDialog', () => {
     expect(screen.getByTestId('virtual-profile-error')).toHaveTextContent(
       'profiles.group_members_required'
     );
-    expect(addVirtualProfileMock).not.toHaveBeenCalled();
+    expect(addVirtualProfileSpy).not.toHaveBeenCalled();
   });
 
   // Disabled profiles are legal members: scope resolution filters them out
   // while they stay disabled, and the group works again once re-enabled.
   it('offers a disabled profile as a member and marks it disabled', async () => {
     const user = userEvent.setup();
-    useProfileStoreMock.mockReturnValue(storeState([HOME, { ...OFFICE, disabled: true }]));
+    seedVirtualProfileFixture([HOME, makeProfile('p2', { name: 'Office', disabled: true })]);
+    const addVirtualProfileSpy = vi.spyOn(useProfileStore.getState(), 'addVirtualProfile');
 
     render(<VirtualProfileDialog group={null} onClose={vi.fn()} />);
 
@@ -180,24 +183,23 @@ describe('VirtualProfileDialog', () => {
     await user.click(screen.getByTestId('virtual-profile-member-p2'));
     await user.click(screen.getByTestId('virtual-profile-save'));
 
-    expect(addVirtualProfileMock).toHaveBeenCalledWith('Backyard', ['p2']);
+    expect(addVirtualProfileSpy).toHaveBeenCalledWith('Backyard', ['p2']);
   });
 
   // The dialog's own checks cannot see a group deleted in another tab; the
-  // store throw is the only signal, and it has to reach the user.
+  // store throw is the only signal, and it has to reach the user. This group
+  // is never added to the real store's virtualProfiles, so updateVirtualProfile
+  // throws its own real "not found" error - no fabricated throw needed.
   it('surfaces a store rejection the dialog could not predict', async () => {
     const user = userEvent.setup();
     const group = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: ['p2' as ProfileId] };
-    updateVirtualProfileMock.mockImplementation(() => {
-      throw new Error('Virtual profile not found');
-    });
     const onClose = vi.fn();
 
     render(<VirtualProfileDialog group={group} onClose={onClose} />);
     await user.click(screen.getByTestId('virtual-profile-save'));
 
     expect(screen.getByTestId('virtual-profile-error')).toHaveTextContent(
-      'Virtual profile not found'
+      `Virtual profile ${group.id} not found`
     );
     expect(onClose).not.toHaveBeenCalled();
   });

@@ -1,13 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { EventCard } from '../EventCard';
 import { setEventArchived } from '../../../api/events';
 import { asProfileId } from '../../../api/types';
 import { toast } from 'sonner';
 import { createHttpError } from '../../../lib/http/types';
 import { usePermissionDenialStore } from '../../../stores/permissions';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const navigate = vi.fn();
 // Calls through: the assertion is that the list gets refreshed, not that it doesn't.
@@ -18,25 +24,9 @@ function renderWithClient(ui: ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
-// Permission probe (refs #344); tests set the verdict they need.
-let mockEventsPermission: string | undefined;
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({
-    permissions: mockEventsPermission === undefined ? undefined : { events: mockEventsPermission },
-    isLoading: false,
-  }),
-}));
-
 vi.mock('../../../api/events', () => ({ setEventArchived: vi.fn() }));
 
 vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }) }));
-
-// Partial: the profile store registers its own gate against this module on
-// import, so the real exports have to survive the mock.
-vi.mock('../../../services/sessions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../services/sessions')>()),
-  getSession: () => ({ client: {} }),
-}));
 
 vi.mock('react-router-dom', () => ({
   useNavigate: () => navigate,
@@ -49,25 +39,10 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-    api: vi.fn(),
-    auth: vi.fn(),
-    profile: vi.fn(),
-    eventCard: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3,
-    NONE: 4,
-  },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, eventCard: vi.fn() } };
+});
 
 // Base event object with all required fields. Accepts overrides for specific fields.
 const baseEvent = {
@@ -346,28 +321,34 @@ describe('EventCard', () => {
  * would be noise.
  */
 describe('EventCard without permission to archive', () => {
-  beforeEach(() => {
-    mockEventsPermission = undefined;
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
-  it('greys the archive control when ZoneMinder denies editing', () => {
-    mockEventsPermission = 'View';
+  it('greys the archive control when ZoneMinder denies editing', async () => {
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(asProfileId('p1'), fakeApiClient({ '/users.json': { users: [{ User: { Username: 'bob', Events: 'View' } }] } }));
 
-    renderEventCard({});
+    renderEventCard({}, { profileId: asProfileId('p1') });
 
-    expect(screen.getByTestId('event-archive-button')).toHaveAttribute('aria-disabled', 'true');
+    await waitFor(() => expect(screen.getByTestId('event-archive-button')).toHaveAttribute('aria-disabled', 'true'));
   });
 
-  it('leaves it alone at Edit', () => {
-    mockEventsPermission = 'Edit';
+  it('leaves it alone at Edit', async () => {
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(asProfileId('p1'), fakeApiClient({ '/users.json': { users: [{ User: { Username: 'bob', Events: 'Edit' } }] } }));
 
-    renderEventCard({});
+    renderEventCard({}, { profileId: asProfileId('p1') });
 
-    expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
+    await waitFor(() => expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled'));
   });
 
   it('leaves it alone while the permission is unknown', () => {
-    renderEventCard({});
+    // No profile seeded for this id: usePermissions(p1) sees no real profile
+    // (isReal but not authenticated), so its query never runs and the
+    // verdict stays unknown - never denied.
+    renderEventCard({}, { profileId: asProfileId('p1') });
 
     expect(screen.getByTestId('event-archive-button')).not.toHaveAttribute('aria-disabled');
   });
@@ -391,10 +372,19 @@ describe('EventCard when ZoneMinder refuses the archive', () => {
   );
 
   beforeEach(() => {
-    mockEventsPermission = undefined;
     usePermissionDenialStore.setState({ denied: {} });
     vi.mocked(setEventArchived).mockReset();
     invalidateQueries.mockClear();
+    // No username: usePermissions resolves UNRESTRICTED_PERMISSIONS with no
+    // network call, so nothing here is pre-gated - only the server's refusal
+    // (mocked per test below) decides the outcome, matching this describe's
+    // "gated only by ZoneMinder's own answer" premise.
+    seedProfiles([makeProfile('p1')]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('names the permission instead of blaming the archive', async () => {

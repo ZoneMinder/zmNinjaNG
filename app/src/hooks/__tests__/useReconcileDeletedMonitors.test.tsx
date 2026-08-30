@@ -1,25 +1,21 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+
+vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { useReconcileDeletedMonitors } from '../useReconcileDeletedMonitors';
 import { useSettingsStore, DEFAULT_MONTAGE_GROUP_LAYOUT } from '../../stores/settings';
 import { useDashboardStore } from '../../stores/dashboard';
 import { getMonitors } from '../../api/monitors';
 import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const VIRTUAL_ID = mintVirtualProfileId();
-
-vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getCurrentSession: vi.fn(() => ({ client: {}, profileId: 'p1' })) }));
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
-    selector({ isAuthenticated: true }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
 
 const mockGetMonitors = vi.mocked(getMonitors);
 
@@ -33,6 +29,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 function seedProfile() {
+  seedProfiles(['p1']);
   useSettingsStore.setState({
     profileSettings: {
       p1: {
@@ -89,6 +86,11 @@ describe('useReconcileDeletedMonitors', () => {
   beforeEach(() => {
     mockGetMonitors.mockReset();
     seedProfile();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('drops ids for monitors ZoneMinder no longer has, everywhere they are stored', async () => {

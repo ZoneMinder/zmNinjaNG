@@ -5,18 +5,15 @@
  * self-signed certs on native: whether a freshly fetched certificate should be
  * treated as a silent first pin, a confirmed match, or a changed/mismatched
  * certificate that needs the user's explicit trust/cancel decision. Refs #217.
+ *
+ * Runs against the real profile and settings stores; only Platform,
+ * ssl-trust and the logger are faked.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({
   isNative: true,
-  currentProfile: { id: 'profile-1', portalUrl: 'https://zm.example.com' } as {
-    id: string;
-    portalUrl: string;
-  } | null,
-  trustedCertFingerprint: null as string | null,
-  updateProfileSettings: vi.fn(),
   applyTrustedCertificates: vi.fn().mockResolvedValue(undefined),
   getServerCertFingerprint: vi.fn(),
   logSslTrust: vi.fn(),
@@ -30,33 +27,31 @@ vi.mock('../../lib/platform', () => ({
   },
 }));
 
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: h.currentProfile,
-    settings: { trustedCertFingerprint: h.trustedCertFingerprint },
-  }),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: (selector: (s: { updateProfileSettings: typeof h.updateProfileSettings }) => unknown) =>
-    selector({ updateProfileSettings: h.updateProfileSettings }),
-}));
-
 vi.mock('../../lib/security/ssl-trust', () => ({
   applyTrustedCertificates: h.applyTrustedCertificates,
   getServerCertFingerprint: h.getServerCertFingerprint,
 }));
 
+// The real profile/auth stores (pulled in by seedProfiles/resetProfileFixture)
+// log through profileService/auth on their own housekeeping (refresh-token
+// sync, logout); stub those too so seeding doesn't crash on an undefined
+// method, alongside sslTrust which the hook itself calls.
 vi.mock('../../lib/logger', () => ({
-  log: { sslTrust: h.logSslTrust },
+  log: { sslTrust: h.logSslTrust, profileService: vi.fn(), auth: vi.fn() },
   LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
 }));
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const mockApplyTrustedCertificates = h.applyTrustedCertificates;
 const mockGetServerCertFingerprint = h.getServerCertFingerprint;
 const mockLogSslTrust = h.logSslTrust;
 
 import { useCertTrustPrompt } from '../useCertTrustPrompt';
+import { useSettingsStore } from '../../stores/settings';
+import { makeProfile, seedProfiles, resetProfileFixture, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const CERT_INFO = {
   fingerprint: 'AA:BB:CC:DD',
@@ -65,12 +60,24 @@ const CERT_INFO = {
   expiry: '2027-01-01',
 };
 
+const PROFILE_ID = asProfileId('profile-1');
+
+function seedWithFingerprint(fingerprint: string | null) {
+  seedProfiles([makeProfile('profile-1', { portalUrl: 'https://zm.example.com' })], {
+    settings: { 'profile-1': { trustedCertFingerprint: fingerprint } },
+  });
+}
+
 describe('useCertTrustPrompt', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.isNative = true;
-    h.currentProfile = { id: 'profile-1', portalUrl: 'https://zm.example.com' };
-    h.trustedCertFingerprint = null;
+    seedWithFingerprint(null);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('is a no-op on non-native platforms', async () => {
@@ -86,7 +93,7 @@ describe('useCertTrustPrompt', () => {
   });
 
   it('is a no-op when there is no current profile', async () => {
-    h.currentProfile = null;
+    resetProfileFixture();
     const { result } = renderHook(() => useCertTrustPrompt());
 
     await act(async () => {
@@ -98,7 +105,7 @@ describe('useCertTrustPrompt', () => {
   });
 
   it('accept-on-first-use: opens the dialog with isChanged=false when no fingerprint is pinned yet', async () => {
-    h.trustedCertFingerprint = null;
+    seedWithFingerprint(null);
     mockGetServerCertFingerprint.mockResolvedValue(CERT_INFO);
 
     const { result } = renderHook(() => useCertTrustPrompt());
@@ -114,7 +121,7 @@ describe('useCertTrustPrompt', () => {
   });
 
   it('pin match: isChanged=false when the fetched fingerprint matches the stored pin', async () => {
-    h.trustedCertFingerprint = CERT_INFO.fingerprint;
+    seedWithFingerprint(CERT_INFO.fingerprint);
     mockGetServerCertFingerprint.mockResolvedValue(CERT_INFO);
 
     const { result } = renderHook(() => useCertTrustPrompt());
@@ -127,7 +134,7 @@ describe('useCertTrustPrompt', () => {
   });
 
   it('mismatch: isChanged=true when the fetched fingerprint differs from the stored pin', async () => {
-    h.trustedCertFingerprint = 'FF:EE:DD:CC';
+    seedWithFingerprint('FF:EE:DD:CC');
     mockGetServerCertFingerprint.mockResolvedValue(CERT_INFO);
 
     const { result } = renderHook(() => useCertTrustPrompt());
@@ -195,7 +202,7 @@ describe('useCertTrustPrompt', () => {
   });
 
   it('onTrust pins the fingerprint, enables self-signed certs, and re-applies with the new pin', async () => {
-    h.trustedCertFingerprint = 'FF:EE:DD:CC';
+    seedWithFingerprint('FF:EE:DD:CC');
     mockGetServerCertFingerprint.mockResolvedValue(CERT_INFO);
 
     const { result } = renderHook(() => useCertTrustPrompt());
@@ -208,17 +215,16 @@ describe('useCertTrustPrompt', () => {
       await result.current.dialogProps.onTrust();
     });
 
-    expect(h.updateProfileSettings).toHaveBeenCalledWith('profile-1', {
-      allowSelfSignedCerts: true,
-      trustedCertFingerprint: CERT_INFO.fingerprint,
-    });
+    const settings = useSettingsStore.getState().getProfileSettings(PROFILE_ID);
+    expect(settings.allowSelfSignedCerts).toBe(true);
+    expect(settings.trustedCertFingerprint).toBe(CERT_INFO.fingerprint);
     // Called once from prompt's TOFU enable, once more from onTrust's re-apply with the pinned fingerprint
     expect(mockApplyTrustedCertificates).toHaveBeenCalledTimes(2);
     expect(result.current.dialogProps.open).toBe(false);
   });
 
   it('onCancel closes the dialog without pinning (rejection path)', async () => {
-    h.trustedCertFingerprint = 'FF:EE:DD:CC';
+    seedWithFingerprint('FF:EE:DD:CC');
     mockGetServerCertFingerprint.mockResolvedValue(CERT_INFO);
 
     const { result } = renderHook(() => useCertTrustPrompt());
@@ -232,7 +238,9 @@ describe('useCertTrustPrompt', () => {
     });
 
     expect(result.current.dialogProps.open).toBe(false);
-    expect(h.updateProfileSettings).not.toHaveBeenCalled();
+    const settings = useSettingsStore.getState().getProfileSettings(PROFILE_ID);
+    expect(settings.allowSelfSignedCerts).toBe(false);
+    expect(settings.trustedCertFingerprint).toBe('FF:EE:DD:CC');
     // applyTrustedCertificates was called once already (from prompt's TOFU enable), never again with a pin
     expect(mockApplyTrustedCertificates).toHaveBeenCalledTimes(1);
   });
@@ -244,7 +252,8 @@ describe('useCertTrustPrompt', () => {
       await result.current.dialogProps.onTrust();
     });
 
-    expect(h.updateProfileSettings).not.toHaveBeenCalled();
+    const settings = useSettingsStore.getState().getProfileSettings(PROFILE_ID);
+    expect(settings.allowSelfSignedCerts).toBe(false);
     expect(mockApplyTrustedCertificates).not.toHaveBeenCalled();
   });
 });

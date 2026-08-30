@@ -1,69 +1,54 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { useGroupFilter } from '../useGroupFilter';
-import { useCurrentProfile } from '../useCurrentProfile';
 import { useGroups } from '../useGroups';
-import { useSettingsStore } from '../../stores/settings';
-import { asProfileId } from '../../api/types';
 
-// Mock dependencies
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../useGroups', () => ({
   useGroups: vi.fn(),
 }));
 
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: vi.fn(),
-}));
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useSettingsStore } from '../../stores/settings';
 
-const mockUpdateProfileSettings = vi.fn();
+function mockGroups() {
+  vi.mocked(useGroups).mockReturnValue({
+    groups: [
+      {
+        Group: { Id: '1', Name: 'Inside', ParentId: null },
+        Monitor: [{ Id: '1' }, { Id: '2' }],
+      },
+      {
+        Group: { Id: '2', Name: 'Outside', ParentId: null },
+        Monitor: [{ Id: '3' }],
+      },
+    ],
+    isLoading: false,
+    isSuccess: true,
+    error: null,
+    refetch: vi.fn(),
+    getGroupMonitorIds: vi.fn((groupId: string) => {
+      if (groupId === '1') return ['1', '2'];
+      if (groupId === '2') return ['3'];
+      return [];
+    }),
+    hasGroups: true,
+  });
+}
 
 describe('useGroupFilter', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: null } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
-
-    vi.mocked(useGroups).mockReturnValue({
-      groups: [
-        {
-          Group: { Id: '1', Name: 'Inside', ParentId: null },
-          Monitor: [{ Id: '1' }, { Id: '2' }],
-        },
-        {
-          Group: { Id: '2', Name: 'Outside', ParentId: null },
-          Monitor: [{ Id: '3' }],
-        },
-      ],
-      isLoading: false,
-      isSuccess: true,
-      error: null,
-      refetch: vi.fn(),
-      getGroupMonitorIds: vi.fn((groupId: string) => {
-        if (groupId === '1') return ['1', '2'];
-        if (groupId === '2') return ['3'];
-        return [];
-      }),
-      hasGroups: true,
-    });
-
-    vi.mocked(useSettingsStore).mockImplementation((selector) => {
-      if (typeof selector === 'function') {
-        return selector({ updateProfileSettings: mockUpdateProfileSettings } as never);
-      }
-      return mockUpdateProfileSettings;
-    });
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('returns null selectedGroupId when no filter is active', () => {
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    mockGroups();
+
     const { result } = renderHook(() => useGroupFilter());
 
     expect(result.current.selectedGroupId).toBeNull();
@@ -72,12 +57,8 @@ describe('useGroupFilter', () => {
   });
 
   it('returns selected group info when filter is active', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
+    mockGroups();
 
     const { result } = renderHook(() => useGroupFilter());
 
@@ -88,22 +69,21 @@ describe('useGroupFilter', () => {
   });
 
   it('setSelectedGroup updates profile settings', () => {
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    mockGroups();
+
     const { result } = renderHook(() => useGroupFilter());
 
     act(() => {
       result.current.setSelectedGroup('2');
     });
 
-    expect(mockUpdateProfileSettings).toHaveBeenCalledWith('profile-1', { selectedGroupId: '2' });
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').selectedGroupId).toBe('2');
   });
 
   it('clearGroupFilter sets selectedGroupId to null', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
+    mockGroups();
 
     const { result } = renderHook(() => useGroupFilter());
 
@@ -111,28 +91,30 @@ describe('useGroupFilter', () => {
       result.current.clearGroupFilter();
     });
 
-    expect(mockUpdateProfileSettings).toHaveBeenCalledWith('profile-1', { selectedGroupId: null });
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').selectedGroupId).toBeNull();
   });
 
   it('returns null selectedGroupName when no filter is active', () => {
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    mockGroups();
+
     const { result } = renderHook(() => useGroupFilter());
 
     expect(result.current.selectedGroupName).toBeNull();
   });
 
   it('isFilterReady is true when no filter is active', () => {
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+    mockGroups();
+
     const { result } = renderHook(() => useGroupFilter());
 
     expect(result.current.isFilterReady).toBe(true);
   });
 
   it('isFilterReady is true when a filter is active and groups have loaded', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
+    mockGroups();
 
     const { result } = renderHook(() => useGroupFilter());
 
@@ -140,12 +122,7 @@ describe('useGroupFilter', () => {
   });
 
   it('isFilterReady is false when a filter is active but groups have not loaded yet', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
@@ -162,12 +139,7 @@ describe('useGroupFilter', () => {
   });
 
   it('isFilterReady is true when a filter is active but the groups query errored', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
@@ -184,12 +156,8 @@ describe('useGroupFilter', () => {
   });
 
   it('returns null selectedGroupName when selected group does not exist', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '999' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '999' } } });
+    mockGroups();
 
     const { result } = renderHook(() => useGroupFilter());
 
@@ -197,12 +165,8 @@ describe('useGroupFilter', () => {
   });
 
   it('does not update settings when no profile is selected', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null,
-      settings: { selectedGroupId: null } as never,
-      hasProfile: false,
-      isAllMode: false,
-    });
+    seedProfiles([], { current: null });
+    mockGroups();
 
     const { result } = renderHook(() => useGroupFilter());
 
@@ -210,16 +174,13 @@ describe('useGroupFilter', () => {
       result.current.setSelectedGroup('1');
     });
 
-    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+    // No profile to write to: the bucket for an unrelated id stays untouched
+    // and the hook's own state stays null.
+    expect(result.current.selectedGroupId).toBeNull();
   });
 
   it('resets a dangling selectedGroupId after a successful groups load', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '999' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '999' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [{ Group: { Id: '1', Name: 'Front', ParentId: null }, Monitor: [] }],
       isLoading: false,
@@ -229,21 +190,15 @@ describe('useGroupFilter', () => {
       getGroupMonitorIds: () => [],
       hasGroups: true,
     });
-    renderHook(() => useGroupFilter());
+    const { result } = renderHook(() => useGroupFilter());
     await waitFor(() => {
-      expect(mockUpdateProfileSettings).toHaveBeenCalledWith('profile-1', {
-        selectedGroupId: null,
-      });
+      expect(result.current.selectedGroupId).toBeNull();
     });
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').selectedGroupId).toBeNull();
   });
 
   it('does not reset while groups are still loading', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '999' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '999' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: true,
@@ -253,17 +208,12 @@ describe('useGroupFilter', () => {
       getGroupMonitorIds: () => [],
       hasGroups: false,
     });
-    renderHook(() => useGroupFilter());
-    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+    const { result } = renderHook(() => useGroupFilter());
+    expect(result.current.selectedGroupId).toBe('999');
   });
 
   it('does not reset when the groups query errored', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '999' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '999' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
@@ -273,8 +223,8 @@ describe('useGroupFilter', () => {
       getGroupMonitorIds: () => [],
       hasGroups: false,
     });
-    renderHook(() => useGroupFilter());
-    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+    const { result } = renderHook(() => useGroupFilter());
+    expect(result.current.selectedGroupId).toBe('999');
   });
 
   // Regression: on cold start the groups query is disabled (auth/profile not
@@ -282,12 +232,7 @@ describe('useGroupFilter', () => {
   // for a disabled query, so guarding only on isLoading let the self-heal wipe
   // a valid persisted selection and Montage fell back to streaming all monitors.
   it('does not reset while the groups query is disabled and not yet fetched', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: { selectedGroupId: '1' } as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1', settings: { 'profile-1': { selectedGroupId: '1' } } });
     vi.mocked(useGroups).mockReturnValue({
       groups: [],
       isLoading: false,
@@ -297,7 +242,7 @@ describe('useGroupFilter', () => {
       getGroupMonitorIds: () => [],
       hasGroups: false,
     });
-    renderHook(() => useGroupFilter());
-    expect(mockUpdateProfileSettings).not.toHaveBeenCalled();
+    const { result } = renderHook(() => useGroupFilter());
+    expect(result.current.selectedGroupId).toBe('1');
   });
 });

@@ -1,64 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Profiles from '../Profiles';
 import { mintVirtualProfileId } from '../../api/types';
-import { ProfileGuardError } from '../../stores/profile';
+import { useProfileStore } from '../../stores/profile';
+import { useSettingsStore } from '../../stores/settings';
+import { seedProfiles, resetProfileFixture, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-}));
-
-const useCurrentProfileMock = vi.fn();
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => useCurrentProfileMock(),
-}));
-
-// The page a profile was last on, per profile id: a switch navigates there
-// rather than always to /monitors (refs #337).
-const savedRoutes: Record<string, string> = {};
-
-vi.mock('../../stores/settings', () => ({
-  DEFAULT_SETTINGS: {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'light',
-  },
-  useSettingsStore: Object.assign(
-    vi.fn((selector: any) => {
-      if (typeof selector === 'function') {
-        return selector({ profileSettings: {} });
-      }
-      return {};
-    }),
-    {
-      getState: () => ({
-        getProfileSettings: (id: string) => ({ lastRoute: savedRoutes[id] }),
-        updateProfileSettings: vi.fn(),
-      }),
-    }
-  ),
-  mergeProfileSettings: vi.fn((raw?: Record<string, unknown>) => ({
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'light',
-    ...raw,
-  })),
-}));
-
-const switchProfileMock = vi.fn(() => Promise.resolve());
-const setProfileDisabledMock = vi.fn();
-const useProfileStoreMock = vi.fn();
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: any) => unknown) => selector(useProfileStoreMock()),
-  ProfileGuardError: class ProfileGuardError extends Error {
-    code: string;
-    constructor(message: string, code: string) {
-      super(message);
-      this.code = code;
-    }
-  },
 }));
 
 vi.mock('../../hooks/use-toast', () => ({
@@ -89,7 +44,7 @@ vi.mock('react-i18next', () => ({
 }));
 
 const HOME = {
-  id: 'p1',
+  id: asProfileId('p1'),
   name: 'Home',
   portalUrl: 'https://home.test',
   apiUrl: 'https://api.home.test',
@@ -99,7 +54,7 @@ const HOME = {
 };
 
 const OFFICE = {
-  id: 'p2',
+  id: asProfileId('p2'),
   name: 'Office',
   portalUrl: 'https://office.test',
   apiUrl: 'https://api.office.test',
@@ -108,50 +63,28 @@ const OFFICE = {
   createdAt: 2,
 };
 
-const deleteVirtualProfileMock = vi.fn();
+beforeEach(() => {
+  mockNavigate.mockClear();
+});
 
-function storeState(
-  profiles: typeof HOME[],
-  currentProfileId: string,
-  virtualProfiles: { id: string; name: string; memberProfileIds: string[] }[] = []
-) {
-  return {
-    profiles,
-    virtualProfiles,
-    currentProfileId,
-    updateProfile: vi.fn(),
-    deleteProfile: vi.fn(),
-    deleteAllProfiles: vi.fn(),
-    switchProfile: switchProfileMock,
-    setProfileDisabled: setProfileDisabledMock,
-    deleteVirtualProfile: deleteVirtualProfileMock,
-    addVirtualProfile: vi.fn(),
-    updateVirtualProfile: vi.fn(),
-    profileExists: vi.fn(() => false),
-  };
-}
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
 
 describe('Profiles Page', () => {
-  beforeEach(() => {
-    mockNavigate.mockClear();
-    switchProfileMock.mockClear();
-    setProfileDisabledMock.mockReset();
-    useCurrentProfileMock.mockReset();
-    useProfileStoreMock.mockReset();
-  });
-
   it('renders profile list and active indicator', () => {
-    useCurrentProfileMock.mockReturnValue({
-      currentProfile: HOME,
-      isAllMode: false,
-    });
-    useProfileStoreMock.mockReturnValue(storeState([HOME], 'p1'));
+    seedProfiles([HOME], { current: 'p1' });
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-list')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-card')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-active-indicator')).toBeInTheDocument();
+    // One seeded profile, so the list holds exactly one card.
+    const cards = within(screen.getByTestId('profile-list')).getAllByTestId('profile-card');
+    expect(cards).toHaveLength(1);
+    // HOME.isDefault is true, so its card carries the Default badge.
+    expect(cards[0]).toHaveTextContent('profiles.default');
+    // The active indicator belongs to HOME's own card, not just the document.
+    expect(cards[0]).toContainElement(screen.getByTestId('profile-active-indicator'));
     expect(screen.getByTestId('profile-name')).toHaveTextContent('Home');
   });
 
@@ -159,12 +92,11 @@ describe('Profiles Page', () => {
   // no built-in aggregate at all: an aggregate is now always a named group the
   // user picked members for (refs #337).
   it('renders no All Servers card, whatever the enabled profile count', () => {
-    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
+    seedProfiles([HOME, OFFICE], { current: 'p1' });
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-new-group-button')).toHaveTextContent('profiles.new_group');
     expect(screen.queryByTestId('profile-card-all')).not.toBeInTheDocument();
     expect(screen.queryByTestId('profile-card-all-note')).not.toBeInTheDocument();
   });
@@ -172,58 +104,53 @@ describe('Profiles Page', () => {
   // refs #337: per-profile disable toggle
   it('renders a disable toggle for every profile and flips a non-active one', async () => {
     const user = userEvent.setup();
-    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
+    seedProfiles([HOME, OFFICE], { current: 'p1' });
 
     render(<Profiles />);
     await user.click(screen.getByTestId('profile-actions-menu-p2'));
     await user.click(await screen.findByTestId('profile-disable-toggle-p2'));
 
-    expect(setProfileDisabledMock).toHaveBeenCalledWith('p2', true);
+    expect(useProfileStore.getState().profiles.find((p) => p.id === 'p2')?.disabled).toBe(true);
   });
 
   it('shows a muted card and Disabled badge for a disabled profile, hiding its switch button', () => {
-    const disabledOffice = { ...OFFICE, disabled: true };
-    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1'));
+    seedProfiles([HOME, { ...OFFICE, disabled: true }], { current: 'p1' });
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-disabled-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-disabled-badge')).toHaveTextContent('profiles.disabled');
     expect(screen.queryByTestId('profile-switch-button-p2')).not.toBeInTheDocument();
     // Edit, delete, and the re-enable toggle stay available, in the row menu.
-    expect(screen.getByTestId('profile-actions-menu-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-actions-menu-p2')).toHaveAttribute(
+      'aria-label',
+      'profiles.more_actions'
+    );
   });
 
   it('shows an error toast when disabling the active profile is rejected', async () => {
     const user = userEvent.setup();
     const { toast: sonnerToast } = await import('sonner');
-    setProfileDisabledMock.mockImplementation(() => {
-      throw new ProfileGuardError('Cannot disable the active profile p1', 'CANNOT_DISABLE_CURRENT');
-    });
-    useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
-    useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1'));
+    seedProfiles([HOME, OFFICE], { current: 'p1' });
 
     render(<Profiles />);
     await user.click(screen.getByTestId('profile-actions-menu-p1'));
     await user.click(await screen.findByTestId('profile-disable-toggle-p1'));
 
-    expect(setProfileDisabledMock).toHaveBeenCalledWith('p1', true);
+    // The real guard rejects disabling the active profile - it stays enabled.
+    expect(useProfileStore.getState().profiles.find((p) => p.id === 'p1')?.disabled).toBeFalsy();
     expect(sonnerToast.error).toHaveBeenCalledWith('profiles.cannot_disable_active');
   });
 
   // Group cards: the visible half of virtual profiles (refs #337, spec 11).
   describe('group cards', () => {
-    const GROUP = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: ['p2'] };
+    const GROUP = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: [asProfileId('p2')] };
 
     beforeEach(() => {
-      deleteVirtualProfileMock.mockReset();
-      useCurrentProfileMock.mockReturnValue({ currentProfile: HOME, isAllMode: false });
+      seedProfiles([HOME, OFFICE], { current: 'p1' });
+      useProfileStore.setState({ virtualProfiles: [GROUP] });
     });
 
     it('names the group and counts its members', () => {
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
-
       render(<Profiles />);
 
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
@@ -232,8 +159,6 @@ describe('Profiles Page', () => {
     });
 
     it('renders group cards after every profile card', () => {
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
-
       render(<Profiles />);
 
       const cards = screen.getAllByTestId(/^profile-card(-virtual-.+)?$/);
@@ -241,23 +166,21 @@ describe('Profiles Page', () => {
     });
 
     it('marks the group card active while that group is current', () => {
-      useCurrentProfileMock.mockReturnValue({ currentProfile: null, isAllMode: true });
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], GROUP.id, [GROUP]));
+      useProfileStore.setState({ currentProfileId: GROUP.id });
 
       render(<Profiles />);
 
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
-      expect(card.querySelector('[data-testid="profile-active-indicator"]')).toBeInTheDocument();
+      expect(card.querySelector('[data-testid="profile-active-indicator"]')).not.toBeNull();
     });
 
     it('switches to the group id from its switch button', async () => {
       const user = userEvent.setup();
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
       await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
-      expect(switchProfileMock).toHaveBeenCalledWith(GROUP.id);
+      await waitFor(() => expect(useProfileStore.getState().currentProfileId).toBe(GROUP.id));
       expect(mockNavigate).toHaveBeenCalledWith('/monitors');
     });
 
@@ -265,32 +188,28 @@ describe('Profiles Page', () => {
     // it and land on /monitors every time (refs #337).
     it('lands on the page the group was last on', async () => {
       const user = userEvent.setup();
-      savedRoutes[GROUP.id] = '/events';
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
+      useSettingsStore.getState().updateProfileSettings(GROUP.id, { lastRoute: '/events' });
 
       render(<Profiles />);
       await user.click(screen.getByTestId(`profile-virtual-switch-${GROUP.id}`));
 
-      expect(mockNavigate).toHaveBeenCalledWith('/events');
-      delete savedRoutes[GROUP.id];
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/events'));
     });
 
     // With one selectable server there is nothing to group.
     it('offers the New Virtual Profile Group action only with 2+ enabled profiles', () => {
-      const disabledOffice = { ...OFFICE, disabled: true };
-      useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', []));
+      seedProfiles([HOME, { ...OFFICE, disabled: true }], { current: 'p1' });
       const { unmount } = render(<Profiles />);
       expect(screen.queryByTestId('profile-new-group-button')).not.toBeInTheDocument();
       unmount();
 
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
+      seedProfiles([HOME, OFFICE], { current: 'p1' });
       render(<Profiles />);
-      expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+      expect(screen.getByTestId('profile-new-group-button')).toHaveTextContent('profiles.new_group');
     });
 
     it('opens the dialog in edit mode from the group card', async () => {
       const user = userEvent.setup();
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
       await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
@@ -301,12 +220,11 @@ describe('Profiles Page', () => {
       );
       expect(screen.getByTestId('virtual-profile-name')).toHaveValue('Backyard');
       // Editing a group must not also switch to it.
-      expect(switchProfileMock).not.toHaveBeenCalled();
+      expect(useProfileStore.getState().currentProfileId).toBe('p1');
     });
 
     it('opens the dialog in create mode from the New Virtual Profile Group action', async () => {
       const user = userEvent.setup();
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
 
       render(<Profiles />);
       await user.click(screen.getByTestId('profile-new-group-button'));
@@ -320,7 +238,6 @@ describe('Profiles Page', () => {
     // line, "Delete Backyard?" reads as deleting the two servers in it.
     it('confirms the delete, promises the servers survive, then deletes only the group', async () => {
       const user = userEvent.setup();
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
       await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
@@ -329,42 +246,45 @@ describe('Profiles Page', () => {
       expect(screen.getByTestId('profile-virtual-delete-dialog')).toHaveTextContent(
         'profiles.delete_group_confirm_desc:{"name":"Backyard"}'
       );
-      expect(deleteVirtualProfileMock).not.toHaveBeenCalled();
+      expect(useProfileStore.getState().virtualProfiles).toEqual([GROUP]);
 
       await user.click(screen.getByTestId('profile-virtual-delete-confirm'));
 
-      expect(deleteVirtualProfileMock).toHaveBeenCalledWith(GROUP.id);
-      expect(switchProfileMock).not.toHaveBeenCalled();
+      expect(useProfileStore.getState().virtualProfiles).toEqual([]);
+      expect(useProfileStore.getState().currentProfileId).toBe('p1');
     });
 
     // The page owns the effective count, so this is the wiring test: disable
     // the group's only member and the card must stop offering the switch.
     it('will not switch to a group whose only member is disabled', async () => {
       const user = userEvent.setup();
-      const disabledOffice = { ...OFFICE, disabled: true };
-      useProfileStoreMock.mockReturnValue(storeState([HOME, disabledOffice], 'p1', [GROUP]));
+      seedProfiles([HOME, { ...OFFICE, disabled: true }], { current: 'p1' });
+      useProfileStore.setState({ virtualProfiles: [GROUP] });
 
       render(<Profiles />);
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
       await user.click(card);
 
-      expect(switchProfileMock).not.toHaveBeenCalled();
+      expect(useProfileStore.getState().currentProfileId).toBe('p1');
       expect(card).toHaveTextContent('profiles.group_no_active_members');
-      // Still fixable: edit and delete are the way out.
-      expect(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`)).toBeInTheDocument();
+      // Still fixable: edit and delete are the way out, through this menu.
+      expect(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`)).toHaveAttribute(
+        'aria-label',
+        'profiles.more_actions'
+      );
     });
 
     it('reports a failed group delete instead of closing silently', async () => {
       const user = userEvent.setup();
       const { toast: sonnerToast } = await import('sonner');
-      deleteVirtualProfileMock.mockImplementation(() => {
-        throw new Error('Virtual profile not found');
-      });
-      useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', [GROUP]));
 
       render(<Profiles />);
       await user.click(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`));
       await user.click(await screen.findByTestId(`profile-delete-button-virtual-${GROUP.id}`));
+      // Simulate the group having already been removed (e.g. another tab)
+      // between opening the confirmation and clicking it, so the real
+      // deleteVirtualProfile rejects the stale id instead of succeeding.
+      useProfileStore.setState((s) => ({ virtualProfiles: s.virtualProfiles.filter((v) => v.id !== GROUP.id) }));
       await user.click(screen.getByTestId('profile-virtual-delete-confirm'));
 
       expect(sonnerToast.error).toHaveBeenCalledWith('profiles.delete_group_error');

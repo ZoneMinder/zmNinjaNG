@@ -1,37 +1,26 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useGroups } from '../useGroups';
 import { getGroups } from '../../api/groups';
-import { useCurrentProfile } from '../useCurrentProfile';
 import type { GroupData } from '../../api/types';
-import { asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 // Mock dependencies
-// The permission probe reaches the profile store through the sessions module
-// this suite stubs; groups permissions are covered in the permission model
-// tests (refs #344).
-vi.mock('../usePermissions', () => ({
-  usePermissions: () => ({ permissions: { groups: 'View' }, isLoading: false }),
-}));
-
+// getGroups is the api/* system boundary; kept as a function mock since the
+// real endpoint response shape is exercised elsewhere. Permissions run for
+// real: a profile with no username (the default fixture) short-circuits
+// fetchAccountPermissions to UNRESTRICTED_PERMISSIONS with no network call,
+// so canViewGroups() never denies here (groups permissions themselves are
+// covered in the permission model tests, refs #344).
 vi.mock('../../api/groups', () => ({
   getGroups: vi.fn(),
-}));
-
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (state: { isAuthenticated: boolean }) => unknown) =>
-    selector({ isAuthenticated: true }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
 }));
 
 const mockGroups: GroupData[] = [
@@ -65,12 +54,12 @@ function createWrapper() {
 describe('useGroups', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: asProfileId('profile-1'), name: 'Test', apiUrl: '', portalUrl: '', cgiUrl: '', isDefault: true, createdAt: 0 },
-      settings: {} as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
+    seedProfiles(['profile-1'], { current: 'profile-1' });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches groups successfully', async () => {
@@ -160,12 +149,7 @@ describe('useGroups', () => {
   });
 
   it('does not fetch when no profile is selected', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null,
-      settings: {} as never,
-      hasProfile: false,
-      isAllMode: false,
-    });
+    seedProfiles([], { current: null });
 
     const { result } = renderHook(() => useGroups(), { wrapper: createWrapper() });
 
@@ -183,12 +167,7 @@ describe('useGroups', () => {
   // sentinel-to-null mapping itself is useCurrentProfile's documented
   // behavior, covered in its own suite.
   it('stays silent in All Servers mode, which is why the palette lists no groups', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null,
-      settings: {} as never,
-      hasProfile: false,
-      isAllMode: true,
-    });
+    seedProfiles(['profile-1'], { current: ALL_PROFILES_ID });
 
     const { result } = renderHook(() => useGroups(), { wrapper: createWrapper() });
 

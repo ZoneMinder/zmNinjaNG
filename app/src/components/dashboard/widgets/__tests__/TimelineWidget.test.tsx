@@ -1,13 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../../api/store-gates', () => import('../../../../tests/fake-store-gates'));
+vi.mock('../../../../lib/security/secureStorage', () => import('../../../../tests/fake-secure-storage'));
+
 import { TimelineWidget } from '../TimelineWidget';
-import { useProfileScope } from '../../../../hooks/useProfileScope';
-import { useBandwidthSettings } from '../../../../hooks/useBandwidthSettings';
-import { getSession } from '../../../../services/sessions';
 import { getEvents } from '../../../../api/events';
-import { asProfileId } from '../../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -23,35 +25,11 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   Tooltip: () => null,
 }));
-vi.mock('../../../../hooks/useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
-vi.mock('../../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  registerSessionsGate: vi.fn(),
-}));
 vi.mock('../../../../api/events', () => ({
   getEvents: vi.fn(),
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home', timezone: 'UTC' };
-
-function clientFor(id: string) {
-  return { profile: id } as unknown as import('../../../../api/client').ApiClient;
-}
-
-function mockScope(profiles: Array<typeof profileA>) {
-  vi.mocked(useProfileScope).mockReturnValue({
-    mode: 'single',
-    profile: profiles[0],
-    profiles,
-    settings: {},
-  } as never);
-}
+const profileA = makeProfile('profile-a', { name: 'Home' });
 
 function renderWidget() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -67,16 +45,18 @@ function renderWidget() {
 describe('TimelineWidget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useBandwidthSettings).mockReturnValue({ timelineHeatmapInterval: 60000 } as never);
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: clientFor(id),
-      timezone: 'UTC',
-    }));
+    // profileA defaults to bandwidthMode 'normal', whose real
+    // getBandwidthSettings() gives timelineHeatmapInterval 60000 - the same
+    // value the old mock hardcoded.
+    seedProfiles([profileA]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('single profile erroring with zero data shows the error branch instead of the chart (refs #337)', async () => {
-    mockScope([profileA]);
     vi.mocked(getEvents).mockRejectedValue(new Error('boom'));
 
     renderWidget();
@@ -85,7 +65,6 @@ describe('TimelineWidget', () => {
   });
 
   it('resolved data with no errors renders the chart, not the error branch', async () => {
-    mockScope([profileA]);
     vi.mocked(getEvents).mockResolvedValue({ events: [] } as never);
 
     renderWidget();

@@ -1,18 +1,7 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock the profile store before importing the module under test
-const mockProfiles = [
-  { id: 'profile-1', name: 'Home Server', portalUrl: 'http://home:8080' },
-  { id: 'profile-2', name: 'Office Server', portalUrl: 'http://office:8080' },
-];
-
-vi.mock('../../../stores/profile', () => ({
-  useProfileStore: {
-    getState: () => ({
-      profiles: mockProfiles,
-    }),
-  },
-}));
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
 vi.mock('../../logger', () => ({
   log: {
@@ -29,8 +18,22 @@ import {
   onProfileSwitchRequest,
   clearPendingProfileSwitch,
 } from '../notification-profile';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 describe('notification-profile', () => {
+  beforeEach(() => {
+    seedProfiles(
+      [makeProfile('profile-1', { name: 'Home Server' }), makeProfile('profile-2', { name: 'Office Server' })],
+      { current: 'profile-1', authenticated: false },
+    );
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   describe('findProfileByName', () => {
     it('finds a profile by exact name', () => {
       const result = findProfileByName('Home Server');

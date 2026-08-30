@@ -6,21 +6,22 @@
  * because currentProfile is null. Real stores throughout: the icons read
  * settings reactively, and a mocked store would hide a stale-icon bug.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { SidebarContent } from '../SidebarContent';
 import { useProfileStore } from '../../../stores/profile';
 import { useSettingsStore } from '../../../stores/settings';
 import { useDeveloperNoticeStore } from '../../../stores/developerNotices';
 import { ALL_PROFILES_ID, asProfileId } from '../../../api/types';
 import type { Profile } from '../../../api/types';
-
-// The permission probe is a React Query call; these suites render without a
-// provider and are not about permissions (refs #344).
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: undefined, isLoading: false }),
-}));
+import { resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
 
@@ -64,10 +65,13 @@ const profile = (id: string, name: string): Profile => ({
 const allBucket = () => useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID);
 
 function renderSidebar(route = '/dashboard') {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter initialEntries={[route]}>
-      <SidebarContent />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[route]}>
+        <SidebarContent />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -83,7 +87,13 @@ describe('SidebarContent in All Servers mode', () => {
     useProfileStore.setState({
       profiles: [profile('profile-1', 'Home'), profile('profile-2', 'Office')],
       currentProfileId: ALL_PROFILES_ID,
+      isInitialized: true,
     });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('persists the insomnia toggle into the ALL bucket', () => {

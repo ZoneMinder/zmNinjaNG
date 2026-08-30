@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { StrictMode } from 'react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { ZmsEventPlayer } from '../ZmsEventPlayer';
 import { asProfileId, type ProfileId } from '../../../api/types';
 import {
@@ -9,6 +13,10 @@ import {
   ZMS_STREAM_DEAD_POLLS,
   ZMS_STREAM_MAX_RESTARTS,
 } from '../../../lib/zmninja-ng-constants';
+import * as freshTokenModule from '../../../hooks/useFreshAccessToken';
+import { useAuthStore } from '../../../stores/auth';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const httpGetMock = vi.fn().mockResolvedValue({ data: {} });
 
@@ -22,42 +30,10 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: {
-    zmsEventPlayer: vi.fn(),
-    eventProgressBar: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3,
-    NONE: 4,
-  },
-}));
-
-vi.mock('../../../hooks/useBandwidthSettings', () => ({
-  // Large interval so the status poll never fires during a test
-  useBandwidthSettings: () => ({ zmsStatusInterval: 600000 }),
-}));
-
-// Parented by profile id, like the real hook: an aggregate is not a profile,
-// so an unparented call resolves to the empty auth slice and never goes fresh
-// (refs #337).
-const freshByProfile: Record<string, boolean> = {};
-const freshAccessTokenMock = vi.fn((profileId?: string) => ({
-  isFresh: freshByProfile[profileId ?? 'current'] ?? true,
-}));
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string) => freshAccessTokenMock(profileId),
-}));
-
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: null,
-    settings: { apiTimeoutSeconds: 15 },
-  }),
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, zmsEventPlayer: vi.fn(), eventProgressBar: vi.fn() } };
+});
 
 vi.mock('../../../hooks/useZoomPan', () => ({
   useZoomPan: () => ({
@@ -128,11 +104,26 @@ function stubTrack(): HTMLElement {
   return track;
 }
 
+// Real profile/settings/auth stores for every test in this file: 'current'
+// is the page's own profile (unparented calls resolve to it), 'p-owner' and
+// 'p-cold' back the token-freshness describe below. bandwidthMode 'low'
+// gives useBandwidthSettings a real (now unmocked) zmsStatusInterval of 5s -
+// POLL_MS below matches it.
+beforeEach(() => {
+  seedProfiles(['current', 'p-owner', 'p-cold'], {
+    settings: { current: { bandwidthMode: 'low' }, 'p-owner': { bandwidthMode: 'low' }, 'p-cold': { bandwidthMode: 'low' } },
+  });
+});
+
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
+
 describe('ZmsEventPlayer', () => {
   beforeEach(() => {
     cleanup();
     httpGetMock.mockClear();
-    freshAccessTokenMock.mockClear();
   });
 
   afterEach(() => {
@@ -238,7 +229,7 @@ describe('ZmsEventPlayer', () => {
 
     // Fire one status poll so the player learns the real duration (20s).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(600000);
+      await vi.advanceTimersByTimeAsync(5000);
     });
 
     // Seek to the end: the offset must be the full reported duration (20s),
@@ -313,7 +304,7 @@ describe('ZmsEventPlayer', () => {
 
     // One poll teaches the player the stream is advancing (duration known).
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(600000);
+      await vi.advanceTimersByTimeAsync(5000);
     });
     httpGetMock.mockClear();
 
@@ -441,7 +432,7 @@ describe('ZmsEventPlayer', () => {
  */
 describe('ZmsEventPlayer stream recovery', () => {
   // Matches the zmsStatusInterval the bandwidth mock reports.
-  const POLL_MS = 600000;
+  const POLL_MS = 5000; // matches bandwidthMode 'low' -> zmsStatusInterval
 
   const pollTimes = async (count: number) => {
     await act(async () => {
@@ -544,12 +535,12 @@ describe('ZmsEventPlayer stream recovery', () => {
 describe('ZmsEventPlayer token freshness', () => {
   beforeEach(() => {
     cleanup();
-    freshAccessTokenMock.mockClear();
   });
 
   it('asks about the owning profile, not the current one', () => {
+    const spy = vi.spyOn(freshTokenModule, 'useFreshAccessToken');
     renderPlayer({ profileId: asProfileId('p-owner') });
-    expect(freshAccessTokenMock).toHaveBeenCalledWith('p-owner');
+    expect(spy).toHaveBeenCalledWith('p-owner');
   });
 
   it('streams the event once that profile has a fresh token', () => {
@@ -560,10 +551,11 @@ describe('ZmsEventPlayer token freshness', () => {
   // An <img src=""> paints the browser's broken-image glyph and its alt text
   // over the no-video placeholder, which is what the placeholder is for.
   it('renders no image at all while the URL is unavailable', () => {
-    freshByProfile['p-cold'] = false;
+    // No token at all for p-cold (real useFreshAccessToken): requiresAuth
+    // stays true with nothing to refresh into, so isFresh is false.
+    useAuthStore.getState().logout(asProfileId('p-cold'));
     renderPlayer({ profileId: asProfileId('p-cold') });
 
     expect(screen.queryByAltText('event_detail.event_playback')).toBeNull();
-    delete freshByProfile['p-cold'];
   });
 });

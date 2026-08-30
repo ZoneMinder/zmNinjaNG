@@ -4,35 +4,28 @@
  * fetched. Aligned with useScopedMonitors (refs #337): enabled once there's
  * a profile to fetch for; the API client self-heals an unauthenticated
  * request via its own proactiveLogin path.
+ *
+ * Runs against the real profile, settings and auth stores and the real
+ * session registry; only the HTTP client is fake (tests/profile-fixture).
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { useMonitors } from '../useMonitors';
-import { useCurrentProfile } from '../useCurrentProfile';
-import { useBandwidthSettings } from '../useBandwidthSettings';
-import { getCurrentSession } from '../../services/sessions';
-import { getMonitors } from '../../api/monitors';
-import { asProfileId } from '../../api/types';
+import { seedProfiles, resetProfileFixture, fakeApiClient, asProfileId } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
 
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-}));
-
-vi.mock('../useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(),
-}));
-
-vi.mock('../../api/monitors', () => ({
-  getMonitors: vi.fn(),
-}));
-
-const profileId = asProfileId('profile-a');
+const monitorsBody = {
+  monitors: [
+    { Monitor: { Id: '1', Name: 'Door', Function: 'Modect', Enabled: '1' } },
+    { Monitor: { Id: '2', Name: 'Yard', Function: 'None', Enabled: '1', Deleted: true } },
+  ],
+};
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -40,41 +33,36 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe('useMonitors', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: { id: profileId } as never,
-      settings: {} as never,
-      hasProfile: true,
-      isAllMode: false,
-    });
-    vi.mocked(useBandwidthSettings).mockReturnValue({ monitorStatusInterval: 20000 } as never);
-    vi.mocked(getCurrentSession).mockReturnValue({
-      profileId,
-      client: {} as never,
-      timezone: 'UTC',
-    });
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches even when the profile has never authenticated this session', async () => {
-    vi.mocked(getMonitors).mockResolvedValue({ monitors: [] });
+    seedProfiles(['a'], { authenticated: false });
+    const client = fakeApiClient({ '/servers.json': { servers: [] }, '/monitors.json': monitorsBody });
+    installApiClient(asProfileId('a'), client);
 
-    renderHook(() => useMonitors(), { wrapper });
+    const { result } = renderHook(() => useMonitors(), { wrapper });
 
-    await waitFor(() => expect(getMonitors).toHaveBeenCalled());
+    // getMonitors drops deleted monitors before the hook filters, so 'Yard'
+    // never reaches it; asserting the server sent two and the hook shows one
+    // is the outcome that would change if either layer regressed.
+    await waitFor(() => expect(result.current.monitors.map((m) => m.Monitor.Name)).toEqual(['Door']));
+    expect(result.current.enabledMonitorIds).toEqual(['1']);
+    expect(client.calls.map((c) => c.url)).toContain('/monitors.json');
   });
 
-  it('stays disabled with no current profile', () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null,
-      settings: {} as never,
-      hasProfile: false,
-      isAllMode: false,
-    });
-    vi.mocked(getMonitors).mockResolvedValue({ monitors: [] });
+  it('stays disabled with no current profile', async () => {
+    seedProfiles([], { current: null });
+    const client = fakeApiClient({ '/monitors.json': monitorsBody });
+    installApiClient(asProfileId('a'), client);
 
-    renderHook(() => useMonitors(), { wrapper });
+    const { result } = renderHook(() => useMonitors(), { wrapper });
 
-    expect(getMonitors).not.toHaveBeenCalled();
+    // Give a wrongly-enabled query every chance to fire before asserting it did not.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(result.current.monitors).toEqual([]);
+    expect(client.calls).toEqual([]);
   });
 });

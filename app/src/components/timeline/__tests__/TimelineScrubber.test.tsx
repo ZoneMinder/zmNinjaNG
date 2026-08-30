@@ -15,29 +15,19 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { TimelineScrubber } from '../TimelineScrubber';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({ fmtTimeShort: () => '00:00', fmtDateTime: () => 'now' }),
 }));
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
-
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: (profileId?: string) => ({
-    profile: profileId
-      ? { id: profileId, portalUrl: `https://${profileId}.test` }
-      : { id: 'current-profile', portalUrl: 'https://current-profile.test' },
-    settings: { thumbnailFallbackChain: [], forceDisableMultiPort: false, hoverPreview: { timeline: false } },
-  }),
-}));
-
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string) => ({
-    token: profileId ? `${profileId}-token` : 'current-profile-token',
-    isFresh: true,
-  }),
-}));
 
 const getQueryDataMock = vi.fn(() => undefined);
 vi.mock('@tanstack/react-query', () => ({
@@ -91,11 +81,22 @@ describe('TimelineScrubber owning-profile wiring (refs #337 Task 2/3)', () => {
     buildThumbnailChainForEventMock.mockClear();
     stubTrackRect();
     vi.useFakeTimers();
+    seedProfiles([
+      makeProfile('current-profile', { portalUrl: 'https://current-profile.test' }),
+      makeProfile('profile-b', { portalUrl: 'https://profile-b.test' }),
+    ], {
+      settings: {
+        'current-profile': { thumbnailFallbackChain: [], forceDisableMultiPort: false, hoverPreview: { timeline: false } as never },
+        'profile-b': { thumbnailFallbackChain: [], forceDisableMultiPort: false, hoverPreview: { timeline: false } as never },
+      },
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   function openThumbnails() {

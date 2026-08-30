@@ -1,30 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../../api/store-gates', () => import('../../../../tests/fake-store-gates'));
+vi.mock('../../../../lib/security/secureStorage', () => import('../../../../tests/fake-secure-storage'));
+
 import { HeatmapWidget } from '../HeatmapWidget';
-import { useProfileScope } from '../../../../hooks/useProfileScope';
-import { useBandwidthSettings } from '../../../../hooks/useBandwidthSettings';
-import { getSession } from '../../../../services/sessions';
+import * as sessions from '../../../../services/sessions';
 import { getEvents } from '../../../../api/events';
-import { asProfileId } from '../../../../api/types';
+import { ALL_PROFILES_ID } from '../../../../api/types';
+import type { Profile } from '../../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
-}));
-vi.mock('../../../../hooks/useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
-vi.mock('../../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  // EventHeatmap (rendered when there's data) uses the real useDateTimeFormat,
-  // which pulls in useCurrentProfile -> stores/profile.ts, which calls this
-  // at module load time.
-  registerSessionsGate: vi.fn(),
 }));
 vi.mock('../../../../api/events', () => ({
   getEvents: vi.fn(),
@@ -36,21 +27,16 @@ vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home', timezone: 'UTC' };
-const profileB = { id: asProfileId('profile-b'), name: 'Work', timezone: 'UTC' };
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
-function clientFor(id: string) {
-  return { profile: id } as unknown as import('../../../../api/client').ApiClient;
-}
-
-function mockScope(profiles: Array<typeof profileA>) {
+// Real profile store + real session registry; distinct client instances per
+// profile so a by-reference branch on the (kept-mocked) getEvents can tell
+// them apart, matching the sanctioned "script the HTTP boundary" pattern.
+function seedScope(profiles: Profile[]) {
   const mode = profiles.length > 1 ? 'all' : 'single';
-  vi.mocked(useProfileScope).mockReturnValue({
-    mode,
-    profile: mode === 'single' ? profiles[0] : null,
-    profiles,
-    settings: {},
-  } as never);
+  seedProfiles(profiles, { current: mode === 'all' ? ALL_PROFILES_ID : profiles[0].id });
+  for (const p of profiles) installApiClient(p.id, fakeApiClient());
 }
 
 function renderWidget() {
@@ -67,16 +53,18 @@ function renderWidget() {
 describe('HeatmapWidget', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useBandwidthSettings).mockReturnValue({ timelineHeatmapInterval: 60000 } as never);
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: clientFor(id),
-      timezone: 'UTC',
-    }));
+    // Every seeded profile below defaults to bandwidthMode 'normal', whose
+    // real getBandwidthSettings() gives timelineHeatmapInterval 60000 - the
+    // same value the old mock hardcoded.
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('single profile erroring with zero data shows the error branch, not the empty state (refs #337)', async () => {
-    mockScope([profileA]);
+    seedScope([profileA]);
     vi.mocked(getEvents).mockRejectedValue(new Error('boom'));
 
     renderWidget();
@@ -86,10 +74,10 @@ describe('HeatmapWidget', () => {
   });
 
   it('one profile erroring while another has data renders the data, not the error branch (zero-data suppression)', async () => {
-    mockScope([profileA, profileB]);
+    seedScope([profileA, profileB]);
+    const clientA = sessions.getSession(profileA.id).client;
     vi.mocked(getEvents).mockImplementation(async (client) => {
-      const id = (client as unknown as { profile: string }).profile;
-      if (id === profileA.id) throw new Error('boom');
+      if (client === clientA) throw new Error('boom');
       return { events: [{ Event: { Id: '1', StartDateTime: '2026-08-03 10:00:00' } }] } as never;
     });
 
@@ -100,7 +88,7 @@ describe('HeatmapWidget', () => {
   });
 
   it('all profiles empty (no error) still shows the empty state', async () => {
-    mockScope([profileA]);
+    seedScope([profileA]);
     vi.mocked(getEvents).mockResolvedValue({ events: [] } as never);
 
     renderWidget();

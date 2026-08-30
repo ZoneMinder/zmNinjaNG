@@ -154,9 +154,11 @@ describe('AssistantSection backend picker and gating', () => {
         <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
       );
 
-      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toHaveTextContent(
+        'settings.assistant.on_device_mobile_disabled',
+      );
       expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
-      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toHaveValue('http://localhost:11434/v1');
     });
 
     it('never shows the on-device model picker, even with the setting still on-device', async () => {
@@ -187,9 +189,11 @@ describe('AssistantSection backend picker and gating', () => {
         <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
       );
 
-      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toHaveTextContent(
+        'settings.assistant.on_device_mobile_disabled',
+      );
       expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
-      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toHaveValue('http://localhost:11434/v1');
     });
 
     it('keeps the unavailable note and forces Ollama when the device fails the isSupported() probe', async () => {
@@ -199,9 +203,11 @@ describe('AssistantSection backend picker and gating', () => {
         <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
       );
 
-      expect(await screen.findByTestId('assistant-on-device-unavailable')).toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-on-device-unavailable')).toHaveTextContent(
+        'settings.assistant.on_device_mobile_disabled',
+      );
       expect(screen.queryByTestId('assistant-backend-select')).not.toBeInTheDocument();
-      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toHaveValue('http://localhost:11434/v1');
     });
 
     it('names this device and the memory reason when the plugin reports reason "memory"', async () => {
@@ -213,7 +219,9 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       const note = await screen.findByTestId('assistant-on-device-unavailable');
-      expect(within(note).getByText('settings.assistant.native_unsupported_memory')).toBeInTheDocument();
+      expect(within(note).getByText('settings.assistant.native_unsupported_memory')).toHaveTextContent(
+        'settings.assistant.native_unsupported_memory',
+      );
       expect(within(note).queryByText('settings.assistant.on_device_mobile_disabled')).not.toBeInTheDocument();
     });
 
@@ -226,7 +234,9 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       const note = await screen.findByTestId('assistant-on-device-unavailable');
-      expect(within(note).getByText('settings.assistant.on_device_mobile_disabled')).toBeInTheDocument();
+      expect(within(note).getByText('settings.assistant.on_device_mobile_disabled')).toHaveTextContent(
+        'settings.assistant.on_device_mobile_disabled',
+      );
     });
 
     it('shows an Ollama/native backend picker once the device passes isSupported(), defaulting to Ollama', async () => {
@@ -238,10 +248,14 @@ describe('AssistantSection backend picker and gating', () => {
 
       const select = await screen.findByTestId('assistant-backend-select');
       expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
-      expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
-      expect(within(select).getByText('settings.assistant.backend_download_model')).toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_ollama')).toHaveTextContent(
+        'settings.assistant.backend_ollama',
+      );
+      expect(within(select).getByText('settings.assistant.backend_download_model')).toHaveTextContent(
+        'settings.assistant.backend_download_model',
+      );
       expect(within(select).queryByText('settings.assistant.backend_on_device')).not.toBeInTheDocument();
-      expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-ollama-url')).toHaveValue('http://localhost:11434/v1');
     });
 
     it('switches to the native download/delete section when native is selected', async () => {
@@ -266,8 +280,10 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
-      expect(await screen.findByTestId('assistant-native-model-download')).toBeInTheDocument();
-      expect(screen.getByTestId('assistant-native-model-delete')).toBeInTheDocument();
+      expect(await screen.findByTestId('assistant-native-model-download')).toHaveTextContent(
+        'settings.assistant.download',
+      );
+      expect(screen.getByTestId('assistant-native-model-delete')).toHaveTextContent('settings.assistant.delete');
     });
   });
 
@@ -283,8 +299,12 @@ describe('AssistantSection backend picker and gating', () => {
 
       const select = await screen.findByTestId('assistant-backend-select');
       expect(screen.queryByTestId('assistant-on-device-unavailable')).not.toBeInTheDocument();
-      expect(within(select).getByText('settings.assistant.backend_apple')).toBeInTheDocument();
-      expect(within(select).getByText('settings.assistant.backend_ollama')).toBeInTheDocument();
+      expect(within(select).getByText('settings.assistant.backend_apple')).toHaveTextContent(
+        'settings.assistant.backend_apple',
+      );
+      expect(within(select).getByText('settings.assistant.backend_ollama')).toHaveTextContent(
+        'settings.assistant.backend_ollama',
+      );
       expect(within(select).queryByText('settings.assistant.backend_download_model')).not.toBeInTheDocument();
     });
 
@@ -384,7 +404,9 @@ describe('AssistantSection backend picker and gating', () => {
         />,
       );
 
-      expect(await screen.findByTestId('system-model-eval-run')).toBeInTheDocument();
+      expect(await screen.findByTestId('system-model-eval-run')).toHaveTextContent(
+        'settings.assistant.system_model_eval_run',
+      );
     });
 
     it('does not show the eval row for a non-apple backend even when apple is supported', async () => {
@@ -420,7 +442,9 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       const select = await screen.findByTestId('assistant-backend-select');
-      expect(select.querySelector('option[value="gemini-nano"]')).toBeInTheDocument();
+      expect(select.querySelector('option[value="gemini-nano"]')).toHaveTextContent(
+        'settings.assistant.backend_gemini_nano',
+      );
     });
 
     it('shows the eval row, and no Ollama settings, when the Gemini Nano backend is selected', async () => {
@@ -436,7 +460,9 @@ describe('AssistantSection backend picker and gating', () => {
         />,
       );
 
-      expect(await screen.findByTestId('system-model-eval-run')).toBeInTheDocument();
+      expect(await screen.findByTestId('system-model-eval-run')).toHaveTextContent(
+        'settings.assistant.system_model_eval_run',
+      );
       // The branch exists so the Platform.isNative fallback cannot render the
       // remote-server settings underneath an on-device backend.
       expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
@@ -459,7 +485,9 @@ describe('AssistantSection backend picker and gating', () => {
 
       const select = await screen.findByTestId('assistant-backend-select');
       expect(select.querySelector('option[value="gemini-nano"]')).toBeNull();
-      expect(screen.getByTestId('assistant-gemini-nano-download-button')).toBeInTheDocument();
+      expect(screen.getByTestId('assistant-gemini-nano-download-button')).toHaveTextContent(
+        'settings.assistant.download',
+      );
     });
 
     it('shows no download row when Gemini Nano is unsupported outright', async () => {
@@ -490,7 +518,9 @@ describe('AssistantSection backend picker and gating', () => {
       );
 
       const hint = await screen.findByTestId('assistant-apple-disabled');
-      expect(within(hint).getByText('settings.assistant.apple_disabled_hint')).toBeInTheDocument();
+      expect(within(hint).getByText('settings.assistant.apple_disabled_hint')).toHaveTextContent(
+        'settings.assistant.apple_disabled_hint',
+      );
     });
 
     it('shows no apple hint for reasons other than "disabled"', async () => {
@@ -518,9 +548,11 @@ describe('AssistantSection backend picker and gating', () => {
     await waitFor(() => expect(isModelDownloadedMock).toHaveBeenCalled());
 
     expect(screen.getByTestId('assistant-backend-select')).toHaveValue('on-device');
-    expect(screen.getByTestId('assistant-model-select')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-model-select')).toHaveValue(DEFAULT_SETTINGS.assistantModelId);
     expect(screen.queryByTestId('assistant-ollama-url')).not.toBeInTheDocument();
-    expect(screen.getByText('settings.assistant.on_device_ollama_hint')).toBeInTheDocument();
+    expect(screen.getByText('settings.assistant.on_device_ollama_hint')).toHaveTextContent(
+      'settings.assistant.on_device_ollama_hint',
+    );
   });
 
   it('shows the backend accuracy hint under the desktop picker', async () => {
@@ -563,16 +595,22 @@ describe('AssistantSection backend picker and gating', () => {
       />
     );
 
-    expect(screen.getByTestId('assistant-ollama-url')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-ollama-key')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-ollama-test')).toBeInTheDocument();
+    expect(screen.getByTestId('assistant-ollama-url')).toHaveValue('http://localhost:11434/v1');
+    expect(screen.getByTestId('assistant-ollama-model')).toHaveAttribute(
+      'placeholder',
+      'settings.assistant.ollama_model_placeholder',
+    );
+    expect(screen.getByTestId('assistant-ollama-key')).toHaveAttribute(
+      'placeholder',
+      'settings.assistant.ollama_key_placeholder',
+    );
+    expect(screen.getByTestId('assistant-ollama-test')).toHaveTextContent('settings.assistant.ollama_test');
     expect(screen.queryByTestId('assistant-model-select')).not.toBeInTheDocument();
 
     // Lets AssistantOllamaSection's mount-effect model fetch (refs #246 Fix
     // 2) settle inside `act` instead of leaking a state update past the end
     // of the test.
-    await waitFor(() => expect(screen.getByTestId('assistant-ollama-model')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('assistant-ollama-model')).toHaveValue(''));
   });
 
   it('shows Ninjii\'s logo in the enable row, before the toggle (refs #246)', () => {
@@ -586,7 +624,7 @@ describe('AssistantSection backend picker and gating', () => {
     );
 
     const logo = container.querySelector(`img[src="${NINJII_LOGO_URL}"]`);
-    expect(logo).toBeInTheDocument();
+    expect(logo).toHaveAttribute('src', NINJII_LOGO_URL);
     // Decorative: the row's label already names Ninjii, so an alt text here
     // would make a screen reader announce the name twice.
     expect(logo).toHaveAttribute('alt', '');
@@ -621,7 +659,9 @@ describe('AssistantSection backend picker and gating', () => {
     // The backend picker itself is still reachable (it's the on-device
     // sub-part, not the toggle, that explains "no WebGPU").
     expect(screen.getByTestId('assistant-backend-select')).not.toBeDisabled();
-    await waitFor(() => expect(screen.getByTestId('assistant-no-webgpu')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId('assistant-no-webgpu')).toHaveTextContent('settings.assistant.no_webgpu_hint'),
+    );
   });
 
   it('renders the toggle even when the enabled flag is off, independent of WebGPU', async () => {

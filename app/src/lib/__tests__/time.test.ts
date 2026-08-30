@@ -2,23 +2,29 @@
  * Unit tests for timezone utilities
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { formatForServer, formatForServerInTz, formatLocalDateTime, resolveProfileTimezone } from '../time';
-import { useProfileStore } from '../../stores/profile';
 
-// Mock the profile store - using primitives pattern (not deprecated currentProfile getter)
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: {
-    getState: vi.fn(() => ({
-      profiles: [{ id: 'profile-1', timezone: 'America/New_York' }],
-      currentProfileId: 'profile-1',
-    })),
-  },
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 describe('formatForServer', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // Base scenario every test in this file gets unless it re-seeds:
+    // profile-1 in America/New_York, current. Not authenticated - these are
+    // pure date/timezone functions, no session or HTTP path involved.
+    seedProfiles([makeProfile('profile-1', { timezone: 'America/New_York' })], {
+      current: 'profile-1',
+      authenticated: false,
+    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('formats date in server timezone format', () => {
@@ -96,13 +102,10 @@ describe('formatForServer', () => {
   });
 
   it('falls back gracefully on timezone error', () => {
-    // Once, not permanently: mockReturnValue would outlive this test, and
-    // vi.clearAllMocks() clears calls rather than implementations, so the
-    // override would still be in place for every later describe.
-    vi.mocked(useProfileStore.getState).mockReturnValueOnce({
-      profiles: [{ id: 'profile-1', timezone: 'Invalid/Timezone' }],
-      currentProfileId: 'profile-1',
-    } as any);
+    seedProfiles([makeProfile('profile-1', { timezone: 'Invalid/Timezone' })], {
+      current: 'profile-1',
+      authenticated: false,
+    });
 
     const date = new Date('2024-01-15T10:30:45Z');
     const result = formatForServer(date);
@@ -112,10 +115,7 @@ describe('formatForServer', () => {
   });
 
   it('uses browser timezone when profile has no timezone', () => {
-    vi.mocked(useProfileStore.getState).mockReturnValueOnce({
-      profiles: [],
-      currentProfileId: null,
-    } as any);
+    seedProfiles([], { current: null, authenticated: false });
 
     const date = new Date('2024-01-15T10:30:45Z');
     const result = formatForServer(date);
@@ -230,6 +230,18 @@ describe('formatLocalDateTime', () => {
 });
 
 describe('formatForServerInTz', () => {
+  beforeEach(() => {
+    seedProfiles([makeProfile('profile-1', { timezone: 'America/New_York' })], {
+      current: 'profile-1',
+      authenticated: false,
+    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   // A single instant, converted into two different IANA zones, must produce
   // the two zones' own distinct wall-clock digits - the per-profile
   // conversion All-mode aggregation fan-outs rely on (refs #337).
@@ -241,7 +253,7 @@ describe('formatForServerInTz', () => {
   });
 
   it('matches formatForServer when given the current profile\'s own timezone', () => {
-    // useProfileStore.getState() is mocked above to profile-1 @ America/New_York.
+    // The current profile (seeded above) is profile-1 @ America/New_York.
     expect(formatForServerInTz(instant, 'America/New_York')).toBe(formatForServer(instant));
   });
 });

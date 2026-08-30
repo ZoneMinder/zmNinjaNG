@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Logs from '../Logs';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const clearLogs = vi.fn();
 const logs = [
@@ -40,7 +45,10 @@ vi.mock('../../lib/logger', () => ({
     getLevel: () => 1,
     setLevel: vi.fn(),
   },
-  log: { server: vi.fn() },
+  // A Proxy rather than a fixed set of names: seeding the real profile/auth
+  // stores now exercises whichever component logger they call
+  // (log.profileService, log.auth, ...), not just the log.server this page uses.
+  log: new Proxy({}, { get: () => vi.fn() }),
   LogLevel: {
     DEBUG: 1,
     INFO: 2,
@@ -98,41 +106,6 @@ vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,
 }));
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'profile-1', name: 'Test Profile', apiUrl: 'https://api.test' },
-    settings: { logLevel: 1 },
-    hasProfile: true,
-  }),
-  useProfileById: () => ({ profile: null, settings: { logLevel: 1 } }),
-}));
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => null,
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(() => ({ client: {} })),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  DEFAULT_SETTINGS: {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'light',
-    logLevel: 1,
-  },
-  useSettingsStore: vi.fn((selector: any) => {
-    if (typeof selector === 'function') {
-      return selector({
-        profileSettings: {},
-        updateProfileSettings: vi.fn(),
-      });
-    }
-    return vi.fn();
-  }),
-}));
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) => key,
@@ -152,6 +125,15 @@ vi.mock('../../lib/log-file', () => ({
 }));
 
 describe('Logs Page', () => {
+  beforeEach(() => {
+    seedProfiles(['profile-1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   it('renders log entries and clears logs', async () => {
     const user = userEvent.setup();
     render(<Logs />);

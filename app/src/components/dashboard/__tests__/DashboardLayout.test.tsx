@@ -1,7 +1,14 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, waitFor } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { DashboardLayout } from '../DashboardLayout';
-import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../../api/types';
+import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import { useProfileStore } from '../../../stores/profile';
 
 // Track calls to updateLayouts to verify it's not called during sync
 const updateLayouts = vi.fn();
@@ -22,10 +29,9 @@ const mockWidgets = [
   },
 ];
 
-// Which bucket the widgets live in, and which one the component asks for.
-// Mutable so a test can put the app in a group and check the key it reads.
+// Which bucket the widgets live in. Mutable so a test can put the app in a
+// group and check the key it reads.
 let widgetBuckets: Record<string, typeof mockWidgets> = {};
-let profileState: Record<string, unknown> = {};
 
 vi.mock('../../../stores/dashboard', () => ({
   useDashboardStore: (selector: (state: {
@@ -38,14 +44,6 @@ vi.mock('../../../stores/dashboard', () => ({
       isEditing: true,
       updateLayouts,
     }),
-}));
-
-vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: Record<string, unknown>) => unknown) => selector(profileState),
-}));
-
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
 }));
 
 vi.mock('react-i18next', () => ({
@@ -94,17 +92,18 @@ describe('DashboardLayout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     widgetBuckets = { 'profile-1': mockWidgets };
-    profileState = {
-      profiles: [{ id: 'profile-1', name: 'Test' }],
-      currentProfileId: 'profile-1',
-      virtualProfiles: [],
-    };
+    seedProfiles([makeProfile('profile-1', { name: 'Test' })]);
     capturedOnLayoutChange = null;
     // Mock requestAnimationFrame
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
       setTimeout(cb, 0);
       return 0;
     });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('renders widgets from the store', () => {
@@ -119,11 +118,10 @@ describe('DashboardLayout', () => {
   it("renders the active group's own widgets", () => {
     const group = mintVirtualProfileId();
     widgetBuckets = { [group]: mockWidgets, [ALL_PROFILES_ID]: [] };
-    profileState = {
-      profiles: [{ id: 'profile-1', name: 'Test' }],
+    useProfileStore.setState({
       currentProfileId: group,
-      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
-    };
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [asProfileId('profile-1')] }],
+    });
 
     render(<DashboardLayout />);
 

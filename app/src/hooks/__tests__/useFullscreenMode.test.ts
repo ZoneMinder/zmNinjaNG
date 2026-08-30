@@ -10,18 +10,18 @@
  * other All-mode view-level preference (refs #337).
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useFullscreenMode } from '../useFullscreenMode';
 import type { ProfileSettings } from '../../stores/settings';
 import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 
-const updateProfileSettings = vi.hoisted(() => vi.fn());
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: (selector: (s: { updateProfileSettings: unknown }) => unknown) =>
-    selector({ updateProfileSettings }),
-}));
+import { useFullscreenMode } from '../useFullscreenMode';
+import { useSettingsStore } from '../../stores/settings';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const PROFILE_ID = asProfileId('p1');
 
@@ -35,7 +35,12 @@ function settingsWith(overrides: Partial<ProfileSettings>): ProfileSettings {
 
 describe('useFullscreenMode', () => {
   beforeEach(() => {
-    updateProfileSettings.mockClear();
+    seedProfiles(['p1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('writes only the settings key it was given', () => {
@@ -49,9 +54,9 @@ describe('useFullscreenMode', () => {
 
     act(() => result.current.handleToggleFullscreen(true));
 
-    expect(updateProfileSettings).toHaveBeenCalledWith('p1', {
-      liveActivityIsFullscreen: true,
-    });
+    const settings = useSettingsStore.getState().getProfileSettings(PROFILE_ID);
+    expect(settings.liveActivityIsFullscreen).toBe(true);
+    expect(settings.montageIsFullscreen).toBe(false);
   });
 
   it('still writes the montage key for the montage page', () => {
@@ -65,7 +70,7 @@ describe('useFullscreenMode', () => {
 
     act(() => result.current.handleToggleFullscreen(true));
 
-    expect(updateProfileSettings).toHaveBeenCalledWith('p1', { montageIsFullscreen: true });
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_ID).montageIsFullscreen).toBe(true);
   });
 
   it('reports the flag its own key holds, not the other page one', () => {
@@ -94,9 +99,11 @@ describe('useFullscreenMode', () => {
       })
     );
 
+    const before = useSettingsStore.getState().profileSettings;
     act(() => result.current.handleToggleFullscreen(true));
 
-    expect(updateProfileSettings).not.toHaveBeenCalled();
+    // Reference equality proves updateProfileSettings's set() never ran.
+    expect(useSettingsStore.getState().profileSettings).toBe(before);
   });
 
   // All mode: currentProfile is null (useCurrentProfile resolves to null for
@@ -114,8 +121,6 @@ describe('useFullscreenMode', () => {
 
     act(() => result.current.handleToggleFullscreen(true));
 
-    expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-      liveActivityIsFullscreen: true,
-    });
+    expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).liveActivityIsFullscreen).toBe(true);
   });
 });

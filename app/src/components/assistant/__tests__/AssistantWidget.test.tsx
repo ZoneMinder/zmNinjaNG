@@ -6,35 +6,42 @@
  */
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const mockNative = { current: true };
 vi.mock('../../../lib/platform', () => ({
   Platform: { get isNative() { return mockNative.current; } },
 }));
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AssistantWidget } from '../AssistantWidget';
 import { useAssistantPanelStore } from '../../../stores/assistantPanel';
 import { useAssistantStore } from '../../../stores/assistant';
+import { useSettingsStore } from '../../../stores/settings';
 import { ASSISTANT, ASSISTANT_PANEL } from '../../../lib/zmninja-ng-constants';
 import { NINJII_LOGO_URL } from '../../../lib/assistant/ninjii-logo';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import type { ProfileSettings } from '../../../stores/settings';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
-}));
-// Mutable so a test can switch backends: the header reads the assistant
-// settings to say which model is answering and where it runs.
-let mockSettings: Record<string, unknown> = {};
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: mockSettings }),
 }));
 vi.mock('../AskPanel', () => ({
   AskPanel: () => <div data-testid="ask-panel-stub" />,
 }));
 // The header dot owns a useQuery probe covered by useOllamaHealth's own test;
 // stub it here so these chrome tests need no QueryClientProvider. Reflect the
-// selected backend so the dot still renders (or hides) as it would live.
+// selected backend (from the real settings store, now that profile settings
+// are seeded rather than mocked) so the dot still renders (or hides) as it
+// would live.
 vi.mock('../../../hooks/useOllamaHealth', () => ({
-  useOllamaHealth: () => ({ enabled: mockSettings.assistantBackend === 'ollama', status: 'connected' }),
+  useOllamaHealth: () => ({
+    enabled: useSettingsStore.getState().profileSettings.p1?.assistantBackend === 'ollama',
+    status: 'connected',
+  }),
 }));
 // Mutable so a test can pick which shell the widget renders. jsdom has no
 // matchMedia, so the real hook returns false (desktop) anyway; this makes the
@@ -44,6 +51,10 @@ vi.mock('../../../hooks/useIsMobile', () => ({
   useIsMobile: () => mockIsMobile,
 }));
 
+function seedWidget(overrides: Partial<ProfileSettings> = {}) {
+  seedProfiles(['p1'], { settings: { p1: overrides } });
+}
+
 describe('AssistantWidget', () => {
   beforeEach(() => {
     mockNative.current = true;
@@ -52,8 +63,13 @@ describe('AssistantWidget', () => {
       size: { width: ASSISTANT_PANEL.defaultWidth, height: ASSISTANT_PANEL.defaultHeight },
     });
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
-    mockSettings = {};
     mockIsMobile = false;
+    seedWidget();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   describe('mobile vs desktop shell', () => {
@@ -61,16 +77,18 @@ describe('AssistantWidget', () => {
       mockIsMobile = false;
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
-      expect(screen.getByTestId('assistant-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-mobile-sheet')).not.toBeInTheDocument();
+      // Fixed bottom-right placement is the desktop card's own layout, not the
+      // mobile sheet's inset-x-0 bottom sheet.
+      expect(screen.getByTestId('assistant-panel')).toHaveClass('fixed', 'bottom-4', 'right-4');
+      expect(screen.queryByTestId('assistant-mobile-sheet')).toBeNull();
     });
 
     it('renders the mobile sheet, not the desktop card, when mobile', () => {
       mockIsMobile = true;
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
-      expect(screen.getByTestId('assistant-mobile-sheet')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-panel')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assistant-mobile-sheet')).toHaveAttribute('role', 'dialog');
+      expect(screen.queryByTestId('assistant-panel')).toBeNull();
     });
   });
 
@@ -78,11 +96,18 @@ describe('AssistantWidget', () => {
   // on a server": the same question the parse-error and OOM notes leave the
   // user asking, and the answer lives two screens away in Settings.
   describe('backend label', () => {
+    // Non-native: the store's native-coercion (Platform.isNative &&
+    // assistantBackend === 'on-device' -> 'ollama') would otherwise rewrite
+    // 'on-device' away, and on-device only ever runs outside native anyway.
+    beforeEach(() => {
+      mockNative.current = false;
+    });
+
     it('shows the on-device model by its picker label, not its registry id', () => {
-      mockSettings = {
+      seedWidget({
         assistantBackend: 'on-device',
         assistantModelId: ASSISTANT.webllmModels[0].id,
-      };
+      });
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
 
@@ -94,11 +119,11 @@ describe('AssistantWidget', () => {
     });
 
     it('shows the Ollama model name and mode when the backend is remote', () => {
-      mockSettings = {
+      seedWidget({
         assistantBackend: 'ollama',
         assistantOllamaModel: 'qwen2.5:3b',
         assistantModelId: ASSISTANT.webllmModels[0].id,
-      };
+      });
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
 
@@ -111,7 +136,7 @@ describe('AssistantWidget', () => {
     });
 
     it('falls back to a saved id with no matching picker entry', () => {
-      mockSettings = { assistantBackend: 'on-device', assistantModelId: 'some-unlisted-model' };
+      seedWidget({ assistantBackend: 'on-device', assistantModelId: 'some-unlisted-model' });
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
 
@@ -119,7 +144,7 @@ describe('AssistantWidget', () => {
     });
 
     it('shows the mode alone when no model is configured yet', () => {
-      mockSettings = { assistantBackend: 'ollama', assistantOllamaModel: '' };
+      seedWidget({ assistantBackend: 'ollama', assistantOllamaModel: '' });
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
 
@@ -139,7 +164,7 @@ describe('AssistantWidget', () => {
     render(<AssistantWidget />);
 
     const fab = screen.getByTestId('assistant-fab');
-    expect(fab).toBeInTheDocument();
+    expect(fab).toHaveAttribute('type', 'button');
     expect(fab).toHaveAccessibleName('assistant.reopen');
     // Ninjii's logo replaces the lucide icon in the FAB (refs #246); it's
     // decorative since the button's own aria-label already names Ninjii.
@@ -154,12 +179,17 @@ describe('AssistantWidget', () => {
     useAssistantPanelStore.setState({ state: 'open' });
     render(<AssistantWidget />);
 
-    expect(screen.queryByTestId('assistant-fab')).not.toBeInTheDocument();
-    expect(screen.getByTestId('assistant-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('ask-panel-stub')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-clear')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-minimize')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-close')).toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+    // Default size from the panel store, reflected onto the resizable card.
+    expect(screen.getByTestId('assistant-panel')).toHaveStyle({
+      '--assistant-w': `${ASSISTANT_PANEL.defaultWidth}px`,
+      '--assistant-h': `${ASSISTANT_PANEL.defaultHeight}px`,
+    });
+    // Open, not minimized: AskPanel sits outside the 'hidden' wrapper.
+    expect(screen.getByTestId('ask-panel-stub').closest('.hidden')).toBeNull();
+    expect(screen.getByTestId('assistant-clear')).toHaveAttribute('aria-label', 'assistant.clear');
+    expect(screen.getByTestId('assistant-minimize')).toHaveAttribute('aria-label', 'assistant.minimize');
+    expect(screen.getByTestId('assistant-close')).toHaveAttribute('aria-label', 'common.close');
     // Ninjii's logo in the header, to the left of the title (refs #246).
     expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', NINJII_LOGO_URL);
   });
@@ -198,8 +228,9 @@ describe('AssistantWidget', () => {
 
     expect(useAssistantPanelStore.getState().state).toBe('minimized');
     // AskPanel stays mounted (hidden via CSS) so the conversation and any
-    // in-flight turn survive the minimize (refs #246).
-    expect(screen.getByTestId('ask-panel-stub')).toBeInTheDocument();
+    // in-flight turn survive the minimize (refs #246): it's still in the
+    // DOM, now inside the wrapper that just gained the 'hidden' class.
+    expect(screen.getByTestId('ask-panel-stub').closest('.hidden')).not.toBeNull();
   });
 
   it('close button closes the panel', async () => {
@@ -215,7 +246,7 @@ describe('AssistantWidget', () => {
   it('Clear resets the current profile thread and clears activities', async () => {
     // Native runs the Ollama backend, so the cleared note must not claim an
     // on-device model was unloaded (there is none to unload).
-    mockSettings = { assistantBackend: 'ollama' };
+    seedWidget({ assistantBackend: 'ollama' });
     useAssistantPanelStore.setState({ state: 'open' });
     useAssistantStore.getState().append('p1', { role: 'user', text: 'is the front door armed?' });
     useAssistantStore.setState({ activities: [{ toolName: 'list_monitors', status: 'done', input: {} }] });

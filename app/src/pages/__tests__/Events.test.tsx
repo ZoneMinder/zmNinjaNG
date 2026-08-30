@@ -1,11 +1,17 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import userEvent from '@testing-library/user-event';
 import Events from '../Events';
-import { ALL_PROFILES_ID } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId } from '../../api/types';
 import { eventInstant } from '../../lib/event/event-instant';
 import type { EventData } from '../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useSettingsStore } from '../../stores/settings';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const useQueryMock = vi.fn();
 
@@ -16,7 +22,6 @@ vi.mock('@tanstack/react-query', () => ({
 
 const useScopedEventsMock = vi.fn();
 const useScopedMonitorsMock = vi.fn();
-const useProfileScopeMock = vi.fn();
 
 // The fan-out itself is covered in useScopedEventTags' own suite; stubbed
 // here so this page suite keeps its narrow react-query mock. The returned map
@@ -39,71 +44,10 @@ vi.mock('../../hooks/useScopedEvents', () => ({
 vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: () => useScopedMonitorsMock(),
 }));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
-}));
-
-// Mutable so All-mode tests can flip isAllMode (real useCurrentProfile/
-// useCurrentProfile.isAllMode compares this against ALL_PROFILES_ID) - a
-// SEPARATE signal from the useProfileScope mock below, and Events.tsx reads
-// both, so tests must set both together (see allScope()/singleScope()).
-let mockCurrentProfileId = 'profile-1';
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfileId: string }) => unknown) =>
-    selector({ currentProfileId: mockCurrentProfileId }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (
-    selector: (state: {
-      accessToken: string;
-      accessTokenExpires: number;
-      isAuthenticated: boolean;
-      getFreshAccessToken: () => Promise<string | null>;
-    }) => unknown,
-  ) =>
-    selector({
-      accessToken: 'token-1',
-      accessTokenExpires: Date.now() + 60 * 60 * 1000,
-      isAuthenticated: true,
-      getFreshAccessToken: vi.fn(async () => 'token-1'),
-    }),
-  useAuthSlice: () => ({
-    accessToken: 'token-1',
-    accessTokenExpires: Date.now() + 60 * 60 * 1000,
-    isAuthenticated: true,
-    requiresAuth: true,
-  }),
-}));
-
-const updateProfileSettingsMock = vi.fn();
-let settingsOverrides: Record<string, unknown> = {};
-
-vi.mock('../../stores/settings', () => {
-  const DEFAULT_SETTINGS = {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'light',
-    defaultEventLimit: 50,
-    eventsViewMode: 'list',
-    eventMontageByGroup: { '__all__': { gridCols: 3 } },
-    excludedMonitorIds: [],
-    eventsServerFilter: null,
-  };
-  return {
-    ALL_GROUPS_KEY: '__all__',
-    DEFAULT_EVENT_MONTAGE_GROUP_LAYOUT: { gridCols: 3 },
-    DEFAULT_SETTINGS,
-    mergeProfileSettings: (raw: Record<string, unknown> | undefined) => ({ ...DEFAULT_SETTINGS, ...raw, ...settingsOverrides }),
-    useSettingsStore: (selector: (state: { getProfileSettings: (id: string) => { defaultEventLimit: number; eventsViewMode: 'list'; eventMontageByGroup: Record<string, { gridCols: number }> }; updateProfileSettings: (...args: unknown[]) => void; updateEventMontageGroupLayout: () => void }) => unknown) =>
-      selector({
-        getProfileSettings: () => ({ defaultEventLimit: 50, eventsViewMode: 'list', eventMontageByGroup: { '__all__': { gridCols: 3 } }, excludedMonitorIds: [] }),
-        updateProfileSettings: updateProfileSettingsMock,
-        updateEventMontageGroupLayout: vi.fn(),
-      }),
-  };
-});
+// useProfileScope, stores/profile, stores/auth and stores/settings now run
+// for real, against the seeded profile/settings/auth stores (singleScope()/
+// allScope() below) - useCurrentProfile's isAllMode and useProfileScope's
+// mode agree because both derive from the same real currentProfileId.
 
 const applyFilters = vi.fn();
 const clearFilters = vi.fn();
@@ -217,17 +161,18 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [mockSearchParams, setSearchParamsMock],
 }));
 
-const profileA = { id: 'profile-1', name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
-const profileB = { id: 'profile-2', name: 'Office', portalUrl: 'https://b', apiUrl: 'https://b/api', timezone: 'America/New_York' };
+const profileA = { id: asProfileId('profile-1'), name: 'Home', portalUrl: 'https://a', apiUrl: 'https://a/api', timezone: 'UTC' };
+const profileB = { id: asProfileId('profile-2'), name: 'Office', portalUrl: 'https://b', apiUrl: 'https://b/api', timezone: 'America/New_York' };
 
 function singleScope() {
-  mockCurrentProfileId = 'profile-1';
-  useProfileScopeMock.mockReturnValue({ mode: 'single', profile: profileA, profiles: [profileA], settings: {} });
+  seedProfiles([makeProfile('profile-1', profileA)], { current: 'profile-1' });
 }
 
-function allScope(profiles: Array<typeof profileA> = [profileA, profileB]) {
-  mockCurrentProfileId = ALL_PROFILES_ID;
-  useProfileScopeMock.mockReturnValue({ mode: 'all', profile: null, profiles, settings: {} });
+function allScope() {
+  seedProfiles(
+    [makeProfile('profile-1', profileA), makeProfile('profile-2', profileB)],
+    { current: ALL_PROFILES_ID }
+  );
 }
 
 function scopedEvents(overrides: Partial<ReturnType<typeof defaultScopedEvents>> = {}) {
@@ -269,10 +214,8 @@ describe('Events Page', () => {
     useScopedEventsMock.mockReset();
     useScopedMonitorsMock.mockReset();
     useScopedMonitorsMock.mockReturnValue({ monitors: [], errors: [], isLoading: false, refetchProfile: vi.fn() });
-    useProfileScopeMock.mockReset();
     singleScope();
     scopedEvents();
-    updateProfileSettingsMock.mockClear();
     applyFilters.mockClear();
     clearFilters.mockClear();
     clearDateRange.mockClear();
@@ -280,12 +223,16 @@ describe('Events Page', () => {
     mockSearchParams = new URLSearchParams();
     eventFiltersOverrides = {};
     favoritesOnlyOverride = false;
-    settingsOverrides = {};
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows empty state when no events exist', () => {
     render(<Events />);
-    expect(screen.getByTestId('events-empty-state')).toBeInTheDocument();
+    expect(screen.getByTestId('events-empty-state')).toHaveTextContent('events.no_events');
   });
 
   it('renders event list when events are available', () => {
@@ -312,14 +259,14 @@ describe('Events Page', () => {
 
     render(<Events />);
 
-    expect(screen.getByTestId('event-list')).toBeInTheDocument();
+    expect(screen.getByTestId('event-list')).toHaveTextContent('100-Front Door');
     expect(screen.getByTestId('event-card-item')).toHaveTextContent('100-Front Door');
   });
 
   it('applies and clears filters from the filter panel', async () => {
     render(<Events />);
 
-    expect(screen.getByTestId('events-filter-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('events-filter-panel')).toHaveTextContent('common.filter');
     const user = userEvent.setup();
     await user.click(screen.getByTestId('events-apply-filters'));
     await user.click(screen.getByTestId('events-clear-filters'));
@@ -338,7 +285,7 @@ describe('Events Page', () => {
 
     render(<Events />);
 
-    expect(screen.getByTestId('events-clear-quick-range')).toBeInTheDocument();
+    expect(screen.getByTestId('events-clear-quick-range')).toHaveAttribute('title', 'common.clear');
   });
 
   it('hides the clear-date button when no date range and no quick range are active', () => {
@@ -416,11 +363,14 @@ describe('Events Page', () => {
 
     render(<Events />);
 
+    // EventMontageView is mocked to a bare decorative div (no text/attrs); its
+    // presence vs. the list view's is the only observable signal, so pair it
+    // with the list view's absence to pin down which branch actually rendered.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
-    expect(updateProfileSettingsMock).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ eventsViewMode: expect.anything() })
-    );
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
+    // The deep link rendered montage without ever persisting it: the stored
+    // preference is still the default ('list'), not overwritten to 'montage'.
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').eventsViewMode).toBe('list');
   });
 
   // viewMode is derived from the ?view param and the persisted preference, so
@@ -428,7 +378,7 @@ describe('Events Page', () => {
   // clears the param, and leaving it set would pin the page in montage while
   // the toggle claims to have switched.
   it('switching back to list both persists list and clears the ?view param', () => {
-    settingsOverrides = { eventsViewMode: 'montage' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { eventsViewMode: 'montage' });
     mockSearchParams = new URLSearchParams('view=montage&monitorId=4');
     scopedEvents({
       events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
@@ -436,15 +386,14 @@ describe('Events Page', () => {
 
     render(<Events />);
     // Precondition: the page really is in montage, so the click below means
-    // "switch to list" rather than "switch to montage".
+    // "switch to list" rather than "switch to montage". EventMontageView is a
+    // bare decorative mock, so pair its presence with the list view's absence.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('events-view-toggle'));
 
-    expect(updateProfileSettingsMock).toHaveBeenCalledWith(
-      'profile-1',
-      expect.objectContaining({ eventsViewMode: 'list' })
-    );
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').eventsViewMode).toBe('list');
     const nextParams = setSearchParamsMock.mock.calls.at(-1)?.[0] as URLSearchParams;
     expect(nextParams.get('view')).toBeNull();
     // The other filters ride along in the same object and must survive.
@@ -452,14 +401,18 @@ describe('Events Page', () => {
   });
 
   it('settings-sync still applies the persisted view when no ?view param is present (refs #337 round 2)', () => {
-    settingsOverrides = { eventsViewMode: 'montage' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { eventsViewMode: 'montage' });
     scopedEvents({
       events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
     });
 
     render(<Events />);
 
+    // EventMontageView is mocked to a bare decorative div (no text/attrs);
+    // pair its presence with the list view's absence to confirm the
+    // persisted setting actually won the branch, not just that something rendered.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
   });
 
   describe('All mode', () => {
@@ -585,12 +538,15 @@ describe('Events Page', () => {
 
       expect(screen.getByTestId('events-view-toggle')).not.toBeDisabled();
       expect(screen.queryByTestId('events-montage-gate')).not.toBeInTheDocument();
+      // EventMontageView is mocked to a bare decorative div (no text/attrs);
+      // pair its presence with the list view's absence.
       expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+      expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
     });
 
     it('the server filter chip row hides a profile\'s slice when toggled off', () => {
       allScope();
-      settingsOverrides = { eventsServerFilter: ['profile-1'] };
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -603,12 +559,13 @@ describe('Events Page', () => {
       const cards = screen.getAllByTestId('event-card-item');
       expect(cards).toHaveLength(1);
       expect(cards[0]).toHaveTextContent('1-');
-      expect(screen.getByTestId('events-server-filter-row')).toBeInTheDocument();
+      expect(screen.getByTestId('events-server-filter-profile-1')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('events-server-filter-profile-2')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('drops a deleted profile\'s id from the persisted server filter instead of silently hiding everything (refs #337)', () => {
       allScope();
-      settingsOverrides = { eventsServerFilter: ['deleted-profile-id'] };
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('deleted-profile-id')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -625,7 +582,7 @@ describe('Events Page', () => {
 
     it('keeps a persisted filter\'s live ids while dropping only the deleted one', () => {
       allScope();
-      settingsOverrides = { eventsServerFilter: ['profile-1', 'deleted-profile-id'] };
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1'), asProfileId('deleted-profile-id')] });
       scopedEvents({
         events: [
           { profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } },
@@ -642,7 +599,7 @@ describe('Events Page', () => {
 
     it('"Showing X of Y" reflects only the server-filtered profiles, not every profile in scope (refs #337)', () => {
       allScope();
-      settingsOverrides = { eventsServerFilter: ['profile-1'] };
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [asProfileId('profile-1')] });
       scopedEvents({
         events: [{ profileId: 'profile-1', profileName: 'Home', item: { Event: { Id: '1', MonitorId: '1', StartDateTime: '2026-08-03 10:00:00' } } }],
         totalCount: 5,
@@ -651,17 +608,19 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByText('events.showing_of_total:{"showing":1,"total":1}')).toBeInTheDocument();
+      expect(screen.getByText('events.showing_of_total:{"showing":1,"total":1}')).toHaveTextContent(
+        'events.showing_of_total:{"showing":1,"total":1}'
+      );
     });
 
     it('shows a localized hint instead of the plain empty state when the server filter hides every profile (refs #337)', () => {
       allScope();
-      settingsOverrides = { eventsServerFilter: [] };
+      useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { eventsServerFilter: [] });
       scopedEvents({ events: [] });
 
       render(<Events />);
 
-      expect(screen.getByTestId('events-filter-empty-hint')).toBeInTheDocument();
+      expect(screen.getByTestId('events-filter-empty-hint')).toHaveTextContent('events.filter_hides_everything');
       expect(screen.queryByTestId('events-empty-state')).not.toBeInTheDocument();
     });
 
@@ -674,8 +633,8 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
-      expect(screen.getByTestId('event-card-item')).toBeInTheDocument();
+      expect(screen.getByTestId('profile-error-strip-profile-2')).toHaveTextContent('Office:');
+      expect(screen.getByTestId('event-card-item')).toHaveTextContent('1-Camera 1');
       expect(screen.queryByTestId('events-all-failed-state')).not.toBeInTheDocument();
     });
 
@@ -695,11 +654,8 @@ describe('Events Page', () => {
       expect(cards).toHaveLength(1);
       expect(cards[0]).toHaveTextContent('2-');
       // The deep link filters this render only - it must never write the
-      // persisted All-mode server filter.
-      expect(updateProfileSettingsMock).not.toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ eventsServerFilter: expect.anything() })
-      );
+      // persisted All-mode server filter, which stays at its default (null).
+      expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).eventsServerFilter).toBeNull();
     });
 
     it('shows every server again once the ?profileId= param is gone, with no filter left persisted (refs #337 I9)', () => {
@@ -729,7 +685,9 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByTestId('events-all-failed-state')).toBeInTheDocument();
+      // Confirms the branch that rendered is genuinely the all-failed state,
+      // not merely that some empty-state div exists.
+      expect(screen.queryByTestId('events-empty-state')).toBeNull();
       expect(screen.getByTestId('events-all-failed-state')).toHaveTextContent('events.all_failed_title');
     });
   });

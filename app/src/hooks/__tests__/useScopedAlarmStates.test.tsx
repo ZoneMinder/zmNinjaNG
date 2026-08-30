@@ -1,28 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useScopedAlarmStates } from '../useAlarmStates';
-import { getAlarmStatus } from '../../api/monitors';
-import { getSession } from '../../services/sessions';
-import type { ProfileId } from '../../api/types';
 
 vi.mock('../../api/monitors', () => ({ getAlarmStatus: vi.fn() }));
-vi.mock('../../services/sessions', () => ({ getSession: vi.fn((profileId: string) => ({ client: { profileId } })) }));
-// useAlarmStates.ts (this hook's sibling in the same module) imports these
-// for the single-mode hook; mocked here purely to stop their real module
-// graph (stores/profile.ts -> services/sessions' registerSessionsGate) from
-// loading against the partial sessions mock above. useScopedAlarmStates
-// itself never reads either.
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: null, settings: {} }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+import { useScopedAlarmStates } from '../useAlarmStates';
+import { getAlarmStatus } from '../../api/monitors';
+import { seedProfiles, resetProfileFixture, fakeApiClient, asProfileId } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const mockStatus = vi.mocked(getAlarmStatus);
-const mockGetSession = vi.mocked(getSession);
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient({
@@ -31,19 +21,31 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
-const p1 = 'p1' as ProfileId;
-const p2 = 'p2' as ProfileId;
+const p1 = asProfileId('p1');
+const p2 = asProfileId('p2');
 
 describe('useScopedAlarmStates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    seedProfiles([p1, p2]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fans out one request per pair via the OWNING profile session, keyed composite', async () => {
-    mockStatus.mockImplementation(async (client: unknown, id: string) => {
-      const c = client as { profileId: string };
-      return c.profileId === 'p1' && id === '3' ? { status: 2 } : { status: 0 };
-    });
+    // Each profile gets its OWN client instance installed, so a poll landing
+    // on the wrong profile's session is a client the test can catch, not one
+    // that happens to look the same.
+    const clientP1 = fakeApiClient();
+    const clientP2 = fakeApiClient();
+    installApiClient(p1, clientP1);
+    installApiClient(p2, clientP2);
+    mockStatus.mockImplementation(async (client: unknown, id: string) =>
+      client === clientP1 && id === '3' ? { status: 2 } : { status: 0 }
+    );
 
     const { result } = renderHook(
       () =>
@@ -57,13 +59,13 @@ describe('useScopedAlarmStates', () => {
       { wrapper }
     );
 
+    // Two servers sharing raw monitor id "3" must not collide in the map,
+    // and each pair's OWN profile's session client must have been used - the
+    // states map itself proves it, since the implementation above only
+    // reports "alarm" for clientP1's own request.
     await waitFor(() => {
       expect(result.current.states).toEqual({ 'p1:3': 'alarm', 'p2:3': 'idle' });
     });
-    // Two servers sharing raw monitor id "3" must not collide in the map,
-    // and each pair's OWN profile's session client must have been used.
-    expect(mockGetSession).toHaveBeenCalledWith('p1');
-    expect(mockGetSession).toHaveBeenCalledWith('p2');
   });
 
   it('emits a total map: every requested pair present, disabled means empty', async () => {

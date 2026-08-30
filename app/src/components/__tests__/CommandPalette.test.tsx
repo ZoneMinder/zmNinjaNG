@@ -1,8 +1,15 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { CommandPalette } from '../CommandPalette';
 import { useCommandPaletteStore } from '../../stores/commandPalette';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -26,22 +33,6 @@ vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: (options: unknown) => scopedMonitorsMock(options),
 }));
 
-const singleScope = {
-  mode: 'single' as const,
-  profile: { id: 'p1' },
-  profiles: [{ id: 'p1' }],
-  settings: { assistantEnabled: false },
-};
-const allScope = {
-  mode: 'all' as const,
-  profile: null,
-  profiles: [{ id: 'p1' }, { id: 'p2' }],
-  settings: { assistantEnabled: false },
-};
-const useProfileScopeMock = vi.fn<() => unknown>(() => singleScope);
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
-}));
 // The Ask item's gate. Not the scope's settings any more: an aggregate's own
 // bucket never holds assistantEnabled, so the gate resolves over the scope's
 // profiles instead (refs #337).
@@ -59,7 +50,10 @@ const setSelectedGroup = vi.fn();
 vi.mock('../../hooks/useGroupFilter', () => ({
   useGroupFilter: () => ({ setSelectedGroup }),
 }));
-vi.mock('../../lib/profile/profile-settings', () => ({ getExcludedMonitorIdSet: () => new Set<string>() }));
+vi.mock('../../lib/profile/profile-settings', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getExcludedMonitorIdSet: () => new Set<string>(),
+}));
 
 // jsdom does not implement scrollIntoView; the keyboard-nav effect calls it.
 const scrollIntoViewMock = vi.fn();
@@ -72,10 +66,15 @@ describe('CommandPalette', () => {
     scrollIntoViewMock.mockClear();
     useCommandPaletteStore.setState({ open: true });
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
-    useProfileScopeMock.mockReturnValue(singleScope);
+    seedProfiles(['p1'], { settings: { p1: { assistantEnabled: false } } });
     useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue({ monitors: singleMonitors });
     groupsMock.mockReturnValue({ groups: [{ Group: { Id: '1', Name: 'Front Cameras' } }] });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('filters monitors by name and navigates on Enter', () => {
@@ -171,9 +170,14 @@ describe('CommandPalette in All mode (refs #337)', () => {
     scrollIntoViewMock.mockClear();
     useCommandPaletteStore.setState({ open: true });
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
-    useProfileScopeMock.mockReturnValue(allScope);
+    seedProfiles(['p1', 'p2'], { current: ALL_PROFILES_ID });
     scopedMonitorsMock.mockReturnValue({ monitors: allMonitors });
     groupsMock.mockReturnValue({ groups: [] });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('lists a colliding monitor id once per server, each labelled with its server', () => {

@@ -7,34 +7,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { EventPreviewPopover } from '../EventPreviewPopover';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 
 vi.mock('../../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({ fmtDate: () => 'date', fmtTime: () => 'time' }),
-}));
-
-// The OWNING profile (from the event's profileId prop) must be resolved, not
-// whichever profile happens to be globally current.
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: (profileId?: string) => ({
-    profile: profileId
-      ? { id: profileId, portalUrl: `https://${profileId}.test`, apiUrl: `https://${profileId}.test/api` }
-      : { id: 'current-profile', portalUrl: 'https://current-profile.test', apiUrl: 'https://current-profile.test/api' },
-    settings: {
-      thumbnailFallbackChain: [{ type: 'snapshot', enabled: true }],
-      forceDisableMultiPort: false,
-      hoverPreview: { timeline: false },
-    },
-  }),
-}));
-
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string) => ({
-    token: profileId ? `${profileId}-token` : 'current-profile-token',
-    isFresh: true,
-  }),
 }));
 
 const getQueryDataMock = vi.fn(() => undefined);
@@ -67,10 +51,22 @@ const baseEvent = {
 describe('EventPreviewPopover owning-profile wiring (refs #337 Task 2)', () => {
   beforeEach(() => {
     vi.stubGlobal('Image', FakeImage);
+    seedProfiles([
+      makeProfile('current-profile', { portalUrl: 'https://current-profile.test' }),
+      makeProfile('profile-b', { portalUrl: 'https://profile-b.test' }),
+    ], {
+      current: 'current-profile',
+      settings: {
+        'current-profile': { thumbnailFallbackChain: [{ type: 'snapshot', enabled: true }] as never, forceDisableMultiPort: false, hoverPreview: { timeline: false } as never },
+        'profile-b': { thumbnailFallbackChain: [{ type: 'snapshot', enabled: true }] as never, forceDisableMultiPort: false, hoverPreview: { timeline: false } as never },
+      },
+    });
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it("renders profile B's thumbnail URL when the event's profileId is B, not the current profile's", async () => {

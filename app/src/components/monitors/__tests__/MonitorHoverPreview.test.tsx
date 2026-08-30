@@ -8,12 +8,17 @@
  * these tests exercise only MonitorHoverPreview/MonitorLivePreview's own
  * profile resolution.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { MonitorHoverPreview } from '../MonitorHoverPreview';
-import { useProfileStore } from '../../../stores/profile';
-import type { Monitor, Profile } from '../../../api/types';
-import { asProfileId } from '../../../api/types';
+import type { Monitor } from '../../../api/types';
+import * as freshTokenModule from '../../../hooks/useFreshAccessToken';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../ui/hover-preview', () => ({
   HoverPreview: ({ renderPreview }: { renderPreview: () => React.ReactNode }) => (
@@ -29,54 +34,30 @@ vi.mock('../../../hooks/useStreamLifecycle', () => ({
   },
 }));
 
-const freshTokenCalls: Array<string | null | undefined> = [];
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string | null) => {
-    freshTokenCalls.push(profileId);
-    return { token: 'tok', isFresh: true };
-  },
-}));
-
-vi.mock('../../../lib/logger', () => ({
-  log: { monitor: vi.fn() },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, monitor: vi.fn() } };
+});
 
 const monitor = { Id: 'mon-1', Name: 'Front Door', Width: 1920, Height: 1080 } as unknown as Monitor;
 
-const profileA: Profile = {
-  id: asProfileId('profile-a'),
-  name: 'A',
-  apiUrl: 'https://a',
-  portalUrl: 'https://a',
-  cgiUrl: 'https://a/cgi-bin',
-  isDefault: true,
-  createdAt: 0,
-};
-
-const profileB: Profile = {
-  id: asProfileId('profile-b'),
-  name: 'B',
-  apiUrl: 'https://b',
-  portalUrl: 'https://b',
-  cgiUrl: 'https://b/cgi-bin',
-  isDefault: false,
-  createdAt: 0,
-};
+const profileA = makeProfile('profile-a', { name: 'A', apiUrl: 'https://a', portalUrl: 'https://a', cgiUrl: 'https://a/cgi-bin', isDefault: true });
+const profileB = makeProfile('profile-b', { name: 'B', apiUrl: 'https://b', portalUrl: 'https://b', cgiUrl: 'https://b/cgi-bin' });
 
 describe('MonitorHoverPreview profile threading', () => {
   beforeEach(() => {
     streamLifecycleCalls.length = 0;
-    freshTokenCalls.length = 0;
-    useProfileStore.setState({
-      profiles: [profileA, profileB],
-      currentProfileId: profileA.id,
-      isInitialized: true,
-      isBootstrapping: false,
-      bootstrapStep: null,
-    });
+    seedProfiles([profileA, profileB], { current: profileA.id });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('defaults to the current profile when no profileId prop is given (single mode)', () => {
+    const spy = vi.spyOn(freshTokenModule, 'useFreshAccessToken');
+
     render(
       <MonitorHoverPreview monitor={monitor}>
         <div>trigger</div>
@@ -84,10 +65,12 @@ describe('MonitorHoverPreview profile threading', () => {
     );
 
     expect(streamLifecycleCalls).toEqual([{ monitorId: 'mon-1', profileId: 'profile-a' }]);
-    expect(freshTokenCalls).toEqual([undefined]);
+    expect(spy).toHaveBeenCalledWith(undefined);
   });
 
   it('streams from the owning profile when profileId is passed (All mode)', () => {
+    const spy = vi.spyOn(freshTokenModule, 'useFreshAccessToken');
+
     render(
       <MonitorHoverPreview monitor={monitor} profileId={profileB.id}>
         <div>trigger</div>
@@ -97,7 +80,7 @@ describe('MonitorHoverPreview profile threading', () => {
     // The stream hook resolves against profile B even though the globally
     // selected profile is A.
     expect(streamLifecycleCalls).toEqual([{ monitorId: 'mon-1', profileId: 'profile-b' }]);
-    expect(freshTokenCalls).toEqual(['profile-b']);
+    expect(spy).toHaveBeenCalledWith('profile-b');
   });
 });
 
@@ -105,13 +88,12 @@ describe('MonitorHoverPreview profile threading', () => {
 // never arrives left the browser's broken-image glyph sitting in the popover.
 describe('MonitorHoverPreview frame gating', () => {
   beforeEach(() => {
-    useProfileStore.setState({
-      profiles: [profileA],
-      currentProfileId: profileA.id,
-      isInitialized: true,
-      isBootstrapping: false,
-      bootstrapStep: null,
-    });
+    seedProfiles([profileA], { current: profileA.id });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   const renderPreview = () =>

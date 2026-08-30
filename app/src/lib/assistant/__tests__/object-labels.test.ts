@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { getObjectLabels, buildObjectLabelLine, __clearObjectLabelCacheForTests } from '../object-labels';
 import { getEvents } from '../../../api/events';
 
 vi.mock('../../../api/events', () => ({ getEvents: vi.fn() }));
-vi.mock('../../../services/sessions', () => ({ getSession: vi.fn(() => ({ client: {} })) }));
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const page = (notes: string[]) => ({
   events: notes.map((Notes, i) => ({ Event: { Id: String(i), MonitorId: '1', Notes } })),
@@ -14,6 +18,12 @@ describe('getObjectLabels', () => {
   beforeEach(() => {
     __clearObjectLabelCacheForTests();
     vi.mocked(getEvents).mockReset();
+    seedProfiles(['p1', 'p2']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('reads the labels this install actually writes, de-duped and sorted', async () => {

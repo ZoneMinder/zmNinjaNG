@@ -7,13 +7,30 @@
  * change to show the toast and play the sound.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { toast } from 'sonner';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { NotificationHandler } from '../NotificationHandler';
 import { useNotificationStore } from '../../stores/notifications';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { useSettingsStore, mergeProfileSettings, type ProfileSettings } from '../../stores/settings';
+
+// seedProfiles only seeds settings buckets keyed by real profile ids; the
+// All-mode aggregate reads its own bucket under ALL_PROFILES_ID, so that one
+// is set directly the same way profile-fixture seeds the real ones.
+function seedAllModeSettings(overrides: Partial<ProfileSettings>) {
+  useSettingsStore.setState((state) => ({
+    profileSettings: { ...state.profileSettings, [ALL_PROFILES_ID]: mergeProfileSettings(overrides) },
+  }));
+}
 import type { ZMAlarmEvent } from '../../types/notifications';
 
 vi.mock('sonner', () => ({
@@ -28,40 +45,8 @@ vi.mock('react-i18next', () => ({
 
 const PROFILE_ID = 'profile-1';
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: {
-      id: 'profile-1',
-      name: 'Test Profile',
-      portalUrl: 'http://zm.local',
-    },
-    settings: {
-      thumbnailFallbackChain: [],
-      forceDisableMultiPort: false,
-    },
-    hasProfile: true,
-  }),
-}));
-
-vi.mock('../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: null, isFresh: false }),
-}));
-
 vi.mock('../../hooks/useNotificationAutoConnect', () => ({
   useNotificationAutoConnect: () => {},
-}));
-
-// Real single-current-profile mode by default; overridden per-test for the
-// All-mode fan-out coverage below.
-type ScopeLike = {
-  mode: string;
-  profile: { id: string; name: string } | null;
-  profiles: { id: string; name: string }[];
-  settings: { allModeNotifications?: 'live' | 'muted' | 'off' };
-} | null;
-const mockUseProfileScope = vi.fn<() => ScopeLike>(() => null);
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => mockUseProfileScope(),
 }));
 
 vi.mock('../../components/notifications/ProfileNotificationConnector', () => ({
@@ -107,6 +92,12 @@ describe('NotificationHandler live-event toasts', () => {
       profileSettings: {},
       currentProfileId: null,
     });
+    seedProfiles([makeProfile(PROFILE_ID, { name: 'Test Profile', portalUrl: 'http://zm.local' })]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('does not toast on mount with no events', () => {
@@ -163,20 +154,13 @@ describe('NotificationHandler live-event toasts', () => {
 });
 
 describe('NotificationHandler All-mode fan-out (refs #337)', () => {
-  beforeEach(() => {
-    mockUseProfileScope.mockReset();
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('mounts one connector per All-mode scope profile', () => {
-    mockUseProfileScope.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-a', name: 'Home' },
-        { id: 'profile-b', name: 'Work' },
-      ],
-      settings: {},
-    });
+    seedProfiles(['profile-a', 'profile-b'], { current: ALL_PROFILES_ID });
 
     const { getByTestId } = renderHandler();
 
@@ -185,12 +169,7 @@ describe('NotificationHandler All-mode fan-out (refs #337)', () => {
   });
 
   it('mounts no connectors in single mode', () => {
-    mockUseProfileScope.mockReturnValue({
-      mode: 'single',
-      profile: { id: 'profile-1', name: 'Test Profile' },
-      profiles: [{ id: 'profile-1', name: 'Test Profile' }],
-      settings: {},
-    });
+    seedProfiles([makeProfile('profile-1', { name: 'Test Profile' })]);
 
     const { queryByTestId } = renderHandler();
 
@@ -202,15 +181,8 @@ describe('NotificationHandler All-mode fan-out (refs #337)', () => {
   // live paths (distinct from 'muted', which still connects and only
   // suppresses toast/sound display at the useNotificationAllModeToasts seam).
   it('mounts no connectors when allModeNotifications is off', () => {
-    mockUseProfileScope.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-a', name: 'Home' },
-        { id: 'profile-b', name: 'Work' },
-      ],
-      settings: { allModeNotifications: 'off' },
-    });
+    seedProfiles(['profile-a', 'profile-b'], { current: ALL_PROFILES_ID });
+    seedAllModeSettings({ allModeNotifications: 'off' });
 
     const { queryByTestId } = renderHandler();
 
@@ -219,12 +191,8 @@ describe('NotificationHandler All-mode fan-out (refs #337)', () => {
   });
 
   it('still mounts connectors when allModeNotifications is muted', () => {
-    mockUseProfileScope.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [{ id: 'profile-a', name: 'Home' }],
-      settings: { allModeNotifications: 'muted' },
-    });
+    seedProfiles(['profile-a'], { current: ALL_PROFILES_ID });
+    seedAllModeSettings({ allModeNotifications: 'muted' });
 
     const { getByTestId } = renderHandler();
 

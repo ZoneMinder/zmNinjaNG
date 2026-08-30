@@ -9,10 +9,17 @@
  * the ALL sentinel is selected, and the numeric monitor jump must land on the
  * owning profile's `/all/monitors/:profileId/:id` route.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { KeyboardShortcuts } from '../KeyboardShortcuts';
 import { useAssistantPanelStore } from '../../stores/assistantPanel';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { ALL_PROFILES_ID } from '../../api/types';
 
 // The Dialog's open state is a React state update, so the dispatched keydown
 // must be wrapped in act() to flush it before asserting on the DOM.
@@ -32,27 +39,12 @@ vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }
 // module-init gates need the whole auth/session graph. Mocking it keeps this
 // suite to the component under test.
 vi.mock('../../hooks/useTvMode', () => ({ useTvMode: () => ({ isTvMode: false }) }));
-vi.mock('../../lib/profile/profile-settings', () => ({
+vi.mock('../../lib/profile/profile-settings', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   getExcludedMonitorIdSet: () => new Set<string>(),
 }));
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
-const singleScope = {
-  mode: 'single' as const,
-  profile: { id: 'p1' },
-  profiles: [{ id: 'p1' }],
-  settings: { assistantEnabled: false, tvMode: false },
-};
-const allScope = {
-  mode: 'all' as const,
-  profile: null,
-  profiles: [{ id: 'p1' }, { id: 'p2' }],
-  settings: { assistantEnabled: false, tvMode: false },
-};
-const useProfileScopeMock = vi.fn<() => unknown>(() => singleScope);
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
-}));
 // The `?` key's gate. Not the scope's settings any more: an aggregate's own
 // bucket never holds assistantEnabled, so the gate resolves over the scope's
 // profiles instead (refs #337).
@@ -73,10 +65,15 @@ vi.mock('../../hooks/useScopedMonitors', () => ({
 describe('KeyboardShortcuts "?" key', () => {
   beforeEach(() => {
     navigateMock.mockClear();
-    useProfileScopeMock.mockReturnValue(singleScope);
+    seedProfiles(['p1']);
     useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue({ monitors: [] });
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('opens the help overlay and does not open the assistant panel when the assistant is disabled', () => {
@@ -108,10 +105,15 @@ describe('KeyboardShortcuts in All mode (refs #337)', () => {
 
   beforeEach(() => {
     navigateMock.mockClear();
-    useProfileScopeMock.mockReturnValue(allScope);
+    seedProfiles(['p1', 'p2'], { current: ALL_PROFILES_ID });
     useAssistantEnabledMock.mockReturnValue({ enabled: false, profileId: 'p1' });
     scopedMonitorsMock.mockReturnValue(twoServers);
     useAssistantPanelStore.setState({ state: 'closed', size: { width: 400, height: 560 } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   // These two components mount for the whole session and share the monitors
@@ -161,7 +163,7 @@ describe('KeyboardShortcuts in All mode (refs #337)', () => {
   });
 
   it('keeps the bare monitor route in single mode', () => {
-    useProfileScopeMock.mockReturnValue(singleScope);
+    seedProfiles(['p1', 'p2']);
     scopedMonitorsMock.mockReturnValue({
       monitors: [{ profileId: 'p1', profileName: 'Home', item: { Monitor: { Id: '7', Name: 'Gate' } } }],
     });

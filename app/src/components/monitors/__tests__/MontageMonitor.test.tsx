@@ -7,13 +7,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { MontageMonitor } from '../MontageMonitor';
 import type { Monitor, MonitorStatus, Profile } from '../../../api/types';
 import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
-import { useSettingsStore, DEFAULT_SETTINGS } from '../../../stores/settings';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 import { useNotificationStore } from '../../../stores/notifications';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 // Mock dependencies
 vi.mock('react-i18next', () => ({
@@ -28,14 +33,6 @@ vi.mock('react-router-dom', () => ({
   useNavigate: () => mockRouterNavigate,
 }));
 
-// useOpenMonitorEvents (used by the Events button) reads the profile through
-// this hook independently of the `currentProfile` prop MontageMonitor takes.
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'profile-1', portalUrl: 'https://test', cgiUrl: 'https://test/cgi', apiUrl: 'https://test/api' },
-    settings: {},
-  }),
-}));
 
 vi.mock('sonner', () => ({
   toast: {
@@ -52,19 +49,10 @@ vi.mock('../../../services/download', () => ({
   downloadSnapshotFromElement: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: {
-    montageMonitor: vi.fn(),
-    videoPlayer: vi.fn(),
-    monitor: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3,
-  },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, montageMonitor: vi.fn(), videoPlayer: vi.fn(), monitor: vi.fn() } };
+});
 
 vi.mock('../../../lib/monitor/monitor-rotation', () => ({
   getMonitorAspectRatio: (width: number, height: number) =>
@@ -102,26 +90,6 @@ vi.mock('../../../hooks/useServerUrls', () => ({
     isMultiServer: false,
   }),
 }));
-
-// Partial: the hover preview this component can now wrap its player in pulls
-// in the stream lifecycle, which registers its resolver against this module on
-// import. A hand-listed mock drops that export and the whole file fails to
-// load rather than any one test failing.
-// The hover preview this component can now wrap its player in pulls in the
-// stream lifecycle, which registers a resolver against this module and
-// subscribes to the store. Keep the hand-written selector shape the tests
-// rely on, and add what the new import path needs.
-vi.mock('../../../stores/auth', () => {
-  const useAuthStore = Object.assign(
-    (selector: (state: { version: string }) => unknown) => selector({ version: '1.38.0' }),
-    { subscribe: () => () => {}, getState: () => ({ version: '1.38.0' }) },
-  );
-  return {
-    useAuthStore,
-    useAuthSlice: () => ({ version: '1.38.0' }),
-    registerAuthClientResolver: () => {},
-  };
-});
 
 vi.mock('../../../stores/notifications', () => {
   const state = { profileEvents: {} };
@@ -176,21 +144,19 @@ describe('MontageMonitor', () => {
       }),
     });
 
-    useSettingsStore.setState({
-      profileSettings: {
-        'profile-1': {
-          ...DEFAULT_SETTINGS,
-          viewMode: 'streaming',
-          streamScale: 50,
-          streamMaxFps: 5,
-        },
-      },
+    seedProfiles([makeProfile('profile-1')], {
+      settings: { 'profile-1': { viewMode: 'streaming', streamScale: 50, streamMaxFps: 5 } },
     });
 
     useMonitorSeenStore.setState({ profileWatermarks: {} });
     mockRouterNavigate.mockClear();
 
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('renders monitor name and status', async () => {
@@ -596,14 +562,14 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
   };
 
   beforeEach(() => {
-    useSettingsStore.setState({
-      profileSettings: { 'profile-1': { ...DEFAULT_SETTINGS, viewMode: 'streaming' } },
-    });
+    seedProfiles([makeProfile('profile-1')], { settings: { 'profile-1': { viewMode: 'streaming' } } });
     useMonitorSeenStore.setState({ profileWatermarks: {} });
   });
 
   afterEach(() => {
     (useNotificationStore.getState() as { profileEvents: Record<string, unknown[]> }).profileEvents = {};
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('announces the alarm to a screen reader, not only as a tint', async () => {

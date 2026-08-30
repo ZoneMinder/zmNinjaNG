@@ -1,15 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import React from 'react';
 import { useScopedMonitors } from '../useScopedMonitors';
-import { useProfileScope, type ProfileScope } from '../useProfileScope';
 import { useBandwidthSettings } from '../useBandwidthSettings';
 import { getMonitors } from '../../api/monitors';
-import { getSession } from '../../services/sessions';
 import { queryKeys } from '../../lib/query/query-keys';
-import { asProfileId } from '../../api/types';
+import { ALL_PROFILES_ID, asProfileId, type Profile } from '../../api/types';
+import type { ApiClient } from '../../api/client';
 import type { MonitorData } from '../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/monitors', () => ({
   getMonitors: vi.fn(),
@@ -24,24 +28,15 @@ vi.mock('@tanstack/react-query', async () => {
   return { ...actual, useQueries: useQueriesSpy };
 });
 
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-}));
-
-vi.mock('../useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-
+// useBandwidthSettings reads settings through the real useCurrentProfile,
+// which would require per-test profile settings scripting for one number;
+// kept as a direct mock (a plain data hook, not a store) since only its
+// numeric output matters to this suite's stagger assertions.
 vi.mock('../useBandwidthSettings', () => ({
   useBandwidthSettings: vi.fn(),
 }));
 
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
-}));
-
-const profileA = {
+const profileA: Profile = {
   id: asProfileId('profile-a'),
   name: 'Home',
   apiUrl: 'http://a/api',
@@ -51,7 +46,7 @@ const profileA = {
   createdAt: 0,
 };
 
-const profileB = {
+const profileB: Profile = {
   id: asProfileId('profile-b'),
   name: 'Work',
   apiUrl: 'http://b/api',
@@ -74,20 +69,14 @@ function createWrapper() {
   };
 }
 
-function mockScope(profiles: Array<typeof profileA>, mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
-  const scope =
-    mode === 'single'
-      ? { mode: 'single' as const, profile: profiles[0], profiles: [profiles[0]] as [typeof profileA], settings: {} }
-      : { mode: 'all' as const, profile: null, profiles, settings: {} };
-  vi.mocked(useProfileScope).mockReturnValue(scope as unknown as ProfileScope);
-}
-
-function sessionFor(p: typeof profileA) {
-  return {
-    profileId: p.id,
-    client: { profile: p.id } as unknown as import('../../api/client').ApiClient,
-    timezone: 'UTC',
-  };
+/** Seed the real profile store for the given scope and give each profile a
+ * distinguishable fake session client (getMonitors is mocked directly, so
+ * the client only needs to carry which profile it belongs to). */
+function setupScope(profiles: Profile[], mode: 'single' | 'all' = profiles.length === 1 ? 'single' : 'all') {
+  seedProfiles(profiles, { current: mode === 'single' ? profiles[0].id : ALL_PROFILES_ID });
+  for (const p of profiles) {
+    installApiClient(p.id, { profile: p.id } as unknown as ApiClient);
+  }
 }
 
 describe('useScopedMonitors', () => {
@@ -96,14 +85,15 @@ describe('useScopedMonitors', () => {
     vi.mocked(useBandwidthSettings).mockReturnValue({
       monitorStatusInterval: 20000,
     } as never);
-    vi.mocked(getSession).mockImplementation((id) => {
-      const p = [profileA, profileB].find((pr) => pr.id === id);
-      return sessionFor(p ?? profileA);
-    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('keeps colliding monitor ids distinct across profiles, tagged with the right profile', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
       return { monitors: [monitor('1', isA ? 'Front Door (A)' : 'Front Door (B)')] };
@@ -127,7 +117,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('surfaces one failing profile as a ProfileError while the other profile still renders its data', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     const failure = new Error('B is down');
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
@@ -148,7 +138,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('single-mode profile scope writes to the exact key useMonitors reads, so the cache entry is shared', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('42', 'Driveway')] });
 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -172,7 +162,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('is not loading once at least one profile has data, even if others are still pending', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     let resolveB: (v: { monitors: MonitorData[] }) => void = () => {};
     vi.mocked(getMonitors).mockImplementation(async (client) => {
       const isA = (client as unknown as { profile: string }).profile === profileA.id;
@@ -192,7 +182,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('refetchProfile(id) refetches only that profile', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
 
     const { result } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
@@ -219,7 +209,7 @@ describe('useScopedMonitors', () => {
     // merge lives inside combine, whose output QueriesObserver deep-diffs
     // against the previous combined result via replaceEqualDeep, reusing old
     // references for unchanged data.
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
 
     const { result, rerender } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
@@ -237,7 +227,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('fetches every profile in scope even when neither has ever authenticated this session (refs #337)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     // Neither profile has an auth slice at all - the state an All-mode
     // profile is in until something touches it this session. The old gate
     // (isAuthenticated) left it disabled forever, so its query never fired
@@ -254,7 +244,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('staggers each profile query refetchInterval so N profiles do not poll in a synchronized burst (W8)', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
 
     renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });
@@ -271,7 +261,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('poll:false leaves every profile query without an interval, so an app-wide consumer adds no polling', async () => {
-    mockScope([profileA, profileB]);
+    setupScope([profileA, profileB]);
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Mon')] });
 
     renderHook(() => useScopedMonitors({ poll: false }), { wrapper: createWrapper() });
@@ -287,7 +277,7 @@ describe('useScopedMonitors', () => {
   });
 
   it('refetchProfile still triggers a real network refetch under combine', async () => {
-    mockScope([profileA], 'single');
+    setupScope([profileA], 'single');
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [monitor('1', 'Front Door')] });
 
     const { result } = renderHook(() => useScopedMonitors(), { wrapper: createWrapper() });

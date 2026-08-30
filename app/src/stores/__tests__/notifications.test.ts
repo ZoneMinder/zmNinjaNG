@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { useNotificationStore, startEventPoller, resolvePollIntervalMs } from '../notifications';
 import { useProfileStore } from '../profile';
 import { stopAllEventPollers } from '../../services/eventPoller';
@@ -6,6 +10,9 @@ import { resetAllNotificationServices } from '../../services/notifications';
 import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../api/types';
 import { getBandwidthSettings } from '../../lib/zmninja-ng-constants';
 import type { ZMAlarmEvent, ConnectionState } from '../../types/notifications';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { markSessionActive, markAllSessionsInactive } from '../../services/session-flags';
 
 const mockService = {
   connect: vi.fn().mockResolvedValue(undefined),
@@ -34,32 +41,18 @@ vi.mock('../../services/eventPoller', () => ({
   stopAllEventPollers: vi.fn(),
 }));
 
-vi.mock('../auth', () => ({
-  useAuthStore: {
-    getState: vi.fn(() => ({
-      accessToken: 'access-token',
-      getFreshAccessToken: vi.fn().mockResolvedValue('fresh-token'),
-    })),
-    subscribe: vi.fn(() => vi.fn()),
-  },
-  getAuthSlice: vi.fn(() => ({ accessToken: 'access-token' })),
-  registerAuthClientResolver: vi.fn(),
-}));
-
-vi.mock('../settings', () => ({
-  useSettingsStore: {
-    getState: vi.fn(() => ({
-      getProfileSettings: vi.fn(() => ({ bandwidthMode: 'normal' })),
-    })),
-  },
-}));
-
+// The real profile store (already unmocked here) subscribes to the real auth
+// store's setState and logs through profileService/auth on its own
+// housekeeping; stub those too so seeding doesn't crash on an undefined
+// method, alongside the fields this store's own code calls.
 vi.mock('../../lib/logger', () => ({
   log: {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
     notifications: vi.fn(),
+    profileService: vi.fn(),
+    auth: vi.fn(),
   },
   LogLevel: {
     DEBUG: 0,
@@ -81,6 +74,9 @@ vi.mock('../../api/notifications', () => ({
 vi.mock('../../services/sessions', () => ({
   getSession: vi.fn(() => ({ client: {} })),
   registerSessionsGate: vi.fn(),
+  // Required by tests/profile-fixture.ts's resetProfileFixture(), which calls
+  // this unconditionally; this store never calls it itself.
+  dropAllSessions: vi.fn(),
 }));
 
 // services/pushNotifications.ts is only reachable dynamically from this store
@@ -116,6 +112,25 @@ describe('Notification Store', () => {
       _cleanupFunctions: {},
     });
     vi.clearAllMocks();
+
+    // Real profile/settings/auth stores (per the testing playbook): every
+    // profile id this file connects/polls for needs a settings bucket
+    // (bandwidthMode) and a session marked active, or getFreshAccessToken
+    // returns null before it even looks at the (fresh) seeded token.
+    // current: null matches this store's real dependency (useProfileStore)
+    // as it always ran here - no test seeds a real "current" profile, and
+    // connect()'s switch-teardown check (a truthy appCurrentProfileId that
+    // isn't the connecting profile) must stay dormant unless a test opts in.
+    seedProfiles(['profile-1', 'profile-A', 'profile-B'], { current: null });
+    markSessionActive('profile-1');
+    markSessionActive('profile-A');
+    markSessionActive('profile-B');
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+    markAllSessionsInactive();
   });
 
   it('returns default settings for a profile', () => {
@@ -323,7 +338,8 @@ describe('Notification Store', () => {
       password: 'secret',
     });
 
-    expect(await providers.getFreshAccessToken()).toBe('fresh-token');
+    // The real auth store's seeded (fresh) token for this profile.
+    expect(await providers.getFreshAccessToken()).toBe('access-profile-1');
 
     const imageUrl = providers.buildEventImageUrl(42, 'tok');
     expect(imageUrl).toContain('http://zm.local');
@@ -602,7 +618,8 @@ describe('Notification Store', () => {
     expect(id).toBe(profileId);
 
     expect(deps.getOnlyDetectedEvents()).toBe(true);
-    expect(await deps.getFreshAccessToken()).toBe('fresh-token');
+    // The real auth store's seeded (fresh) token for this profile.
+    expect(await deps.getFreshAccessToken()).toBe('access-profile-1');
     expect(deps.getPollIntervalMs()).toBe(30000);
 
     deps.onEvent(baseEvent);

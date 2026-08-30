@@ -7,15 +7,21 @@
  * currentProfile is null. Real profile/settings stores so the assertions are
  * on stored values.
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import AppLayout from '../AppLayout';
 import { useProfileStore } from '../../../stores/profile';
 import { useSettingsStore } from '../../../stores/settings';
 import { useKioskStore } from '../../../stores/kioskStore';
 import { ALL_PROFILES_ID, asProfileId, mintVirtualProfileId } from '../../../api/types';
 import type { Profile } from '../../../api/types';
+import { resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
 
@@ -30,12 +36,6 @@ vi.mock('../../../hooks/useReconcileDeletedMonitors', () => ({
   useReconcileDeletedMonitors: vi.fn(),
 }));
 vi.mock('../../../hooks/useTvMode', () => ({ useTvMode: () => ({ isTvMode: false }) }));
-// Which aggregate is active. Mutable so a test can swap All Servers for a
-// named group, whose bucket is a different key in the same settings map.
-let scopeMock: Record<string, unknown> = {};
-vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: () => scopeMock,
-}));
 
 vi.mock('../SidebarContent', () => ({ SidebarContent: () => <div /> }));
 vi.mock('../DeveloperNoticeBanner', () => ({ DeveloperNoticeBanner: () => null }));
@@ -84,14 +84,19 @@ describe('AppLayout in All Servers mode', () => {
   beforeEach(() => {
     checkIsTVMock.mockReset();
     checkIsTVMock.mockResolvedValue(false);
-    scopeMock = { mode: 'all', profiles: [], aggregateId: ALL_PROFILES_ID, aggregateName: null };
     useSettingsStore.setState({ profileSettings: {} });
     useProfileStore.setState({
       profiles: [profile('profile-1', 'Home'), profile('profile-2', 'Office')],
       currentProfileId: ALL_PROFILES_ID,
       virtualProfiles: [],
+      isInitialized: true,
     });
     useKioskStore.setState({ isLocked: false, previousInsomniaState: false });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('persists a sidebar collapse into the ALL bucket', () => {
@@ -136,7 +141,6 @@ describe('AppLayout in All Servers mode', () => {
   it("remembers the last route in the active group's bucket, not the ALL sentinel's", () => {
     const group = mintVirtualProfileId();
     useSettingsStore.getState().updateProfileSettings(ALL_PROFILES_ID, { lastRoute: '/events' });
-    scopeMock = { mode: 'all', profiles: [], aggregateId: group, aggregateName: 'Backyard' };
     useProfileStore.setState({
       currentProfileId: group,
       virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [asProfileId('profile-1')] }],

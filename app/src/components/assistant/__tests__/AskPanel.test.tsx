@@ -11,10 +11,17 @@
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
 import { NINJII_LOGO_URL } from '../../../lib/assistant/ninjii-logo';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import type { ProfileSettings } from '../../../stores/settings';
 
 const mockLanguage = { current: 'en' };
 vi.mock('react-i18next', () => ({
@@ -48,43 +55,13 @@ vi.mock('../../../lib/platform', () => ({
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
-const mockBackend = { current: 'on-device' };
-const mockOllamaModel = { current: '' };
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'p1', timezone: 'UTC' },
-    settings: {
-      assistantModelId: 'test-model',
-      get assistantBackend() { return mockBackend.current; },
-      get assistantOllamaModel() { return mockOllamaModel.current; },
-      assistantOllamaBaseUrl: 'http://zm:11434/v1',
-      // Event result cards read this surface toggle (refs #270); previews off
-      // keeps these tests about the cards themselves.
-      hoverPreview: { assistant: false },
-    },
-  }),
-  // Only read in All mode (refs #337); single mode's isAllMode is false so
-  // this is never actually consulted, but it's called unconditionally.
-  useProfileById: () => ({ profile: null, settings: {} }),
-}));
-// null: useProfileScope's real return for single mode (see its own doc
-// comment) - AskPanel's isAllMode check must see it that way, not the real
-// hook, which would otherwise pull in stores/profile.ts's whole dependency
-// chain into this unit test (refs #337, same rationale as the mocks above).
-vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: () => null,
-}));
 // The warmup effect (refs #261) resolves the stored API key and fires
 // warmOllamaModel on mount for the Ollama backend; both are stubbed so the
 // test controls when the warmup settles and no request leaves jsdom.
-vi.mock('../../../lib/security/secureStorage', () => ({ getSecureValue: vi.fn().mockResolvedValue(null) }));
 const warmResolvers: Array<(v: boolean) => void> = [];
 vi.mock('../../../lib/assistant/providers/openai', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   warmOllamaModel: vi.fn(() => new Promise<boolean>((resolve) => warmResolvers.push(resolve))),
-}));
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: null, isFresh: false }),
 }));
 const navigateMock = vi.fn();
 vi.mock('../useAssistantHost', () => ({
@@ -107,12 +84,34 @@ vi.mock('../../events/EventThumbnail', () => ({
   EventThumbnail: ({ alt }: { alt?: string }) => <div data-testid="assistant-card-thumbnail-stub">{alt}</div>,
 }));
 
+// Seeds profile 'p1' (current) with the settings the tests below vary:
+// backend, ollama model. Event result cards read hoverPreview.assistant
+// (refs #270); off keeps these tests about the cards themselves.
+function seedAsk(overrides: Partial<ProfileSettings> = {}) {
+  seedProfiles(['p1'], {
+    settings: {
+      p1: {
+        assistantModelId: 'test-model',
+        assistantBackend: 'on-device',
+        assistantOllamaModel: '',
+        assistantOllamaBaseUrl: 'http://zm:11434/v1',
+        hoverPreview: { assistant: false } as never,
+        ...overrides,
+      },
+    },
+  });
+}
+
 describe('AskPanel', () => {
   beforeEach(() => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
-    mockBackend.current = 'on-device';
-    mockOllamaModel.current = '';
     warmResolvers.length = 0;
+    seedAsk();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   // Single mode: no pinned-profile banner or picker at all (refs #337).
@@ -150,8 +149,7 @@ describe('AskPanel', () => {
   // chat says so while it runs (refs #261): without the line, a cold server's
   // ~36s load looked like a hang or hid behind a misleading "Thinking".
   it('shows the model-loading line while the Ollama warmup runs, then hides it', async () => {
-    mockBackend.current = 'ollama';
-    mockOllamaModel.current = 'qwen3:8b';
+    seedAsk({ assistantBackend: 'ollama', assistantOllamaModel: 'qwen3:8b' });
 
     render(<AskPanel />);
 
@@ -381,14 +379,14 @@ describe('AskPanel', () => {
   describe('language notice', () => {
     it('warns when the app language is not English and the model runs on-device', () => {
       mockLanguage.current = 'de';
-      mockBackend.current = 'on-device';
+      seedAsk({ assistantBackend: 'on-device' });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
     });
 
     it('stays hidden in English', () => {
       mockLanguage.current = 'en-GB';
-      mockBackend.current = 'on-device';
+      seedAsk({ assistantBackend: 'on-device' });
       render(<AskPanel />);
       expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
     });
@@ -400,14 +398,14 @@ describe('AskPanel', () => {
     // silently in another language whatever model is answering.
     it('warns on Ollama too, since the English-only machinery is not the model', () => {
       mockLanguage.current = 'zh';
-      mockBackend.current = 'ollama';
+      seedAsk({ assistantBackend: 'ollama' });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-english-notice')).toBeInTheDocument();
     });
 
     it('stays hidden in English on Ollama', () => {
       mockLanguage.current = 'en';
-      mockBackend.current = 'ollama';
+      seedAsk({ assistantBackend: 'ollama' });
       render(<AskPanel />);
       expect(screen.queryByTestId('assistant-english-notice')).not.toBeInTheDocument();
     });
@@ -418,7 +416,7 @@ describe('AskPanel', () => {
   // on-device backend, naming the active backend via assistantBackendLabel.
   describe('system-model note', () => {
     it('shows the note when the active backend is a system model (apple)', () => {
-      mockBackend.current = 'apple';
+      seedAsk({ assistantBackend: 'apple' });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent('assistant.system_model_note');
     });
@@ -427,7 +425,7 @@ describe('AskPanel', () => {
     // (issue #270), so sending an Android user there is advice they cannot take.
     it('points an Android system-model user at Ollama, never llama.cpp', () => {
       mockIsIOS.current = false;
-      mockBackend.current = 'gemini-nano';
+      seedAsk({ assistantBackend: 'gemini-nano' });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent(
         'assistant.system_model_note:settings.assistant.backend_ollama',
@@ -436,7 +434,7 @@ describe('AskPanel', () => {
 
     it('still points an iOS system-model user at the on-device llama.cpp backend', () => {
       mockIsIOS.current = true;
-      mockBackend.current = 'apple';
+      seedAsk({ assistantBackend: 'apple' });
       render(<AskPanel />);
       expect(screen.getByTestId('assistant-system-model-note')).toHaveTextContent(
         'assistant.system_model_note:settings.assistant.backend_download_model',
@@ -444,13 +442,13 @@ describe('AskPanel', () => {
     });
 
     it('stays hidden on the Ollama backend', () => {
-      mockBackend.current = 'ollama';
+      seedAsk({ assistantBackend: 'ollama' });
       render(<AskPanel />);
       expect(screen.queryByTestId('assistant-system-model-note')).not.toBeInTheDocument();
     });
 
     it('stays hidden on the on-device (llama.cpp/WebGPU) backend', () => {
-      mockBackend.current = 'on-device';
+      seedAsk({ assistantBackend: 'on-device' });
       render(<AskPanel />);
       expect(screen.queryByTestId('assistant-system-model-note')).not.toBeInTheDocument();
     });

@@ -1,16 +1,17 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { SidebarContent } from '../SidebarContent';
 import { useDeveloperNoticeStore } from '../../../stores/developerNotices';
+import { resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 // The logo is a png asset; give it a stub so the import resolves in jsdom.
-// The permission probe is a React Query call; these suites render without a
-// provider and are not about permissions (refs #344).
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: undefined, isLoading: false }),
-}));
-
 vi.mock('../../../../assets/logo.png', () => ({ default: 'logo.png' }));
 
 // Side-effecting hooks the sidebar pulls in; stub them to keep the render pure.
@@ -42,10 +43,13 @@ vi.mock('react-i18next', () => ({
 }));
 
 function renderSidebar() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MemoryRouter>
-      <SidebarContent />
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <SidebarContent />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -57,6 +61,11 @@ describe('SidebarContent developer-notice nav item', () => {
       deletedIds: [],
       showNotices: true,
     });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows the developer-notice nav item when showNotices is true', () => {

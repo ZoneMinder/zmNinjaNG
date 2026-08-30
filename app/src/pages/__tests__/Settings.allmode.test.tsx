@@ -1,43 +1,21 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import Settings from '../Settings';
-import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../hooks/useProfileScope';
-import { asProfileId, ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
-import { DEFAULT_SETTINGS } from '../../stores/settings';
+import { ALL_PROFILES_ID, mintVirtualProfileId } from '../../api/types';
+import { DEFAULT_SETTINGS, useSettingsStore } from '../../stores/settings';
+import { useProfileStore } from '../../stores/profile';
 import { getMonitors } from '../../api/monitors';
+import { seedProfiles, resetProfileFixture, fakeApiClient, makeProfile } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
 
-const updateProfileSettings = vi.fn();
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../api/monitors', () => ({ getMonitors: vi.fn() }));
-vi.mock('../../services/sessions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../services/sessions')>()),
-  getSession: () => ({ client: {} }) as never,
-}));
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-// What the ALL bucket holds for the All Servers Streaming Mode. 'per-server'
-// is its default: each server keeps its own Streaming Mode.
-let allModeViewMode = 'per-server';
-// Everything except the store itself stays REAL: the All Servers performance
-// section reads DEFAULT_SETTINGS to decide what "back to default" means, and a
-// hand-written stub of that would assert against the stub rather than against
-// what the app ships.
-vi.mock('../../stores/settings', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../stores/settings')>()),
-  useSettingsStore: (
-    selector: (state: { updateProfileSettings: typeof updateProfileSettings }) => unknown
-  ) => selector({ updateProfileSettings }),
-}));
 // Interpolation values are appended so a test can assert which aggregate a
 // section named, not just which key it used.
 vi.mock('react-i18next', () => ({
@@ -84,15 +62,12 @@ vi.mock('../../components/settings/AdvancedSection', () => ({
   AdvancedSection: () => null,
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
-const baseSettings = {
-  ...DEFAULT_SETTINGS,
-  viewMode: 'snapshot', tvMode: false, dateFormat: 'MMM d, yyyy', timeFormat: '12h',
-  customDateFormat: '', customTimeFormat: '', thumbnailFallbackChain: [], hoverPreview: {},
-  hoverPreviewPlaybackRate: 200,
-};
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
+function setSettings(id: string, overrides: Record<string, unknown>) {
+  useSettingsStore.getState().updateProfileSettings(id, overrides);
+}
 
 // LiveStreamingSection reads the monitor count through React Query to explain
 // its Streaming Mode recommendation (refs #385), so the page needs a client.
@@ -104,21 +79,17 @@ const queryWrapper = ({ children }: { children: React.ReactNode }) => (
 
 describe('Settings page - All mode two-tier picker (refs #337)', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    allModeViewMode = 'per-server';
-    // mockImplementation, not mockReturnValue: allModeViewMode is mutated
-    // between renders inside a test, and a captured object would not see it.
-    vi.mocked(useCurrentProfile).mockImplementation(() => ({
-      currentProfile: null, isAllMode: true, hasProfile: false,
-      settings: { ...baseSettings, allModeViewMode } as never,
-    }));
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: baseSettings as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
+    seedProfiles([profileA, profileB], {
+      current: ALL_PROFILES_ID,
+      settings: { [profileA.id]: { viewMode: 'snapshot' }, [profileB.id]: { viewMode: 'snapshot' } },
     });
+    installApiClient(profileA.id, fakeApiClient({ '/servers.json': { servers: [] } }));
+    installApiClient(profileB.id, fakeApiClient({ '/servers.json': { servers: [] } }));
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('Streaming Mode reason follows the picked server, not the aggregate (refs #385)', async () => {
@@ -142,26 +113,20 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     await screen.findByTestId('settings-tv-mode');
     fireEvent.click(screen.getByTestId('settings-tv-mode'));
 
-    expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, { tvMode: true });
+    expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).tvMode).toBe(true);
   });
 
   // The other side of the same helper: single mode still writes the real
   // profile's own bucket, so the aggregate resolution never leaks into it.
   it('AppearanceSection writes to the real profile in single mode', async () => {
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: profileA, isAllMode: false, hasProfile: true,
-      settings: baseSettings as never,
-    });
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
-    });
+    useProfileStore.setState({ currentProfileId: profileA.id });
 
     render(<Settings />, { wrapper: queryWrapper });
 
     await screen.findByTestId('settings-tv-mode');
     fireEvent.click(screen.getByTestId('settings-tv-mode'));
 
-    expect(updateProfileSettings).toHaveBeenCalledWith(profileA.id, { tvMode: true });
+    expect(useSettingsStore.getState().getProfileSettings(profileA.id).tvMode).toBe(true);
   });
 
   it('shows the picker above the server-scoped block, defaulted to the first profile', () => {
@@ -178,9 +143,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-        allModeViewMode: 'streaming',
-      });
+      expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeViewMode).toBe('streaming');
     });
 
     it('imposes snapshot on every server when picked', () => {
@@ -188,20 +151,16 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-snapshot'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-        allModeViewMode: 'snapshot',
-      });
+      expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeViewMode).toBe('snapshot');
     });
 
     it('hands every server back its own mode when "Per server" is picked', () => {
-      allModeViewMode = 'streaming';
+      setSettings(ALL_PROFILES_ID, { allModeViewMode: 'streaming' });
       render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-per-server'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-        allModeViewMode: 'per-server',
-      });
+      expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeViewMode).toBe('per-server');
     });
 
     // The row's description is what tells the user which state they are in;
@@ -213,7 +172,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       ).toBeInTheDocument();
       unmount();
 
-      allModeViewMode = 'snapshot';
+      setSettings(ALL_PROFILES_ID, { allModeViewMode: 'snapshot' });
       render(<Settings />, { wrapper: queryWrapper });
       expect(
         screen.getByText('settings.all_mode_streaming_snapshot_desc')
@@ -232,13 +191,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     });
 
     it('is absent in single mode, where Streaming Mode is per-profile', () => {
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: profileA, isAllMode: false, hasProfile: true,
-        settings: baseSettings as never,
-      });
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
-      });
+      useProfileStore.setState({ currentProfileId: profileA.id });
 
       render(<Settings />, { wrapper: queryWrapper });
 
@@ -251,27 +204,18 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   // the ALL bucket and that it stays out of single mode entirely (refs #337).
   describe('All Servers performance', () => {
     it('writes a reset knob back to the ALL bucket', () => {
-      vi.mocked(useCurrentProfile).mockImplementation(() => ({
-        currentProfile: null, isAllMode: true, hasProfile: false,
-        settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
-      }));
+      setSettings(ALL_PROFILES_ID, { allModeMaxStreams: 2 });
       render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(ALL_PROFILES_ID, {
-        allModeMaxStreams: DEFAULT_SETTINGS.allModeMaxStreams,
-      });
+      expect(useSettingsStore.getState().getProfileSettings(ALL_PROFILES_ID).allModeMaxStreams).toBe(
+        DEFAULT_SETTINGS.allModeMaxStreams
+      );
     });
 
     it('is absent in single mode, where none of these guardrails apply', () => {
-      vi.mocked(useCurrentProfile).mockReturnValue({
-        currentProfile: profileA, isAllMode: false, hasProfile: true,
-        settings: baseSettings as never,
-      });
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'single', profile: profileA, profiles: [profileA], settings: baseSettings as never,
-      });
+      useProfileStore.setState({ currentProfileId: profileA.id });
 
       render(<Settings />, { wrapper: queryWrapper });
 
@@ -283,13 +227,10 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
   // every write these sections make lands under the group's id, never the ALL
   // sentinel's (refs #337).
   describe('a named group', () => {
-    const GROUP = mintVirtualProfileId();
+    const GROUP = { id: mintVirtualProfileId(), name: 'Backyard', memberProfileIds: [profileA.id, profileB.id] };
 
     beforeEach(() => {
-      vi.mocked(useProfileScope).mockReturnValue({
-        mode: 'all', aggregateId: GROUP, aggregateName: 'Backyard', profile: null,
-        profiles: [profileA, profileB], settings: baseSettings as never,
-      });
+      useProfileStore.setState({ virtualProfiles: [GROUP], currentProfileId: GROUP.id });
     });
 
     it('writes a view-level setting to the group bucket', async () => {
@@ -298,7 +239,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
       await screen.findByTestId('settings-tv-mode');
       fireEvent.click(screen.getByTestId('settings-tv-mode'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, { tvMode: true });
+      expect(useSettingsStore.getState().getProfileSettings(GROUP.id).tvMode).toBe(true);
     });
 
     it('writes the imposed Streaming Mode to the group bucket', () => {
@@ -306,9 +247,7 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
 
       fireEvent.click(screen.getByTestId('all-mode-streaming-option-streaming'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, {
-        allModeViewMode: 'streaming',
-      });
+      expect(useSettingsStore.getState().getProfileSettings(GROUP.id).allModeViewMode).toBe('streaming');
     });
 
     // Both aggregate sections are titled after the aggregate they govern, so
@@ -325,17 +264,14 @@ describe('Settings page - All mode two-tier picker (refs #337)', () => {
     });
 
     it('writes a performance knob to the group bucket', () => {
-      vi.mocked(useCurrentProfile).mockImplementation(() => ({
-        currentProfile: null, isAllMode: true, hasProfile: false,
-        settings: { ...baseSettings, allModeViewMode, allModeMaxStreams: 2 } as never,
-      }));
+      setSettings(GROUP.id, { allModeMaxStreams: 2 });
       render(<Settings />, { wrapper: queryWrapper });
 
       fireEvent.click(screen.getByTestId('all-mode-max-streams-reset'));
 
-      expect(updateProfileSettings).toHaveBeenCalledWith(GROUP, {
-        allModeMaxStreams: DEFAULT_SETTINGS.allModeMaxStreams,
-      });
+      expect(useSettingsStore.getState().getProfileSettings(GROUP.id).allModeMaxStreams).toBe(
+        DEFAULT_SETTINGS.allModeMaxStreams
+      );
     });
   });
 });

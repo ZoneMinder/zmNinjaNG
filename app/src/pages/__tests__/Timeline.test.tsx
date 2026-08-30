@@ -1,16 +1,22 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Timeline from '../Timeline';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { ALL_PROFILES_ID } from '../../api/types';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const useTimelineDataMock = vi.fn();
 const useScopedTimelineEventsMock = vi.fn();
-const useProfileScopeMock = vi.fn();
 
-// The permission probe is a React Query call; these suites render without a
-// provider and are not about permissions (refs #344).
-vi.mock('../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: undefined, isLoading: false }),
-}));
+// usePermissions and useProfileScope now run for real, against the seeded
+// profile/settings/auth stores (refs the real-store migration). The
+// permission probe resolves without a network call when the seeded profile
+// has no username (fetchAccountPermissions short-circuits to
+// UNRESTRICTED_PERMISSIONS), so no route needs scripting here.
 
 vi.mock('../../hooks/useTimelineData', () => ({
   useTimelineData: (opts: unknown) => useTimelineDataMock(opts),
@@ -18,10 +24,6 @@ vi.mock('../../hooks/useTimelineData', () => ({
 vi.mock('../../hooks/useScopedTimelineEvents', () => ({
   useScopedTimelineEvents: (opts: unknown) => useScopedTimelineEventsMock(opts),
 }));
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
-}));
-
 vi.mock('../../hooks/useTimelineFilters', () => ({
   useTimelineFilters: () => ({
     selectedMonitorIds: [],
@@ -160,27 +162,40 @@ function defaultScoped() {
   };
 }
 
+function renderTimeline() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Timeline />
+    </QueryClientProvider>
+  );
+}
+
 describe('Timeline Page', () => {
   beforeEach(() => {
     scopedTagsByKey.mockReset();
     scopedTagsByKey.mockReturnValue(new Map());
     useTimelineDataMock.mockReset();
     useScopedTimelineEventsMock.mockReset();
-    useProfileScopeMock.mockReset();
     navigateMock.mockClear();
     useTimelineDataMock.mockReturnValue(defaultSingle());
     useScopedTimelineEventsMock.mockReturnValue(defaultScoped());
   });
 
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
   it('single mode renders via useTimelineData with no aggregation', () => {
-    useProfileScopeMock.mockReturnValue({ mode: 'single', profile: { id: 'profile-1' }, profiles: [{ id: 'profile-1' }], settings: {} });
+    seedProfiles(['profile-1']);
     useTimelineDataMock.mockReturnValue({
       ...defaultSingle(),
       enabledMonitors: [{ Monitor: { Id: '1', Name: 'Front Door' } }],
       allTimelineEvents: [{ id: 'e1', monitorId: '1', startMs: 1000, endMs: 2000, cause: 'Motion', alarmRatio: 0.5, notes: '' }],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     expect(screen.getByTestId('timeline-canvas-event-count')).toHaveTextContent('1');
     expect(screen.getByTestId('timeline-monitor-row-1')).toHaveTextContent('Front Door');
@@ -188,15 +203,10 @@ describe('Timeline Page', () => {
   });
 
   it('All mode aggregates both profiles\' bands via useScopedTimelineEvents, each chip\'d with its owning profile', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     useScopedTimelineEventsMock.mockReturnValue({
       ...defaultScoped(),
       enabledMonitors: [
@@ -209,7 +219,7 @@ describe('Timeline Page', () => {
       ],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     expect(screen.getByTestId('timeline-canvas-event-count')).toHaveTextContent('2');
     // All mode rows/events key by the composite `${profileId}:${monitorId}`
@@ -223,15 +233,10 @@ describe('Timeline Page', () => {
   });
 
   it('All mode keeps colliding monitor ids across profiles as distinct rows with events attributed correctly (refs #337 I4)', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     useScopedTimelineEventsMock.mockReturnValue({
       ...defaultScoped(),
       enabledMonitors: [
@@ -244,7 +249,7 @@ describe('Timeline Page', () => {
       ],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     // Two distinct rows despite the shared bare monitor id "3".
     expect(screen.getByTestId('timeline-monitor-row-profile-1:3')).toHaveTextContent('Front Door');
@@ -255,15 +260,10 @@ describe('Timeline Page', () => {
   });
 
   it('All mode opens the correct owning profile\'s route for colliding event ids (refs #337 I5)', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     useScopedTimelineEventsMock.mockReturnValue({
       ...defaultScoped(),
       enabledMonitors: [
@@ -276,7 +276,7 @@ describe('Timeline Page', () => {
       ],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     // Click the SECOND event (profile-2's "dup1"), then open it.
     fireEvent.click(screen.getByTestId('timeline-canvas-event-dup1-1'));
@@ -286,15 +286,10 @@ describe('Timeline Page', () => {
   });
 
   it('All mode shows the tags of the profile that owns the clicked event (refs #337 D4)', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     // Both servers have an event "dup1" and both have tagged it - differently.
     scopedTagsByKey.mockReturnValue(
       new Map([
@@ -314,7 +309,7 @@ describe('Timeline Page', () => {
       ],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     // Click the SECOND event (profile-2's "dup1"): it must show ITS server's
     // tag, not the other server's, and not the empty list All mode used to
@@ -324,15 +319,10 @@ describe('Timeline Page', () => {
   });
 
   it('a scrubber tap on a colliding event id opens the tapped event\'s OWN owning profile\'s route (refs #337 Task 3)', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     useScopedTimelineEventsMock.mockReturnValue({
       ...defaultScoped(),
       enabledMonitors: [
@@ -345,7 +335,7 @@ describe('Timeline Page', () => {
       ],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     // Tap the SECOND event's scrubber stand-in (profile-2's "dup1") directly
     // - never via handleOpenEvent's popover-selection path.
@@ -355,15 +345,10 @@ describe('Timeline Page', () => {
   });
 
   it('All mode shows a retry-able error strip for a failed profile while the healthy one still renders bands', () => {
-    useProfileScopeMock.mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [
-        { id: 'profile-1', name: 'Home', timezone: 'UTC' },
-        { id: 'profile-2', name: 'Office', timezone: 'America/New_York' },
-      ],
-      settings: {},
-    });
+    seedProfiles([
+      makeProfile('profile-1', { name: 'Home', timezone: 'UTC' }),
+      makeProfile('profile-2', { name: 'Office', timezone: 'America/New_York' }),
+    ], { current: ALL_PROFILES_ID });
     useScopedTimelineEventsMock.mockReturnValue({
       ...defaultScoped(),
       enabledMonitors: [
@@ -375,7 +360,7 @@ describe('Timeline Page', () => {
       errors: [{ profileId: 'profile-2', profileName: 'Office', error: new Error('down') }],
     });
 
-    render(<Timeline />);
+    renderTimeline();
 
     expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
     expect(screen.getByTestId('timeline-canvas-event-count')).toHaveTextContent('1');

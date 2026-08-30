@@ -1,6 +1,19 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Monitors from '../Monitors';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+// usePermissions probes this on mount; the account-permissions boundary
+// itself isn't this suite's subject, so it's stubbed to a harmless verdict.
+vi.mock('../../api/users', () => ({
+  fetchAccountPermissions: vi.fn().mockResolvedValue({ system: 'Edit' }),
+}));
 
 // Its own tests cover the button's two gates; stubbing keeps useAssistantEnabled's
 // settings-store reads out of this file's mock surface, as with the analysis
@@ -11,19 +24,9 @@ vi.mock('../../components/assistant/NinjiiToolbarButton', () => ({
 
 
 const useScopedMonitorsMock = vi.fn();
-const useCurrentProfileMock = vi.fn();
-const useProfileScopeMock = vi.fn();
 
 vi.mock('../../hooks/useScopedMonitors', () => ({
   useScopedMonitors: () => useScopedMonitorsMock(),
-}));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => useCurrentProfileMock(),
-}));
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => useProfileScopeMock(),
 }));
 
 vi.mock('../../hooks/useGroupFilter', () => ({
@@ -66,28 +69,6 @@ vi.mock('../../components/monitors/MonitorCard', () => ({
   ),
 }));
 
-vi.mock('../../stores/profile', () => ({
-  // `profiles` is read by usePermissions for the account name (refs #344).
-  useProfileStore: (
-    selector: (state: { currentProfileId: string; profiles: { id: string; username?: string }[] }) => unknown,
-  ) => selector({ currentProfileId: 'profile-1', profiles: [{ id: 'profile-1', username: 'admin' }] }),
-}));
-
-// The permission probe is a React Query call; this suite renders without a
-// QueryClientProvider and is not about permissions (refs #344).
-vi.mock('../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: { system: 'Edit' }, isLoading: false }),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: (selector: (state: { updateProfileSettings: (...args: unknown[]) => void }) => unknown) =>
-    selector({ updateProfileSettings: vi.fn() }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthSlice: () => ({ version: '1.38.0' }),
-}));
-
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, params?: Record<string, unknown>) => {
@@ -117,33 +98,40 @@ const SETTINGS = {
   monitorsGroupByServer: false,
 };
 
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Monitors />
+    </QueryClientProvider>
+  );
+}
+
 function singleProfile() {
-  useCurrentProfileMock.mockReturnValue({
-    currentProfile: { id: 'profile-1', name: 'Home' },
-    settings: SETTINGS,
-    isAllMode: false,
+  seedProfiles([makeProfile('profile-1', { name: 'Home' })], {
+    current: 'profile-1',
+    settings: { 'profile-1': SETTINGS },
   });
-  useProfileScopeMock.mockReturnValue({ profiles: [{ id: 'profile-1' }] });
 }
 
 function allMode(profileCount: number) {
-  useCurrentProfileMock.mockReturnValue({
-    currentProfile: null,
-    settings: SETTINGS,
-    isAllMode: true,
-  });
-  useProfileScopeMock.mockReturnValue({
-    profiles: Array.from({ length: profileCount }, (_, i) => ({ id: `profile-${i + 1}` })),
+  const profiles = Array.from({ length: profileCount }, (_, i) => makeProfile(`profile-${i + 1}`));
+  seedProfiles(profiles, {
+    current: ALL_PROFILES_ID,
+    settings: { [ALL_PROFILES_ID]: SETTINGS },
   });
 }
 
 describe('Monitors Page', () => {
   beforeEach(() => {
     useScopedMonitorsMock.mockReset();
-    useCurrentProfileMock.mockReset();
-    useProfileScopeMock.mockReset();
     useScopedMonitorNewEventsMock.mockReset();
     useScopedMonitorNewEventsMock.mockReturnValue({ counts: {}, newest: {} });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows empty state when no monitors are available', () => {
@@ -155,7 +143,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitors-empty-state')).toBeInTheDocument();
     expect(screen.getByTestId('monitors-empty-state')).toHaveTextContent('monitors.no_cameras');
@@ -173,7 +161,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitor-grid')).toBeInTheDocument();
     expect(screen.getByTestId('monitor-card-1')).toHaveTextContent('Front Door');
@@ -192,7 +180,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitor-card-1')).toHaveTextContent('Front Door');
     expect(screen.getByTestId('monitor-card-2')).toHaveTextContent('Lobby Cam');
@@ -216,7 +204,7 @@ describe('Monitors Page', () => {
       newest: { 'profile-1:1': 'a', 'profile-2:1': 'b' },
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitor-new-events-badge-profile-1-1')).toHaveTextContent('2');
     expect(screen.getByTestId('monitor-new-events-badge-profile-2-1')).toHaveTextContent('7');
@@ -237,7 +225,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
     expect(screen.getByTestId('monitor-card-1')).toHaveTextContent('Front Door');
@@ -261,7 +249,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitor-card-2')).toHaveTextContent('Lobby Cam');
     expect(screen.queryByTestId('profile-error-strip-profile-2')).not.toBeInTheDocument();
@@ -280,7 +268,7 @@ describe('Monitors Page', () => {
       refetchProfile,
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('monitors-all-failed-state')).toBeInTheDocument();
     expect(screen.getByTestId('monitors-all-failed-state')).toHaveTextContent('monitors.all_failed_title');
@@ -299,7 +287,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     const strip = screen.getByTestId('profile-error-strip-profile-1');
     expect(strip).not.toHaveTextContent('Home:');
@@ -318,7 +306,7 @@ describe('Monitors Page', () => {
       refetchProfile: vi.fn(),
     });
 
-    render(<Monitors />);
+    renderPage();
 
     expect(screen.getByTestId('profile-error-strip-profile-2')).toHaveTextContent('Office:');
   });

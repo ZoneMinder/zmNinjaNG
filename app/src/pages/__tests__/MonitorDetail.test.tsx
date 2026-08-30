@@ -8,19 +8,27 @@
  * unknown profileId.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, cleanup } from '@testing-library/react';
 import MonitorDetail from '../MonitorDetail';
+import { getSession, tryGetCurrentSession } from '../../services/sessions';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
+// The real session registry (backed by the seeded profile store and
+// fake-store-gates), spied through vi.mock's importOriginal so both exports
+// still call through - these tests prove which resolver MonitorDetail
+// actually calls rather than reading back a hand-built mock's own answer.
+vi.mock('../../services/sessions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/sessions')>();
+  return { ...actual, getSession: vi.fn(actual.getSession), tryGetCurrentSession: vi.fn(actual.tryGetCurrentSession) };
+});
 
 const h = vi.hoisted(() => ({
   routeParams: { id: '1' } as Record<string, string | undefined>,
   locationState: {} as Record<string, unknown>,
-  settings: {
-    monitorDetailFeedFit: 'contain',
-    monitorDetailCycleSeconds: 0,
-    showProtocolLabel: false,
-    insomnia: false,
-    forceDisableMultiPort: false,
-  } as Record<string, unknown>,
   zoomReset: vi.fn(),
 }));
 
@@ -34,16 +42,8 @@ vi.mock('../../hooks/useMainScrollRestoration', () => ({
   useMainScrollRestoration: () => {},
 }));
 
-const getSessionMock = vi.fn((id: string) => ({ client: `client-${id}`, profileId: id }));
-const tryGetCurrentSessionMock = vi.fn(() => ({ client: 'client-current', profileId: 'profile-1' }));
-vi.mock('../../services/sessions', () => ({
-  getSession: (id: string) => getSessionMock(id),
-  tryGetCurrentSession: () => tryGetCurrentSessionMock(),
-  // stores/profile.ts (pulled in transitively, real in this test) registers
-  // its gate at module load - the mock needs the export even though this
-  // suite never exercises it.
-  registerSessionsGate: vi.fn(),
-}));
+const getSessionSpy = vi.mocked(getSession);
+const tryGetCurrentSessionSpy = vi.mocked(tryGetCurrentSession);
 
 const useQueryMock = vi.fn();
 vi.mock('@tanstack/react-query', () => ({
@@ -57,24 +57,6 @@ vi.mock('../../api/monitors', () => ({
   updateMonitor: vi.fn(),
 }));
 vi.mock('../../api/zones', () => ({ getZones: vi.fn() }));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  // The scroll pad reads the remembered setting through this one; the page
-  // itself only ever calls useProfileById.
-  useCurrentProfile: () => ({ settings: h.settings }),
-  useProfileById: (profileId?: string) => ({
-    profile: profileId === 'unknown-profile'
-      ? null
-      : { id: profileId ?? 'profile-1', portalUrl: 'https://portal.test', apiUrl: 'https://api.test' },
-    settings: h.settings,
-  }),
-}));
-
-const updateProfileSettings = vi.fn();
-vi.mock('../../stores/settings', () => ({
-  useSettingsStore: (sel: (s: { updateProfileSettings: typeof updateProfileSettings }) => unknown) =>
-    sel({ updateProfileSettings }),
-}));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('../../services/download', () => ({ downloadSnapshotFromElement: vi.fn() }));
@@ -151,15 +133,24 @@ const monitor = {
 describe('MonitorDetail All-mode deep route (refs #337)', () => {
   beforeEach(() => {
     h.locationState = {};
-    getSessionMock.mockClear();
-    tryGetCurrentSessionMock.mockClear();
+    getSessionSpy.mockClear();
+    tryGetCurrentSessionSpy.mockClear();
     useQueryMock.mockReset();
     liveMonitorPlayerMock.mockClear();
     h.zoomReset.mockClear();
+    seedProfiles(['profile-1', 'profile-b'], { current: 'profile-1' });
   });
 
   afterEach(() => {
+    // The suite-wide afterEach(cleanup) in tests/setup.ts runs AFTER this one
+    // (afterEach hooks run LIFO), so without an explicit unmount here,
+    // resetProfileFixture's store writes (logoutAll, profiles: []) would
+    // synchronously re-render the still-mounted page against reset state -
+    // routeProfileId's branch in resolveClient would flip and throw.
+    cleanup();
     h.routeParams = { id: '1' };
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches the monitor via the route profileId\'s client and query key', () => {
@@ -180,8 +171,8 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     render(<MonitorDetail />);
 
     expect(seenKeys).toContainEqual(['monitor', 'profile-b', '1']);
-    expect(getSessionMock).toHaveBeenCalledWith('profile-b');
-    expect(tryGetCurrentSessionMock).not.toHaveBeenCalled();
+    expect(getSessionSpy).toHaveBeenCalledWith('profile-b');
+    expect(tryGetCurrentSessionSpy).not.toHaveBeenCalled();
   });
 
   it('passes the route profileId to LiveMonitorPlayer on the All-mode deep route (refs #337 C1)', () => {
@@ -212,8 +203,8 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
 
     render(<MonitorDetail />);
 
-    expect(tryGetCurrentSessionMock).toHaveBeenCalled();
-    expect(getSessionMock).not.toHaveBeenCalled();
+    expect(tryGetCurrentSessionSpy).toHaveBeenCalled();
+    expect(getSessionSpy).not.toHaveBeenCalled();
   });
 
   it('drops the zoom back to fit when the route moves to another monitor (refs #382)', () => {
@@ -252,6 +243,6 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     render(<MonitorDetail />);
 
     expect(screen.getByText('monitor_detail.load_error')).toBeTruthy();
-    expect(getSessionMock).not.toHaveBeenCalledWith('unknown-profile');
+    expect(getSessionSpy).not.toHaveBeenCalledWith('unknown-profile');
   });
 });

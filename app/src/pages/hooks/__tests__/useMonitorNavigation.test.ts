@@ -8,9 +8,14 @@
  * montage, not the previously viewed monitor).
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { asProfileId } from '../../../api/types';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
 const navigateMock = vi.fn();
 let mockLocation: { pathname: string; state: unknown };
@@ -43,16 +48,6 @@ vi.mock('../../../lib/monitor/filters', () => ({
 vi.mock('../../../hooks/useSwipeNavigation', () => ({
   useSwipeNavigation: () => ({}),
 }));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'profile-a' } }),
-}));
-
-const getSessionMock = vi.fn();
-const getCurrentSessionMock = vi.fn();
-vi.mock('../../../services/sessions', () => ({
-  getSession: (id: string) => getSessionMock(id),
-  getCurrentSession: () => getCurrentSessionMock(),
-}));
 
 import { useMonitorNavigation } from '../useMonitorNavigation';
 
@@ -61,11 +56,13 @@ const profileB = asProfileId('profile-b');
 describe('useMonitorNavigation prev/next history handling', () => {
   beforeEach(() => {
     navigateMock.mockClear();
-    getSessionMock.mockReset();
-    getCurrentSessionMock.mockReset();
-    getSessionMock.mockReturnValue({ client: 'client-b', profileId: profileB });
-    getCurrentSessionMock.mockReturnValue({ client: 'client-current', profileId: 'profile-a' });
+    seedProfiles(['profile-a'], { current: 'profile-a' });
     mockLocation = { pathname: '/monitors/2', state: { from: '/montage' } };
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('next replaces history and preserves the original referrer', () => {
@@ -103,11 +100,13 @@ describe('useMonitorNavigation prev/next history handling', () => {
 describe('useMonitorNavigation All mode (refs #337)', () => {
   beforeEach(() => {
     navigateMock.mockClear();
-    getSessionMock.mockReset();
-    getCurrentSessionMock.mockReset();
-    getSessionMock.mockReturnValue({ client: 'client-b', profileId: profileB });
-    getCurrentSessionMock.mockReturnValue({ client: 'client-current', profileId: 'profile-a' });
+    seedProfiles(['profile-a', 'profile-b'], { current: 'profile-a' });
     mockLocation = { pathname: '/all/monitors/profile-b/2', state: { from: '/monitors' } };
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches monitors via the given profile\'s session and queryKey', () => {

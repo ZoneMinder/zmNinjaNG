@@ -7,42 +7,43 @@
  * the user actually edited.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { MonitorSettingsDialog } from '../MonitorSettingsDialog';
 import { asProfileId, type Monitor } from '../../../api/types';
+import { useSettingsStore } from '../../../stores/settings';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-let disableLogRedaction = false;
-let forceZmsMonitorIds: string[] = [];
-// Per-profile overrides for the All-mode tests below, keyed by profile id.
-// Anything not listed here falls back to the shared `disableLogRedaction` /
-// `forceZmsMonitorIds` vars above (which is all the pre-existing,
-// single-profile tests need).
-let profileSettingsById: Record<string, { forceZmsMonitorIds?: string[]; disableLogRedaction?: boolean }> = {};
-
-const settingsState = {
-  getProfileSettings: (id: string) => ({
-    streamingMethod: 'auto',
-    monitorStreamingOverrides: {},
-    forceZmsMonitorIds: profileSettingsById[id]?.forceZmsMonitorIds ?? forceZmsMonitorIds,
-    disableLogRedaction: profileSettingsById[id]?.disableLogRedaction ?? disableLogRedaction,
-  }),
-  updateProfileSettings: vi.fn(),
-};
-
-vi.mock('../../../stores/settings', () => ({
-  useSettingsStore: (sel: (s: typeof settingsState) => unknown) => sel(settingsState),
-}));
-
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' } }),
-}));
-
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), error: vi.fn() } }));
+
+// Seeds the real settings/profile stores. 'p1' is the current profile (the
+// dialog falls back to it when no owning profileId prop is given); 'profile-b'
+// backs the All-mode owning-profile describe below.
+function seedSettings(overrides: {
+  disableLogRedaction?: boolean;
+  forceZmsMonitorIds?: string[];
+  profileB?: { disableLogRedaction?: boolean; forceZmsMonitorIds?: string[] };
+} = {}) {
+  seedProfiles([makeProfile('p1'), makeProfile('profile-b')], {
+    current: 'p1',
+    settings: {
+      p1: { disableLogRedaction: overrides.disableLogRedaction ?? false, forceZmsMonitorIds: overrides.forceZmsMonitorIds ?? [] },
+      'profile-b': {
+        disableLogRedaction: overrides.profileB?.disableLogRedaction ?? false,
+        forceZmsMonitorIds: overrides.profileB?.forceZmsMonitorIds ?? [],
+      },
+    },
+  });
+}
 
 const baseMonitor = {
   Id: '1',
@@ -74,9 +75,12 @@ const baseMonitor = {
 describe('MonitorSettingsDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    disableLogRedaction = false;
-    forceZmsMonitorIds = [];
-    profileSettingsById = {};
+    seedSettings();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('keeps Save disabled until a field changes', () => {
@@ -128,8 +132,12 @@ describe('MonitorSettingsDialog', () => {
 describe('MonitorSettingsDialog force-ZMS toggle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    disableLogRedaction = false;
-    forceZmsMonitorIds = [];
+    seedSettings();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   const renderDialog = (onSave = vi.fn().mockResolvedValue(undefined)) => {
@@ -153,7 +161,7 @@ describe('MonitorSettingsDialog force-ZMS toggle', () => {
   });
 
   it('is on for a monitor already on the list', () => {
-    forceZmsMonitorIds = ['1'];
+    seedSettings({ forceZmsMonitorIds: ['1'] });
     renderDialog();
     expect(toggle()).toHaveAttribute('aria-checked', 'true');
   });
@@ -163,20 +171,16 @@ describe('MonitorSettingsDialog force-ZMS toggle', () => {
 
     fireEvent.click(toggle());
 
-    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
-      forceZmsMonitorIds: ['1'],
-    });
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).forceZmsMonitorIds).toEqual(['1']);
   });
 
   it('removes only this monitor when switched off', () => {
-    forceZmsMonitorIds = ['1', '4'];
+    seedSettings({ forceZmsMonitorIds: ['1', '4'] });
     renderDialog();
 
     fireEvent.click(toggle());
 
-    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
-      forceZmsMonitorIds: ['4'],
-    });
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).forceZmsMonitorIds).toEqual(['4']);
   });
 
   it('leaves Save disabled and keeps the setting out of the ZM payload', async () => {
@@ -226,7 +230,12 @@ describe('MonitorSettingsDialog credential masking', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    disableLogRedaction = false;
+    seedSettings();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('masks the password in the source path but keeps the host readable', () => {
@@ -271,7 +280,7 @@ describe('MonitorSettingsDialog credential masking', () => {
   });
 
   it('shows the real path and the reveal toggle once redaction is turned off', () => {
-    disableLogRedaction = true;
+    seedSettings({ disableLogRedaction: true });
     renderDialog();
 
     const input = screen.getByTestId('settings-source-input') as HTMLInputElement;
@@ -309,29 +318,26 @@ describe('MonitorSettingsDialog owning-profile scoping (refs #337)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    disableLogRedaction = false;
-    forceZmsMonitorIds = [];
-    profileSettingsById = {};
+    seedSettings();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('writes a preference change to the owning profile (B), not the globally-current one (A=p1)', () => {
-    profileSettingsById = {
-      'profile-b': { forceZmsMonitorIds: [] },
-    };
     renderDialog('profile-b');
 
     fireEvent.click(screen.getByTestId('settings-monitor-force-zms-switch'));
 
-    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('profile-b', {
-      forceZmsMonitorIds: ['1'],
-    });
-    expect(settingsState.updateProfileSettings).not.toHaveBeenCalledWith('p1', expect.anything());
+    expect(useSettingsStore.getState().getProfileSettings(profileB).forceZmsMonitorIds).toEqual(['1']);
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).forceZmsMonitorIds).toEqual([]);
   });
 
   it('reads credential masking from the owning profile (B), independent of the current profile (A=p1)', () => {
     // A (current, unused here) keeps redaction on; B has turned it off.
-    disableLogRedaction = false;
-    profileSettingsById = { 'profile-b': { disableLogRedaction: true } };
+    seedSettings({ profileB: { disableLogRedaction: true } });
 
     render(
       <MonitorSettingsDialog
@@ -354,9 +360,7 @@ describe('MonitorSettingsDialog owning-profile scoping (refs #337)', () => {
 
     fireEvent.click(screen.getByTestId('settings-monitor-force-zms-switch'));
 
-    expect(settingsState.updateProfileSettings).toHaveBeenCalledWith('p1', {
-      forceZmsMonitorIds: ['1'],
-    });
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).forceZmsMonitorIds).toEqual(['1']);
   });
 });
 
@@ -372,9 +376,12 @@ describe('MonitorSettingsDialog owning-profile scoping (refs #337)', () => {
 describe('MonitorSettingsDialog without permission to edit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    disableLogRedaction = false;
-    forceZmsMonitorIds = [];
-    profileSettingsById = {};
+    seedSettings();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   const credentialed = {

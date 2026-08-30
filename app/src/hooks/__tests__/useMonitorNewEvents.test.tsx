@@ -1,11 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQueries } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { useMonitorNewEvents, useScopedMonitorNewEvents, scopedMonitorEventKey } from '../useMonitorNewEvents';
-import { useMonitorSeenStore } from '../../stores/monitorSeen';
-import { getMonitorEventsSince } from '../../api/events';
-import { asProfileId } from '../../api/types';
 
 // Spy on the real useQueries (delegates to actual react-query) so the
 // stagger test can inspect exactly what query config the hook builds.
@@ -16,21 +12,17 @@ vi.mock('@tanstack/react-query', async () => {
 });
 
 vi.mock('../../api/events', () => ({ getMonitorEventsSince: vi.fn() }));
-vi.mock('../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: {} })),
-  getSession: vi.fn((profileId: string) => ({ client: { profileId } })),
-}));
-vi.mock('../useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: {} }),
-}));
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: (selector: (s: { isAuthenticated: boolean }) => unknown) =>
-    selector({ isAuthenticated: true }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 vi.mock('../useBandwidthSettings', () => ({
   useBandwidthSettings: () => ({ monitorNewEventsInterval: 60000 }),
 }));
+
+import { useMonitorNewEvents, useScopedMonitorNewEvents, scopedMonitorEventKey } from '../useMonitorNewEvents';
+import { useMonitorSeenStore } from '../../stores/monitorSeen';
+import { getMonitorEventsSince } from '../../api/events';
+import { seedProfiles, resetProfileFixture, fakeApiClient, asProfileId } from '../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const mockCount = vi.mocked(getMonitorEventsSince);
 
@@ -44,6 +36,12 @@ describe('useMonitorNewEvents', () => {
     useMonitorSeenStore.setState({ profileWatermarks: {} });
     mockCount.mockReset();
     vi.mocked(useQueries).mockClear();
+    seedProfiles(['p1']);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('seeds an unseen monitor and never emits its backlog as new', async () => {
@@ -120,6 +118,12 @@ describe('useScopedMonitorNewEvents', () => {
     useMonitorSeenStore.setState({ profileWatermarks: {} });
     mockCount.mockReset();
     vi.mocked(useQueries).mockClear();
+    seedProfiles([profileA, profileB]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('reports a distinct count per owning profile for the same monitor id', async () => {
@@ -128,10 +132,12 @@ describe('useScopedMonitorNewEvents', () => {
     // not conflated into one entry.
     useMonitorSeenStore.getState().seed(profileA, '1', '2026-07-01 00:00:00');
     useMonitorSeenStore.getState().seed(profileB, '1', '2026-07-01 00:00:00');
+    const clientA = fakeApiClient();
+    const clientB = fakeApiClient();
+    installApiClient(profileA, clientA);
+    installApiClient(profileB, clientB);
     mockCount.mockImplementation(async (client: unknown) =>
-      (client as { profileId: string }).profileId === profileA
-        ? { count: 3, newest: 'a-newest' }
-        : { count: 9, newest: 'b-newest' }
+      client === clientA ? { count: 3, newest: 'a-newest' } : { count: 9, newest: 'b-newest' }
     );
 
     const { result } = renderHook(

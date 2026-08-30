@@ -1,18 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 const h = vi.hoisted(() => ({
   promptSpy: vi.fn(),
-  settings: { allowSelfSignedCerts: true, trustedCertFingerprint: null as string | null },
   isNative: true,
 }));
 
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'p1', portalUrl: 'https://host' },
-    settings: h.settings,
-  }),
-}));
 vi.mock('../../hooks/useCertTrustPrompt', () => ({
   useCertTrustPrompt: () => ({
     prompt: h.promptSpy,
@@ -26,12 +22,19 @@ vi.mock('../../lib/platform', () => ({
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (k: string) => k }) }));
 
 import { CertTrustBanner } from '../CertTrustBanner';
+import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 describe('CertTrustBanner', () => {
   beforeEach(() => {
     h.promptSpy.mockClear();
-    h.settings = { allowSelfSignedCerts: true, trustedCertFingerprint: null };
     h.isNative = true;
+    seedProfiles(['p1'], { settings: { p1: { allowSelfSignedCerts: true, trustedCertFingerprint: null } } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows when self-signed is enabled with no pinned fingerprint on native', () => {
@@ -40,7 +43,7 @@ describe('CertTrustBanner', () => {
   });
 
   it('is hidden once a fingerprint is pinned', () => {
-    h.settings = { allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:BB' };
+    seedProfiles(['p1'], { settings: { p1: { allowSelfSignedCerts: true, trustedCertFingerprint: 'AA:BB' } } });
     render(<CertTrustBanner />);
     expect(screen.queryByTestId('cert-trust-banner')).toBeNull();
   });

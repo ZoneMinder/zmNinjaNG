@@ -3,21 +3,23 @@
  * may throw when the virtual ALL_PROFILES_ID sentinel is the active
  * selection, whether or not any profile's query has resolved yet.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../../api/store-gates', () => import('../../../../tests/fake-store-gates'));
+vi.mock('../../../../lib/security/secureStorage', () => import('../../../../tests/fake-secure-storage'));
+
 import { MonitorWidget } from '../MonitorWidget';
 import { EventsWidget } from '../EventsWidget';
 import { TimelineWidget } from '../TimelineWidget';
 import { HeatmapWidget } from '../HeatmapWidget';
-import { useProfileScope } from '../../../../hooks/useProfileScope';
-import { useProfileById } from '../../../../hooks/useCurrentProfile';
-import { useBandwidthSettings } from '../../../../hooks/useBandwidthSettings';
-import { getSession } from '../../../../services/sessions';
 import { getEvents } from '../../../../api/events';
 import { getMonitor, getMonitors } from '../../../../api/monitors';
-import { asProfileId } from '../../../../api/types';
+import { ALL_PROFILES_ID } from '../../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -40,25 +42,6 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   Tooltip: () => null,
 }));
-vi.mock('../../../../hooks/useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
-vi.mock('../../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../../hooks/useCurrentProfile', () => ({
-  useProfileById: vi.fn(),
-  // useEventTagMapping (real, via EventsWidget) also imports useCurrentProfile.
-  useCurrentProfile: () => ({ currentProfile: null, settings: {}, hasProfile: false, isAllMode: true }),
-}));
-vi.mock('../../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  // useEventTagMapping (real, via EventsWidget) is pulled in through
-  // hooks/useCurrentProfile -> stores/profile.ts, which calls this at
-  // module load time even though these tests never exercise the tag fetch.
-  registerSessionsGate: vi.fn(),
-}));
 vi.mock('../../../../api/events', () => ({
   getEvents: vi.fn(),
 }));
@@ -73,38 +56,30 @@ vi.mock('../../../monitors/MonitorHoverPreview', () => ({
   MonitorHoverPreview: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home', timezone: 'UTC' };
-const profileB = { id: asProfileId('profile-b'), name: 'Work', timezone: 'UTC' };
-
-function clientFor(id: string) {
-  return { profile: id } as unknown as import('../../../../api/client').ApiClient;
-}
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
 describe('Dashboard widgets under the ALL_PROFILES_ID sentinel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useBandwidthSettings).mockReturnValue({
-      eventsWidgetInterval: 30000,
-      timelineHeatmapInterval: 60000,
-    } as never);
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [profileA, profileB],
-      settings: {},
-    } as never);
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id === profileB.id ? profileB : id === profileA.id ? profileA : null,
-      settings: { hoverPreview: { dashboard: false }, showProtocolLabel: false },
-    } as never));
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: clientFor(id),
-      timezone: 'UTC',
-    }));
+    // bandwidthMode defaults to 'normal' in every seeded profile below, whose
+    // real getBandwidthSettings() gives eventsWidgetInterval 30000 and
+    // timelineHeatmapInterval 60000 - the same values the old mock hardcoded.
+    seedProfiles([profileA, profileB], {
+      current: ALL_PROFILES_ID,
+      settings: {
+        [profileA.id]: { hoverPreview: { dashboard: false } as never, showProtocolLabel: false },
+        [profileB.id]: { hoverPreview: { dashboard: false } as never, showProtocolLabel: false },
+      },
+    });
     vi.mocked(getEvents).mockResolvedValue({ events: [] } as never);
     vi.mocked(getMonitors).mockResolvedValue({ monitors: [] } as never);
     vi.mocked(getMonitor).mockResolvedValue({ Monitor: { Id: '1', Name: 'Cam', Deleted: false } } as never);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   const wrap = (ui: React.ReactElement) => {

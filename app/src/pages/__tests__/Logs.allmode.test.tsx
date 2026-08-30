@@ -1,13 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import Logs from '../Logs';
-import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../hooks/useProfileScope';
-import { getSession } from '../../services/sessions';
 import { getZMLogs } from '../../api/logs';
-import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
+import { getSession } from '../../services/sessions';
+import { ALL_PROFILES_ID } from '../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
 
 vi.mock('../../stores/logs', () => ({
   useLogStore: (selector: (state: { logs: unknown[]; clearLogs: () => void }) => unknown) =>
@@ -16,7 +19,7 @@ vi.mock('../../stores/logs', () => ({
 
 vi.mock('../../lib/logger', () => ({
   logger: { getLevel: () => 1, setLevel: vi.fn() },
-  log: { server: vi.fn() },
+  log: { server: vi.fn(), profileService: vi.fn(), auth: vi.fn() },
   LogLevel: { DEBUG: 1, INFO: 2, WARN: 3, ERROR: 4 },
 }));
 
@@ -36,25 +39,6 @@ vi.mock('@capacitor/core', () => ({
 
 vi.mock('../../components/NotificationBadge', () => ({
   NotificationBadge: () => null,
-}));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-
-vi.mock('../../services/sessions', () => ({
-  getSession: vi.fn(),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  DEFAULT_SETTINGS: { logLevel: 1 },
-  useSettingsStore: (selector: (state: { profileSettings: Record<string, unknown>; updateProfileSettings: () => void }) => unknown) =>
-    selector({ profileSettings: {}, updateProfileSettings: vi.fn() }),
 }));
 
 vi.mock('react-i18next', () => ({
@@ -92,38 +76,29 @@ vi.mock('../../components/ui/select', () => ({
   },
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' } as import('../../api/types').Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work' } as import('../../api/types').Profile;
-
 describe('Logs page - All mode profile picker (refs #337)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id,
-      client: { profile: id } as never,
-      timezone: 'UTC',
-    }));
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null, settings: { logLevel: 1 } as never, hasProfile: false, isAllMode: true,
-    });
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: { logLevel: 1 } as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: {} as never,
-    });
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('shows the picker defaulted to the first profile, and switches the server-log source on pick', async () => {
+    const [profileA, profileB] = seedProfiles(
+      [makeProfile('profile-a', { name: 'Home' }), makeProfile('profile-b', { name: 'Work' })],
+      { current: ALL_PROFILES_ID },
+    );
+
     render(<Logs />);
 
     expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('log-source-server'));
-    await waitFor(() => expect(getZMLogs).toHaveBeenCalledWith(expect.objectContaining({ profile: profileA.id }), expect.anything()));
+    // getSession(profile.id).client is the real per-profile session client
+    // (fake HTTP boundary); each profile's session builds its own client
+    // instance, so identity pins which profile's session actually fetched.
+    await waitFor(() => expect(vi.mocked(getZMLogs).mock.calls.at(-1)?.[0]).toBe(getSession(profileA.id).client));
 
     fireEvent.click(screen.getByTestId('page-profile-picker-option-profile-b'));
-    await waitFor(() => expect(getZMLogs).toHaveBeenCalledWith(expect.objectContaining({ profile: profileB.id }), expect.anything()));
+    await waitFor(() => expect(vi.mocked(getZMLogs).mock.calls.at(-1)?.[0]).toBe(getSession(profileB.id).client));
   });
 });

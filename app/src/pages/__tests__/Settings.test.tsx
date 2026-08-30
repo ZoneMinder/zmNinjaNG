@@ -1,79 +1,24 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import Settings from '../Settings';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
+import { seedProfiles, resetProfileFixture, asProfileId } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
+import { useSettingsStore } from '../../stores/settings';
 
-const updateProfileSettings = vi.fn();
-const logout = vi.fn();
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+// AdvancedSection's kiosk-PIN check calls hasSecureValue, which
+// tests/fake-secure-storage.ts does not export (fixture gap - reported
+// separately). Patched locally rather than editing the shared fixture.
+vi.mock('../../lib/security/secureStorage', async () => {
+  const fake = await import('../../tests/fake-secure-storage');
+  return { ...fake, hasSecureValue: async (key: string) => (await fake.getSecureValue(key)) !== null };
+});
+
 const changeLanguage = vi.fn();
-
-vi.mock('../../hooks/useProfileScope', () => ({
-  useProfileScope: () => null,
-}));
-
-vi.mock('../../hooks/useCurrentProfile', () => ({
-  useProfileById: () => ({ profile: null, settings: {} }),
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'profile-1', name: 'Test Profile' },
-    isAllMode: false,
-    settings: {
-      viewMode: 'snapshot',
-      displayMode: 'normal',
-      snapshotRefreshInterval: 3,
-      streamMaxFps: 10,
-      streamScale: 50,
-      defaultEventLimit: 100,
-      disableLogRedaction: false,
-      dashboardRefreshInterval: 30,
-      hoverPreview: { eventsList: true, eventsGrid: false, monitorsList: true, monitorsGrid: false, dashboard: true, timeline: true, notifications: true },
-      hoverPreviewPlaybackRate: 200,
-    },
-    hasProfile: true,
-  }),
-}));
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { currentProfile: () => { id: string } | null }) => unknown) =>
-    selector({
-      currentProfile: () => ({ id: 'profile-1' }),
-    }),
-}));
-
-vi.mock('../../stores/auth', () => ({
-  useAuthStore: () => ({
-    logout,
-  }),
-  useAuthSlice: () => ({ isAuthenticated: true }),
-}));
-
-vi.mock('../../stores/settings', () => ({
-  DEFAULT_SETTINGS: {
-    viewMode: 'snapshot',
-    displayMode: 'normal',
-    theme: 'light',
-    snapshotRefreshInterval: 3,
-    defaultEventLimit: 300,
-    disableLogRedaction: false,
-  },
-  HOVER_PREVIEW_PLAYBACK_RATES: [50, 100, 150, 200, 400],
-  DEFAULT_HOVER_PREVIEW_PLAYBACK_RATE: 200,
-  useSettingsStore: (selector: (state: { getProfileSettings: () => unknown; updateProfileSettings: typeof updateProfileSettings }) => unknown) =>
-    selector({
-      getProfileSettings: () => ({
-        viewMode: 'snapshot',
-        displayMode: 'normal',
-        snapshotRefreshInterval: 3,
-        defaultEventLimit: 100,
-        disableLogRedaction: false,
-        hoverPreview: { eventsList: true, eventsGrid: false, monitorsList: true, monitorsGrid: false, dashboard: true, timeline: true, notifications: true },
-        hoverPreviewPlaybackRate: 200,
-      }),
-      updateProfileSettings,
-    }),
-}));
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -129,9 +74,13 @@ const queryWrapper = ({ children }: { children: React.ReactNode }) => (
 
 describe('Settings Page', () => {
   beforeEach(() => {
-    updateProfileSettings.mockClear();
-    logout.mockClear();
+    seedProfiles(['profile-1']);
     changeLanguage.mockClear();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('updates view mode and event limit settings', async () => {
@@ -139,11 +88,14 @@ describe('Settings Page', () => {
     render(<Settings />, { wrapper: queryWrapper });
 
     await user.click(screen.getByTestId('settings-view-mode-switch'));
-    expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { viewMode: 'streaming', viewModeChosen: true });
+    let stored = useSettingsStore.getState().getProfileSettings(asProfileId('profile-1'));
+    expect(stored.viewMode).toBe('streaming');
+    expect(stored.viewModeChosen).toBe(true);
 
     const eventLimitInput = screen.getByTestId('settings-event-limit');
     fireEvent.change(eventLimitInput, { target: { value: '400' } });
-    expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { defaultEventLimit: 400 });
+    stored = useSettingsStore.getState().getProfileSettings(asProfileId('profile-1'));
+    expect(stored.defaultEventLimit).toBe(400);
   });
 
   it('updates log redaction toggle', async () => {
@@ -153,7 +105,8 @@ describe('Settings Page', () => {
     // Advanced is collapsed by default; expand it to reach its controls.
     await user.click(screen.getByTestId('settings-section-advanced-toggle'));
     await user.click(screen.getByTestId('settings-log-redaction-switch'));
-    expect(updateProfileSettings).toHaveBeenCalledWith('profile-1', { disableLogRedaction: true });
+    const stored = useSettingsStore.getState().getProfileSettings(asProfileId('profile-1'));
+    expect(stored.disableLogRedaction).toBe(true);
   });
 
   it('changes language selection', async () => {
