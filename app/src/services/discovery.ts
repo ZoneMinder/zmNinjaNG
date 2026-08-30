@@ -1,7 +1,7 @@
 
 import type { ApiClient } from '../api/client';
 import { createStoreApiClient } from '../api/store-gates';
-import { PROBE_PROFILE_ID, type ProfileId } from '../api/types';
+import { LoginResponseSchema, PROBE_PROFILE_ID, type LoginResponse, type ProfileId } from '../api/types';
 import type { HttpError } from '../lib/http';
 import { log, LogLevel } from '../lib/logger';
 import { isAbortError } from '../lib/is-abort-error';
@@ -35,6 +35,13 @@ export interface DiscoveryResult {
     portalUrl: string;
     apiUrl: string;
     cgiUrl: string;
+    /**
+     * The login discovery performed to read ZM_PATH_ZMS, when credentials
+     * were given and the server issued tokens. ZoneMinder's login.json
+     * hashes the password server-side and costs ~0.6s, 20x any other call;
+     * a caller that holds this can install it instead of logging in again.
+     */
+    loginResponse?: LoginResponse;
 }
 
 /**
@@ -181,12 +188,17 @@ async function probeApi(apiUrl: string, profileId: ProfileId, signal?: AbortSign
  * Returns the full cgiUrl or null if fetch fails.
  * Throws if signal is aborted.
  */
-async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: DiscoveryOptions, profileId: ProfileId): Promise<string | null> {
+interface CgiFetch {
+    cgiUrl: string | null;
+    loginResponse?: LoginResponse;
+}
+
+async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: DiscoveryOptions, profileId: ProfileId): Promise<CgiFetch> {
     const { username, password, signal } = options;
 
     if (!username || !password) {
         log.discovery('No credentials provided, skipping ZMS path fetch', LogLevel.DEBUG);
-        return null;
+        return { cgiUrl: null };
     }
 
     // Check if already aborted
@@ -208,8 +220,12 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
 
         if (!loginResponse.data?.access_token) {
             log.discovery('Login did not return access token', LogLevel.DEBUG);
-            return null;
+            return { cgiUrl: null };
         }
+        // Validated so the caller can hand it to the auth store as-is; a body
+        // the schema rejects is treated as no login rather than a bad one.
+        const parsedLogin = LoginResponseSchema.safeParse(loginResponse.data);
+        const validLogin = parsedLogin.success ? parsedLogin.data : undefined;
 
         // Check if aborted before fetching config
         if (signal?.aborted) {
@@ -230,8 +246,9 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
             const url = new URL(portalUrl);
             const cgiUrl = `${url.origin}${zmsPath}`;
             log.discovery('ZMS path fetched from server', LogLevel.INFO, { zmsPath, cgiUrl });
-            return cgiUrl;
+            return { cgiUrl, loginResponse: validLogin };
         }
+        return { cgiUrl: null, loginResponse: validLogin };
     } catch (error) {
         // Re-throw abort/cancel errors
         if (error instanceof DiscoveryError && error.code === 'CANCELLED') {
@@ -245,7 +262,7 @@ async function fetchCgiUrl(apiUrl: string, portalUrl: string, options: Discovery
         });
     }
 
-    return null;
+    return { cgiUrl: null };
 }
 
 /**
@@ -297,7 +314,8 @@ export async function discoverZoneminder(inputUrl: string, options: DiscoveryOpt
 
                     // Try to fetch actual ZMS path from server (requires auth)
                     // Fall back to inference if auth fails or no credentials
-                    let cgiUrl = await fetchCgiUrl(fullApiUrl, portalUrl, options, profileId);
+                    const fetched = await fetchCgiUrl(fullApiUrl, portalUrl, options, profileId);
+                    let cgiUrl = fetched.cgiUrl;
 
                     if (!cgiUrl) {
                         // Default: derive from portalUrl
@@ -311,6 +329,7 @@ export async function discoverZoneminder(inputUrl: string, options: DiscoveryOpt
                         portalUrl,
                         apiUrl: fullApiUrl,
                         cgiUrl,
+                        ...(fetched.loginResponse ? { loginResponse: fetched.loginResponse } : {}),
                     };
                 }
             } catch (error) {

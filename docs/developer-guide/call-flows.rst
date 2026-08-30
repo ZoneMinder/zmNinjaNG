@@ -549,9 +549,14 @@ time, logs in to confirm the details, then saves the profile and switches to it.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/CertTrustDialog.tsx>`__
    · → :doc:`05-component-architecture`
 
-#. **Confirm with a login.** After a fresh ``logout()``, the auth store's
-   ``login()`` authenticates against the confirmed server; failure is surfaced as
-   a localized error.
+#. **Install the login discovery already did.** Discovery logged in to read
+   ``ZM_PATH_ZMS`` and returns that response as ``loginResponse``; after a fresh
+   ``logout()`` the form hands it to ``setTokens()`` rather than calling
+   ``login()`` a second time. ZoneMinder's ``login.json`` hashes the password
+   server-side and costs about 0.6s, twenty times any other call, so the second
+   login was most of the wait on a first connect. Only when discovery returned no
+   tokens (no credentials, or a server with auth off) does ``login()`` run.
+   Failure is surfaced as a localized error either way.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/stores/auth.ts>`__
    · → :doc:`11-application-lifecycle`
 
