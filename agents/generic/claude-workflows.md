@@ -89,11 +89,6 @@ named fleet.
   checks finished. Confirm `allow_auto_merge` is true before relying on
   it.
 
-- A PR body without content under `## Acceptance` fails the
-  `pr-acceptance` job for a same-repo human PR (forks and bots are exempt).
-  The Spec review axis reads those lines; four PRs shipped without them
-  before the job existed.
-
 ## Where knowledge goes (M5 in practice)
 
 - Project fact (API quirk, platform behavior, failed approach): the domain

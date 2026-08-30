@@ -133,13 +133,12 @@ npm run gates            # vitest run, build (includes tsc -b), three lints
 npm run test:e2e -- <feature>.feature
 ```
 
-Per commit, run what the change touches; `npm run gates` before push or PR
-(build already type-checks). Blocking lints: `lint:a11y`, `lint:correctness`,
-`lint:ratchet`; `npm run lint` is advisory. Baselines `app/.lint-baseline.json`
+Per commit, run what the change touches; `npm run gates` before push or PR. Blocking lints: `lint:a11y`, `lint:correctness`,
+`lint:ratchet`. Baselines `app/.lint-baseline.json`
 and `app/.quality-baseline.json` lower with `npm run lint:ratchet -- --update`
 and `node scripts/quality-ratchet.mjs --update`. CI also runs
-`scripts/proven-red.mjs` (P2) and `npm run test:scripts`. State completed
-checks in handoff.
+`scripts/proven-red.mjs` (P2), `npm run test:scripts`, and `pr-acceptance`
+(PR body needs `## Acceptance` content). State completed checks in handoff.
 
 ## Playbooks
 
