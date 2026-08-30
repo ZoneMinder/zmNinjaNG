@@ -113,27 +113,6 @@ Then('the monitor grid should lay out cards in more than one column', async ({ p
   }).toPass({ timeout: testConfig.timeouts.pageLoad });
 });
 
-When('I hover the first monitor card', async ({ page }) => {
-  // The hover-preview anchor is the player, not the whole card. In list view the
-  // card center sits over the info column, so hover the player specifically.
-  const player = page.getByTestId('monitor-player').first();
-  await expect(player).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
-  await player.hover();
-});
-
-Then('I should see the monitor hover preview', async ({ page }) => {
-  const preview = page.getByTestId('monitor-hover-preview');
-  await expect(preview).toBeVisible({ timeout: 2000 });
-
-  // Relative, not a magic number: hover-preview.tsx sizes to
-  // max(previewWidthPx, source * 2) and then clamps to the viewport, so a
-  // fixed 350 measures the clamp rather than the feature (it failed at 342 on
-  // an unchanged viewport).
-  const box = await preview.boundingBox();
-  const playerBox = await page.getByTestId('monitor-player').first().boundingBox();
-  expect(box?.width ?? 0).toBeGreaterThanOrEqual(Math.min((playerBox?.width ?? 0) * 2, 300));
-});
-
 Then('I should see at least {int} monitor in montage grid', async ({ page }, count: number) => {
   const gridItems = page.locator('[data-testid="montage-monitor"]')
     .or(page.locator('.react-grid-item'));

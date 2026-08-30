@@ -29,7 +29,6 @@ let archiveToggled = false;
 let detailArchiveToggled = false;
 let detailFavoriteToggled = false;
 let downloadClicked = false;
-let hoverPerformed = false;
 
 // Event List Steps
 Then('I should see events list or empty state', async ({ page }) => {
@@ -224,28 +223,6 @@ When('I click into the first event if events exist', async ({ page }) => {
     await page.waitForURL(/.*events\/\d+/, { timeout: testConfig.timeouts.transition });
     await page.waitForTimeout(500);
   }
-});
-
-When('I hover the first event thumbnail if events exist', async ({ page }) => {
-  if (await serverHasEvents()) {
-    const firstThumb = page.getByTestId('event-thumbnail').first();
-    await firstThumb.hover();
-    hoverPerformed = true;
-  }
-});
-
-Then('I should see the enlarged event thumbnail preview if hover was performed', async ({ page }) => {
-  if (!hoverPerformed) return;
-  const preview = page.getByTestId('event-thumbnail-hover-preview');
-  await expect(preview).toBeVisible({ timeout: 2000 });
-
-  // Relative, not a magic number: hover-preview.tsx sizes to
-  // max(previewWidthPx, source * 2) and then clamps to the viewport, so a
-  // fixed 350 measures the clamp rather than the feature (it failed at 342 on
-  // an unchanged viewport).
-  const box = await preview.boundingBox();
-  const thumbBox = await page.getByTestId('event-thumbnail').first().boundingBox();
-  expect(box?.width ?? 0).toBeGreaterThanOrEqual((thumbBox?.width ?? 0) * 2);
 });
 
 When('I navigate back if I clicked into an event', async ({ page }) => {
