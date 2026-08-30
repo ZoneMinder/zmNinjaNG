@@ -140,10 +140,15 @@ and the test server sits on a private LAN that a GitHub-hosted runner cannot
 reach. A green tick on that job means "ran, or had nothing to run"; its step
 summary says which.
 
-``--skip-e2e`` bypasses the gate for when the test server itself is down
-rather than the app being broken. It prints a warning, because nothing else
-covers those journeys. Missing ``app/.env`` is an error rather than a silent
-skip, so a release never quietly loses the gate.
+It asks first. The suite is 168 scenarios run serially, about 18 minutes,
+and roughly 45% of that is the app booting under the Vite dev server once per
+scenario. A gate that always costs 18 minutes gets routed around, so it asks
+instead: Enter runs it, ``n`` skips with a warning. ``--skip-e2e`` skips
+without the question, for scripted runs.
+
+With no terminal to ask on, it runs rather than skipping: silence should not
+lose the only cover these journeys have. Missing ``app/.env`` is an error
+rather than a silent skip, for the same reason.
 
 When the version in ``app/package.json`` already has a tag, ``make_release.sh``
 offers to pick a new version. It runs ``generate_notice.mjs --plan`` once, which
