@@ -16,6 +16,13 @@ import NotificationSettings from '../NotificationSettings';
 import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile';
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { useNotificationStore } from '../../stores/notifications';
+import { Platform } from '../../lib/platform';
+
+// Platform.isNative is a getter; spy on it rather than assigning.
+let nativeSpy: ReturnType<typeof vi.spyOn> | undefined;
+const pretendNative = () => {
+  nativeSpy = vi.spyOn(Platform, 'isNative', 'get').mockReturnValue(true);
+};
 import { asProfileId, ALL_PROFILES_ID } from '../../api/types';
 import type { Profile } from '../../api/types';
 
@@ -135,9 +142,23 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
 
   afterEach(() => {
     useNotificationStore.setState({ profileSettings: {} });
+    nativeSpy?.mockRestore();
+    nativeSpy = undefined;
+  });
+
+  it('on web says direct mode needs the mobile app: registration cannot happen here', () => {
+    // jsdom is the web platform; no Platform override.
+    useNotificationStore.getState().updateProfileSettings(profileA.id, {
+      enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
+    });
+    renderPage();
+    expect(screen.getByText('notifications.status.direct_native_only').textContent)
+      .toBe('notifications.status.direct_native_only');
+    expect(screen.queryByText('notifications.status.direct_not_registered')).toBeNull();
   });
 
   it('says not registered when direct push is on but registration never succeeded', () => {
+    pretendNative();
     useNotificationStore.getState().updateProfileSettings(profileA.id, {
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
@@ -148,6 +169,7 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
   });
 
   it('says active once the server has returned a registration id', () => {
+    pretendNative();
     useNotificationStore.getState().updateProfileSettings(profileA.id, {
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: 42,
     });

@@ -999,7 +999,8 @@
       "disconnected": "Déconnecté",
       "connecting": "Connexion...",
       "direct_active": "Mode direct actif",
-      "direct_not_registered": "Mode direct non enregistré"
+      "direct_not_registered": "Mode direct non enregistré",
+      "direct_native_only": "Le mode direct nécessite l’app mobile"
     },
     "switch_profile_title": "Changer de profil ?",
     "switch_profile_desc": "Cette notification provient de \"{{profile}}\". Passer a ce profil pour voir l'evenement ?",

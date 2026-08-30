@@ -999,7 +999,8 @@
       "disconnected": "Getrennt",
       "connecting": "Verbinde...",
       "direct_active": "Direktmodus aktiv",
-      "direct_not_registered": "Direktmodus nicht registriert"
+      "direct_not_registered": "Direktmodus nicht registriert",
+      "direct_native_only": "Direktmodus braucht die Mobile-App"
     },
     "switch_profile_title": "Profil wechseln?",
     "switch_profile_desc": "Diese Benachrichtigung stammt von \"{{profile}}\". Zu diesem Profil wechseln, um das Ereignis anzuzeigen?",
