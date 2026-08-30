@@ -12,13 +12,16 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
-import { useCurrentProfile, useProfileById } from '../../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../../hooks/useProfileScope';
-import { asProfileId, ALL_PROFILES_ID } from '../../../api/types';
-import type { Profile } from '../../../api/types';
+import { ALL_PROFILES_ID } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -32,14 +35,6 @@ vi.mock('../../../lib/platform', () => ({
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../lib/security/secureStorage', () => ({ getSecureValue: vi.fn().mockResolvedValue(null) }));
 vi.mock('../../../lib/assistant/providers/openai', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   warmOllamaModel: vi.fn(() => new Promise(() => {})),
@@ -94,31 +89,34 @@ vi.mock('../../ui/select', () => ({
   },
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home', apiUrl: 'http://a/api', timezone: 'UTC' } as Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work', apiUrl: 'http://b/api', timezone: 'UTC' } as Profile;
+const profileA = makeProfile('profile-a', { name: 'Home', apiUrl: 'http://a/api', timezone: 'UTC' });
+const profileB = makeProfile('profile-b', { name: 'Work', apiUrl: 'http://b/api', timezone: 'UTC' });
 
 const baseSettings = {
   assistantModelId: 'test-model',
-  assistantBackend: 'on-device',
+  assistantBackend: 'on-device' as const,
   assistantOllamaModel: '',
   assistantOllamaBaseUrl: '',
-  hoverPreview: { assistant: false },
+  hoverPreview: { assistant: false } as never,
 };
 
 describe('AskPanel - All mode profile pinning (refs #337)', () => {
   beforeEach(() => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
     useFreshAccessTokenMock.mockClear();
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null, settings: baseSettings as never, hasProfile: false, isAllMode: true,
+    // Real profile/profileScope/assistant-enabled hooks, seeded to reproduce
+    // the All-mode shape the old direct mocks hand-built: two profiles,
+    // ALL_PROFILES_ID current, neither with assistantEnabled set (so
+    // useAssistantEnabled/AskPanel fall back to the first scope profile).
+    seedProfiles([profileA, profileB], {
+      current: ALL_PROFILES_ID,
+      settings: { [profileA.id]: baseSettings, [profileB.id]: baseSettings },
     });
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: baseSettings as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
-    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('pins to the first scope profile by default and names it in a persistent banner', () => {

@@ -5,10 +5,16 @@
  * hover/long-press preview when the surface is enabled (refs #270).
  */
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AssistantResultCards } from '../AssistantResultCards';
 import { ASSISTANT } from '../../../lib/zmninja-ng-constants';
 import { DEFAULT_HOVER_PREVIEW } from '../../../stores/settings';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 import type { AssistantHost, DisplayEntity } from '../../../lib/assistant/types';
 
 const hoverPreview = { ...DEFAULT_HOVER_PREVIEW };
@@ -23,9 +29,6 @@ vi.mock('../../../hooks/useMonitors', () => ({
       { Monitor: { Id: '4', Name: 'Front', Function: 'Modect', Enabled: '1' } },
     ],
   }),
-}));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({ currentProfile: { id: 'p1' }, settings: { hoverPreview } }),
 }));
 vi.mock('../../monitors/LiveMonitorPlayer', () => ({
   LiveMonitorPlayer: () => <div data-testid="live-player-stub" />,
@@ -46,6 +49,15 @@ vi.mock('../../events/EventThumbnailHoverPreview', () => ({
     <div data-testid="zms-hover-stub">{`${descriptor.eventId}@${descriptor.monitorId}`}</div>
   ),
 }));
+
+beforeEach(() => {
+  seedProfiles(['p1'], { settings: { p1: { hoverPreview } } });
+});
+
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
 
 const host: AssistantHost = { navigate: vi.fn(), onActivity: vi.fn() };
 const monitorCard = (id: string): DisplayEntity => ({

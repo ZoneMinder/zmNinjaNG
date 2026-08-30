@@ -6,30 +6,40 @@
  * registry. An All-mode thumbnail owned by profile B must fetch through B's
  * client, not whatever profile happens to be globally current.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { SecureImage } from '../secure-image';
 import { asProfileId } from '../../../api/types';
+import type { ApiClient } from '../../../api/client';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../../lib/platform', () => ({
   Platform: { isNative: true },
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: { secureImage: vi.fn() },
-  LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, secureImage: vi.fn() } };
+});
 
 const currentClientGet = vi.fn();
 const profileBClientGet = vi.fn();
 
-vi.mock('../../../services/sessions', () => ({
-  getCurrentSession: vi.fn(() => ({ client: { get: currentClientGet } })),
-  getSession: vi.fn((profileId: string) => {
-    if (profileId === 'profile-b') return { client: { get: profileBClientGet } };
-    throw new Error(`getSession: unknown profile ${profileId}`);
-  }),
-}));
+function fakeClient(get: typeof currentClientGet): ApiClient {
+  return {
+    get,
+    post: vi.fn(),
+    put: vi.fn(),
+    delete: vi.fn(),
+    postForm: vi.fn(),
+    putForm: vi.fn(),
+  } as unknown as ApiClient;
+}
 
 const SRC = 'https://zm.example.com/index.php?view=image&eid=1&fid=snapshot';
 
@@ -43,6 +53,16 @@ describe('SecureImage profile threading', () => {
       data: 'BBBB',
       headers: { 'content-type': 'image/jpeg' },
     });
+    // 'profile-missing' is deliberately never seeded: the real session
+    // registry throws "unknown profile" for it, same as the old mock did.
+    seedProfiles(['current', 'profile-b'], { current: 'current' });
+    installApiClient(asProfileId('current'), fakeClient(currentClientGet));
+    installApiClient(asProfileId('profile-b'), fakeClient(profileBClientGet));
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('fetches via the current profile client when no profileId is given', async () => {

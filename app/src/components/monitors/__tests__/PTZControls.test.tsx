@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { PTZControls } from '../PTZControls';
-import type { ZMControl } from '../../../api/types';
+import { asProfileId, type ZMControl } from '../../../api/types';
 import { UI_INTERACTIONS } from '../../../lib/zmninja-ng-constants';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -10,14 +17,13 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-// Permission probe (refs #344). Tests set the verdict they need.
-let mockControlPermission: string | undefined;
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({
-    permissions: mockControlPermission === undefined ? undefined : { control: mockControlPermission },
-    isLoading: false,
-  }),
-}));
+// usePermissions is real; no profile is ever seeded outside the permission
+// describe below, so its query stays disabled (unknown, never denied) - the
+// same default the old blanket mock gave every other describe here.
+function withQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
+}
 
 // jsdom does not implement pointer capture; the pointerdown handler calls it.
 beforeEach(() => {
@@ -27,6 +33,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  resetProfileFixture();
+  resetFakeStoreGates();
 });
 
 /** Continuous-drive control: one start command, no repeat timer. */
@@ -47,12 +55,12 @@ describe('PTZControls panel', () => {
   // tests/steps/ptz.steps.ts asserts this testid. It went missing once and the
   // e2e guard (Controllable === 0 on the test server) hid the breakage.
   it('marks the panel root with the ptz-controls testid', () => {
-    render(<PTZControls onCommand={vi.fn()} control={continuousControl} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={continuousControl} />));
     expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
   });
 
   it('renders nothing when the monitor has no control definition', () => {
-    const { container } = render(<PTZControls onCommand={vi.fn()} />);
+    const { container } = render(withQuery(<PTZControls onCommand={vi.fn()} />));
     expect(container).toBeEmptyDOMElement();
   });
 });
@@ -60,7 +68,7 @@ describe('PTZControls panel', () => {
 describe('PTZControls hold button', () => {
   it('sends the stop command when unmounted while a button is held', () => {
     const onCommand = vi.fn();
-    const { unmount } = render(<PTZControls onCommand={onCommand} control={continuousControl} />);
+    const { unmount } = render(withQuery(<PTZControls onCommand={onCommand} control={continuousControl} />));
 
     fireEvent.pointerDown(screen.getByTestId('ptz-right'), POINTER);
     expect(onCommand).toHaveBeenCalledWith('moveConRight');
@@ -75,7 +83,7 @@ describe('PTZControls hold button', () => {
   it('clears the repeat interval when unmounted while a button is held', () => {
     vi.useFakeTimers();
     const onCommand = vi.fn();
-    const { unmount } = render(<PTZControls onCommand={onCommand} control={relativeControl} />);
+    const { unmount } = render(withQuery(<PTZControls onCommand={onCommand} control={relativeControl} />));
 
     fireEvent.pointerDown(screen.getByTestId('ptz-up'), POINTER);
     vi.advanceTimersByTime(UI_INTERACTIONS.ptzHoldRepeatMs);
@@ -91,7 +99,7 @@ describe('PTZControls hold button', () => {
 
   it('sends no command when unmounted with no button held', () => {
     const onCommand = vi.fn();
-    const { unmount } = render(<PTZControls onCommand={onCommand} control={continuousControl} />);
+    const { unmount } = render(withQuery(<PTZControls onCommand={onCommand} control={continuousControl} />));
 
     unmount();
 
@@ -100,7 +108,7 @@ describe('PTZControls hold button', () => {
 
   it('sends no stop command after the pointer was already released', () => {
     const onCommand = vi.fn();
-    const { unmount } = render(<PTZControls onCommand={onCommand} control={continuousControl} />);
+    const { unmount } = render(withQuery(<PTZControls onCommand={onCommand} control={continuousControl} />));
 
     const button = screen.getByTestId('ptz-left');
     fireEvent.pointerDown(button, POINTER);
@@ -117,7 +125,7 @@ describe('PTZControls hold button', () => {
   it('fires the command on press and the stop command on release, ending the repeat', () => {
     vi.useFakeTimers();
     const onCommand = vi.fn();
-    render(<PTZControls onCommand={onCommand} control={relativeControl} />);
+    render(withQuery(<PTZControls onCommand={onCommand} control={relativeControl} />));
 
     const button = screen.getByTestId('ptz-down');
     fireEvent.pointerDown(button, POINTER);
@@ -146,28 +154,28 @@ describe('PTZControls hold button', () => {
 describe('PTZControls without control permission', () => {
   const control = { CanMove: '1', CanMoveCon: '1', CanZoom: '1' } as unknown as ZMControl;
 
-  afterEach(() => {
-    mockControlPermission = undefined;
+  it('renders nothing when ZoneMinder denies control', async () => {
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(asProfileId('p1'), fakeApiClient({ '/users.json': { users: [{ User: { Username: 'bob', Control: 'None' } }] } }));
+
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={control} />));
+
+    await waitFor(() => expect(screen.queryByTestId('ptz-controls')).not.toBeInTheDocument());
   });
 
-  it('renders nothing when ZoneMinder denies control', () => {
-    mockControlPermission = 'None';
+  it('renders at View, which is all ZoneMinder asks for', async () => {
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(asProfileId('p1'), fakeApiClient({ '/users.json': { users: [{ User: { Username: 'bob', Control: 'View' } }] } }));
 
-    render(<PTZControls onCommand={vi.fn()} control={control} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={control} />));
 
-    expect(screen.queryByTestId('ptz-controls')).not.toBeInTheDocument();
-  });
-
-  it('renders at View, which is all ZoneMinder asks for', () => {
-    mockControlPermission = 'View';
-
-    render(<PTZControls onCommand={vi.fn()} control={control} />);
-
-    expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('ptz-controls')).toBeInTheDocument());
   });
 
   it('renders while the permission is unknown', () => {
-    render(<PTZControls onCommand={vi.fn()} control={control} />);
+    // No profile seeded at all: currentProfile is null, so usePermissions'
+    // query stays disabled - permissions never resolve past unknown.
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={control} />));
 
     expect(screen.getByTestId('ptz-controls')).toBeInTheDocument();
   });
@@ -194,7 +202,7 @@ describe('PTZControls axis capabilities', () => {
       CanMove: '1', CanMoveCon: '1', CanPan: '1', CanTilt: '0',
     } as unknown as ZMControl;
 
-    render(<PTZControls onCommand={vi.fn()} control={panOnly} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={panOnly} />));
 
     expectHidden('ptz-up');
     expectHidden('ptz-down');
@@ -207,7 +215,7 @@ describe('PTZControls axis capabilities', () => {
       CanMove: '1', CanMoveCon: '1', CanPan: '0', CanTilt: '1',
     } as unknown as ZMControl;
 
-    render(<PTZControls onCommand={vi.fn()} control={tiltOnly} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={tiltOnly} />));
 
     expectHidden('ptz-left');
     expectHidden('ptz-right');
@@ -220,7 +228,7 @@ describe('PTZControls axis capabilities', () => {
       CanMove: '1', CanMoveCon: '1', CanPan: '1', CanTilt: '0', CanMoveDiag: '1',
     } as unknown as ZMControl;
 
-    render(<PTZControls onCommand={vi.fn()} control={panOnlyDiag} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={panOnlyDiag} />));
 
     for (const id of ['ptz-up-left', 'ptz-up-right', 'ptz-down-left', 'ptz-down-right']) {
       expectHidden(id);
@@ -230,7 +238,7 @@ describe('PTZControls axis capabilities', () => {
   it('shows every arrow when a control definition omits the axis fields', () => {
     const legacy = { CanMove: '1', CanMoveCon: '1', CanMoveDiag: '1' } as unknown as ZMControl;
 
-    render(<PTZControls onCommand={vi.fn()} control={legacy} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={legacy} />));
 
     for (const id of ['ptz-up', 'ptz-down', 'ptz-left', 'ptz-right', 'ptz-up-left']) {
       expectShown(id);
@@ -246,7 +254,7 @@ describe('PTZControls axis capabilities', () => {
       CanMove: '1', CanMoveCon: '1', CanPan: 'false', CanTilt: '',
     } as unknown as ZMControl;
 
-    render(<PTZControls onCommand={vi.fn()} control={coercedFalse} />);
+    render(withQuery(<PTZControls onCommand={vi.fn()} control={coercedFalse} />));
 
     expectHidden('ptz-left');
     expectHidden('ptz-right');

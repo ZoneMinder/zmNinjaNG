@@ -4,19 +4,19 @@
  * needs a device (rule 27); this covers the logic that drives it.
  */
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AssistantMobileSheet } from '../AssistantMobileSheet';
 import { useAssistantPanelStore } from '../../../stores/assistantPanel';
 import { ASSISTANT_PANEL } from '../../../lib/zmninja-ng-constants';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
-}));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'p1' },
-    settings: { assistantBackend: 'on-device', assistantModelId: 'x', assistantOllamaModel: '' },
-  }),
 }));
 // The header dot owns a useQuery probe covered by useOllamaHealth's own test;
 // stub it here (on-device backend, so the dot is hidden) to avoid needing a
@@ -38,6 +38,12 @@ const VH = 768; // jsdom window.innerHeight
 describe('AssistantMobileSheet', () => {
   beforeEach(() => {
     useAssistantPanelStore.setState({ state: 'open', sheetHeightFraction: 0 });
+    seedProfiles(['p1'], { settings: { p1: { assistantBackend: 'on-device', assistantModelId: 'x', assistantOllamaModel: '' } } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('renders the grip and the collapse/close/clear controls', () => {

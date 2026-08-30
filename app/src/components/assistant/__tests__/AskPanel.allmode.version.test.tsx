@@ -16,16 +16,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AskPanel } from '../AskPanel';
 import { useAssistantStore } from '../../../stores/assistant';
-import { useCurrentProfile, useProfileById } from '../../../hooks/useCurrentProfile';
-import { useProfileScope } from '../../../hooks/useProfileScope';
 import { getSession } from '../../../services/sessions';
 import { getVersion } from '../../../api/auth';
 import { STORAGE_KEYS } from '../../../lib/zmninja-ng-constants';
-import { asProfileId, ALL_PROFILES_ID } from '../../../api/types';
-import type { Profile } from '../../../api/types';
+import { ALL_PROFILES_ID } from '../../../api/types';
 import type { AssistantTurn } from '../../../lib/assistant/types';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -39,17 +42,6 @@ vi.mock('../../../lib/platform', () => ({
 vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ getQueryData: () => undefined }),
 }));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: vi.fn(),
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../lib/security/secureStorage', () => ({ getSecureValue: vi.fn().mockResolvedValue(null) }));
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: null, isFresh: false }),
-}));
 vi.mock('../useAssistantHost', () => ({
   useAssistantHost: () => ({ host: { navigate: vi.fn(), onActivity: vi.fn() } }),
 }));
@@ -60,17 +52,6 @@ vi.mock('../../../lib/assistant/object-labels', () => ({
   getObjectLabels: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../../../api/auth', () => ({ getVersion: vi.fn() }));
-// getCurrentSession throws for the ALL_PROFILES_ID sentinel in real code
-// (services/sessions.ts never builds a session for it) - reproduced here so
-// the OLD buggy call site (getCurrentSession()) fails exactly as it does in
-// production, while getSession(profileId) (the fix) succeeds.
-vi.mock('../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(() => {
-    throw new Error('No session for the ALL_PROFILES_ID sentinel');
-  }),
-  registerSessionsGate: vi.fn(),
-}));
 vi.mock('../../../hooks/useMonitors', () => ({ useMonitors: () => ({ monitors: [] }) }));
 vi.mock('../../monitors/LiveMonitorPlayer', () => ({
   LiveMonitorPlayer: () => <div data-testid="assistant-live-player-stub" />,
@@ -99,45 +80,41 @@ vi.mock('../../ui/select', () => ({
   },
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home', apiUrl: 'http://a/api', timezone: 'UTC' } as Profile;
-const profileB = { id: asProfileId('profile-b'), name: 'Work', apiUrl: 'http://b/api', timezone: 'UTC' } as Profile;
+const profileA = makeProfile('profile-a', { name: 'Home', apiUrl: 'http://a/api', timezone: 'UTC' });
+const profileB = makeProfile('profile-b', { name: 'Work', apiUrl: 'http://b/api', timezone: 'UTC' });
 
 const baseSettings = {
   assistantModelId: 'test-model',
-  assistantBackend: 'on-device',
+  assistantBackend: 'on-device' as const,
   assistantOllamaModel: '',
   assistantOllamaBaseUrl: '',
-  hoverPreview: { assistant: false },
+  hoverPreview: { assistant: false } as never,
 };
-
-function clientFor(id: string) {
-  return { marker: id };
-}
 
 describe('AskPanel - All mode version probe uses the pinned session (refs #337)', () => {
   beforeEach(() => {
     useAssistantStore.setState({ threads: {}, running: false, activities: [] });
     localStorage.setItem(STORAGE_KEYS.assistantTestMode, '1');
     window.__assistantMockScript = [{ text: 'ok', toolCalls: [] } as AssistantTurn];
-    vi.mocked(useCurrentProfile).mockReturnValue({
-      currentProfile: null, settings: baseSettings as never, hasProfile: false, isAllMode: true,
+    // Real profile/profileScope/session-registry stack: with ALL_PROFILES_ID
+    // current, the real getCurrentSession() throws (services/sessions.ts
+    // never builds a session for the sentinel) exactly like production, so
+    // the OLD buggy call site fails the same way here; getSession(profileId)
+    // (the fix) succeeds against the pinned profile's real session.
+    seedProfiles([profileA, profileB], {
+      current: ALL_PROFILES_ID,
+      settings: { [profileA.id]: baseSettings, [profileB.id]: baseSettings },
     });
-    vi.mocked(useProfileById).mockImplementation((id) => ({
-      profile: id ? [profileA, profileB].find((p) => p.id === id) ?? null : null,
-      settings: baseSettings as never,
-    }));
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', aggregateId: ALL_PROFILES_ID, aggregateName: null, profile: null, profiles: [profileA, profileB], settings: baseSettings as never,
-    });
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id, client: clientFor(id) as never, timezone: 'UTC',
-    }));
+    installApiClient(profileA.id, fakeApiClient());
+    installApiClient(profileB.id, fakeApiClient());
     vi.mocked(getVersion).mockResolvedValue({ version: '1.36.0' } as never);
   });
 
   afterEach(() => {
     delete window.__assistantMockScript;
     localStorage.removeItem(STORAGE_KEYS.assistantTestMode);
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('resolves getVersion via getSession(pinnedProfileId), not the throwing getCurrentSession sentinel', async () => {
@@ -147,7 +124,6 @@ describe('AskPanel - All mode version probe uses the pinned session (refs #337)'
     fireEvent.click(screen.getByTestId('assistant-send'));
 
     await waitFor(() => expect(getVersion).toHaveBeenCalledTimes(1));
-    expect(getSession).toHaveBeenCalledWith(profileA.id);
-    expect(getVersion).toHaveBeenCalledWith(clientFor(profileA.id));
+    expect(getVersion).toHaveBeenCalledWith(getSession(profileA.id).client);
   });
 });

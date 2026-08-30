@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { CompactEventRow } from '../CompactEventRow';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
 import { useDeleteSelectionStore, eventSelectionKey } from '../../../stores/deleteSelection';
@@ -8,11 +13,15 @@ import { asProfileId } from '../../../api/types';
 import { useProfileStore } from '../../../stores/profile';
 
 const navigate = vi.fn();
-// EventDeleteButton probes permissions through React Query; this suite renders
-// without a provider and is not about permissions (refs #344).
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: { events: 'Edit' }, isLoading: false }),
-}));
+// EventDeleteButton's permission probe (usePermissions) is real here: with no
+// profile seeded for these ad-hoc ids and no auth, its query stays disabled
+// (permissions unknown), which is not denied - the delete button renders
+// enabled exactly as the old blanket "Edit" mock did (refs #344). A
+// QueryClientProvider is required for the real hook's useQuery.
+function withQuery(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
+}
 
 vi.mock('react-router-dom', async (orig) => ({
   ...(await orig<typeof import('react-router-dom')>()),
@@ -38,13 +47,15 @@ const base = {
 
 const render1 = (event: typeof base = base) =>
   render(
-    <MemoryRouter>
-      <CompactEventRow
-        event={event as never}
-        thumbnailUrls={['http://x/1.jpg']}
-        aspectRatio={1.6}
-      />
-    </MemoryRouter>
+    withQuery(
+      <MemoryRouter>
+        <CompactEventRow
+          event={event as never}
+          thumbnailUrls={['http://x/1.jpg']}
+          aspectRatio={1.6}
+        />
+      </MemoryRouter>
+    )
   );
 
 describe('CompactEventRow', () => {
@@ -70,7 +81,7 @@ describe('CompactEventRow', () => {
   });
 
   it('navigates to the /all/ deep route when a profileId is given (refs #337)', () => {
-    render(
+    render(withQuery(
       <MemoryRouter>
         <CompactEventRow
           event={base as never}
@@ -79,7 +90,7 @@ describe('CompactEventRow', () => {
           profileId={'profile-b' as never}
         />
       </MemoryRouter>
-    );
+    ));
     fireEvent.click(screen.getByTestId('compact-event-row'));
     expect(navigate).toHaveBeenCalledWith('/all/events/profile-b/233228', { state: { from: '/monitors/4' } });
   });
@@ -110,7 +121,7 @@ describe('CompactEventRow', () => {
   it('is not marked when the same raw event id is queued on another profile', () => {
     useDeleteSelectionStore.getState().clear();
     useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p2'), '233228'));
-    render(
+    render(withQuery(
       <MemoryRouter>
         <CompactEventRow
           event={base as never}
@@ -120,7 +131,7 @@ describe('CompactEventRow', () => {
           ownerProfileId={asProfileId('p1')}
         />
       </MemoryRouter>
-    );
+    ));
     const cls = screen.getByTestId('compact-event-row').className;
     expect(cls).not.toContain('bg-destructive/10');
     useDeleteSelectionStore.getState().clear();
@@ -138,7 +149,7 @@ describe('CompactEventRow', () => {
     useDeleteSelectionStore.getState().clear();
     useDeleteSelectionStore.getState().toggle(eventSelectionKey(asProfileId('p1'), '233228'));
 
-    render(
+    render(withQuery(
       <MemoryRouter>
         <CompactEventRow
           event={base as never}
@@ -147,7 +158,7 @@ describe('CompactEventRow', () => {
           ownerProfileId={asProfileId('p1')}
         />
       </MemoryRouter>
-    );
+    ));
 
     expect(screen.getByTestId('compact-event-row').className).toContain('bg-destructive/10');
     useDeleteSelectionStore.getState().clear();

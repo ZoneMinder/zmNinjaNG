@@ -1,19 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { NotificationHistoryItem, type HistoryEvent } from '../NotificationHistoryItem';
-import { useProfileById } from '../../../hooks/useCurrentProfile';
-import { useFreshAccessToken } from '../../../hooks/useFreshAccessToken';
+import * as currentProfileModule from '../../../hooks/useCurrentProfile';
 import { buildThumbnailChain } from '../../../lib/event/thumbnail-chain';
-import { asProfileId } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string, opts?: { id?: unknown }) => `${key}${opts?.id !== undefined ? `:${opts.id}` : ''}` }),
-}));
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: vi.fn(),
-}));
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: vi.fn(),
 }));
 vi.mock('../../../hooks/useDateTimeFormat', () => ({
   useDateTimeFormat: () => ({ fmtDateTimeShort: (d: Date) => d.toISOString() }),
@@ -31,8 +29,8 @@ vi.mock('../../events/EventThumbnailHoverPreview', () => ({
   EventZmsHoverPlayer: () => null,
 }));
 
-const profileB = { id: asProfileId('profile-b'), name: 'Work', portalUrl: 'https://work.example/zm', minStreamingPort: undefined };
-const settingsB = { thumbnailFallbackChain: [], forceDisableMultiPort: false, hoverPreview: { notifications: false } };
+const profileB = makeProfile('profile-b', { name: 'Work', portalUrl: 'https://work.example/zm' });
+const settingsB = { thumbnailFallbackChain: [] as never, forceDisableMultiPort: false, hoverPreview: { notifications: false } as never };
 
 const baseEvent: HistoryEvent = {
   EventId: 42,
@@ -50,19 +48,25 @@ const baseEvent: HistoryEvent = {
 describe('NotificationHistoryItem (refs #337)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useProfileById).mockReturnValue({ profile: profileB as never, settings: settingsB as never });
-    vi.mocked(useFreshAccessToken).mockReturnValue({ token: 'tok', isFresh: true });
+    seedProfiles([profileB], { settings: { [profileB.id]: settingsB } });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('resolves the thumbnail chain via the OWNING profile, not any global current profile', () => {
+    const spy = vi.spyOn(currentProfileModule, 'useProfileById');
+
     render(<NotificationHistoryItem event={baseEvent} showProfileChip onView={vi.fn()} onMarkRead={vi.fn()} />);
 
-    expect(useProfileById).toHaveBeenCalledWith(profileB.id);
+    expect(spy).toHaveBeenCalledWith(profileB.id);
     expect(buildThumbnailChain).toHaveBeenCalledWith(
       profileB.portalUrl,
       String(baseEvent.EventId),
       settingsB.thumbnailFallbackChain,
-      expect.objectContaining({ token: 'tok' })
+      expect.objectContaining({ token: `access-${profileB.id}` })
     );
   });
 

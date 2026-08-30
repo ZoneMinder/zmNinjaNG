@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { EventMontageView } from '../EventMontageView';
 import { useReturnHighlightStore } from '../../../stores/returnHighlight';
 import { RETURN_FLASH_MS } from '../../../lib/zmninja-ng-constants';
@@ -8,6 +12,8 @@ import { downloadEventVideo } from '../../../services/download';
 import { clearAllServerMaps, setServerMap } from '../../../lib/zm/server-resolver';
 import { asProfileId, type EventData } from '../../../api/types';
 import type { ScopedEventItem } from '../EventListView';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const navigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
@@ -21,26 +27,10 @@ vi.mock('../../../hooks/useDateTimeFormat', () => ({
 }));
 
 // Per-row owning-profile resolution (EventItem pattern, refs #337 Task 2):
-// useProfileById/useFreshAccessToken return profile-specific portal/token
-// when given a profileId, and the current-profile defaults otherwise.
+// useProfileById/useFreshAccessToken (now real) return profile-specific
+// portal/token when given a profileId, and the current profile's otherwise.
 const THUMBNAIL_CHAIN = [{ type: 'snapshot' as const, enabled: true }];
-
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useCurrentProfile: () => ({
-    settings: { thumbnailFallbackChain: THUMBNAIL_CHAIN, hoverPreview: { eventsGrid: false } },
-  }),
-  useProfileById: (profileId?: string) => ({
-    profile: profileId ? { id: profileId, portalUrl: `https://${profileId}.test` } : null,
-    settings: { thumbnailFallbackChain: THUMBNAIL_CHAIN, forceDisableMultiPort: false },
-  }),
-}));
-
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string) => ({
-    token: profileId ? `${profileId}-token` : undefined,
-    isFresh: true,
-  }),
-}));
+const PROFILE_SETTINGS = { thumbnailFallbackChain: THUMBNAIL_CHAIN, forceDisableMultiPort: false, hoverPreview: { eventsGrid: false } as never };
 
 vi.mock('../EventThumbnail', () => ({
   EventThumbnail: ({ urls }: { urls: string[] }) => (
@@ -134,12 +124,18 @@ function renderMontage(startDateTime: string) {
 beforeEach(() => {
   navigate.mockClear();
   useReturnHighlightStore.setState({ lastViewedEventId: null });
+  seedProfiles([makeProfile('current'), makeProfile('profile-b', { portalUrl: 'https://profile-b.test' })], {
+    current: 'current',
+    settings: { current: PROFILE_SETTINGS, 'profile-b': PROFILE_SETTINGS },
+  });
 });
 
 // Server maps are module-global state (server-resolver.ts); clear after
 // every test so a later test never sees a map a previous one registered.
 afterEach(() => {
   clearAllServerMaps();
+  resetProfileFixture();
+  resetFakeStoreGates();
 });
 
 describe('EventMontageView relative time (grid view)', () => {
@@ -238,7 +234,7 @@ describe('EventMontageView all-mode owning-profile wiring (refs #337 Task 2)', (
     const [portalUrl, eventId, , accessToken] = vi.mocked(downloadEventVideo).mock.calls[0];
     expect(portalUrl).toContain('https://profile-b.test');
     expect(eventId).toBe('204');
-    expect(accessToken).toBe('profile-b-token');
+    expect(accessToken).toBe('access-profile-b');
   });
 
   it('single-mode tile still uses the page-level portal and token unchanged (byte-identical)', () => {

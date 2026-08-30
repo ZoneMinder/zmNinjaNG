@@ -6,38 +6,35 @@
  * bug the montage tiles and preview popover had (carried debt, Phase 3
  * re-review).
  */
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { EventZmsHoverPlayer } from '../EventThumbnailHoverPreview';
+import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('../../../lib/zm/zms-quit', () => ({
   sendDelayedCmdQuit: vi.fn(),
   cancelPendingQuit: vi.fn(() => false),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: { zmsEventPlayer: vi.fn() },
-  LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, zmsEventPlayer: vi.fn() } };
+});
 
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: (profileId?: string) => ({
-    profile: profileId
-      ? { id: profileId, portalUrl: `https://${profileId}.test`, apiUrl: `https://${profileId}.test/api` }
-      : { id: 'current-profile', portalUrl: 'https://current-profile.test', apiUrl: 'https://current-profile.test/api' },
-    settings: { forceDisableMultiPort: false, hoverPreviewPlaybackRate: 1 },
-  }),
-}));
-
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: (profileId?: string) => ({
-    token: profileId ? `${profileId}-token` : 'current-profile-token',
-    isFresh: true,
-  }),
-}));
+afterEach(() => {
+  resetProfileFixture();
+  resetFakeStoreGates();
+});
 
 describe('EventZmsHoverPlayer owning-profile wiring (refs #337 Task 2)', () => {
   it("streams from profile B's portal when the descriptor carries profileId B", () => {
+    seedProfiles(['current-profile', 'profile-b'], { current: 'current-profile' });
+
     const { container } = render(
       <EventZmsHoverPlayer descriptor={{ eventId: 'e1', monitorId: '3', profileId: 'profile-b' }} />
     );
@@ -48,6 +45,8 @@ describe('EventZmsHoverPlayer owning-profile wiring (refs #337 Task 2)', () => {
   });
 
   it('falls back to the current profile when no profileId is given (single mode, byte-identical)', () => {
+    seedProfiles(['current-profile', 'profile-b'], { current: 'current-profile' });
+
     const { container } = render(
       <EventZmsHoverPlayer descriptor={{ eventId: 'e1', monitorId: '3' }} />
     );

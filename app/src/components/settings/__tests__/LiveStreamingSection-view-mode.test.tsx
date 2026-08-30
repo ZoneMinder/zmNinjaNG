@@ -8,13 +8,19 @@
  * badge sits on, since those are what tell them why the mode was picked.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { LiveStreamingSection } from '../LiveStreamingSection';
 import { DEFAULT_SETTINGS } from '../../../stores/settings';
-import { asProfileId, type Profile } from '../../../api/types';
+import type { Profile } from '../../../api/types';
 import { getMonitors } from '../../../api/monitors';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -26,27 +32,17 @@ vi.mock('react-i18next', () => ({
 }));
 
 vi.mock('../../../api/monitors', () => ({ getMonitors: vi.fn() }));
-vi.mock('../../../services/sessions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../services/sessions')>()),
-  getSession: () => ({ client: {} }) as never,
-}));
 
-const profile = (minStreamingPort?: number): Profile => ({
-  id: asProfileId('p1'),
-  name: 'Test',
-  portalUrl: 'https://zm.example.com',
-  apiUrl: 'https://zm.example.com/api',
-  cgiUrl: 'https://zm.example.com/cgi-bin',
-  isDefault: true,
-  createdAt: 0,
-  minStreamingPort,
-});
+function profile(minStreamingPort?: number): Profile {
+  return makeProfile('p1', { name: 'Test', minStreamingPort });
+}
 
 async function renderSection(
   monitorCount: number,
   minStreamingPort?: number,
   settings: Partial<typeof DEFAULT_SETTINGS> = {},
 ) {
+  seedProfiles([profile(minStreamingPort)]);
   vi.mocked(getMonitors).mockResolvedValue({
     monitors: Array.from({ length: monitorCount }, (_, i) => ({ id: String(i + 1) })),
   } as never);
@@ -68,6 +64,11 @@ describe('LiveStreamingSection Streaming Mode recommendation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('explains streaming for a small server and badges the streaming side', async () => {

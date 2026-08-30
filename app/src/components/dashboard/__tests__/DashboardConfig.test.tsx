@@ -1,25 +1,20 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { DashboardConfig } from '../DashboardConfig';
 import { mintVirtualProfileId } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+import { useProfileStore } from '../../../stores/profile';
 
 const addWidget = vi.fn();
 
 vi.mock('../../../stores/dashboard', () => ({
   useDashboardStore: (selector: (state: { addWidget: typeof addWidget }) => unknown) =>
     selector({ addWidget }),
-}));
-
-// Mutable so a test can put the app in a group and check which bucket the
-// new widget is filed under.
-let profileState: Record<string, unknown> = {};
-
-vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: Record<string, unknown>) => unknown) => selector(profileState),
-}));
-
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
 }));
 
 vi.mock('@tanstack/react-query', () => ({
@@ -42,11 +37,12 @@ vi.mock('react-i18next', () => ({
 describe('DashboardConfig', () => {
   beforeEach(() => {
     addWidget.mockClear();
-    profileState = {
-      profiles: [{ id: 'profile-1', name: 'Home' }],
-      currentProfileId: 'profile-1',
-      virtualProfiles: [],
-    };
+    seedProfiles([makeProfile('profile-1', { name: 'Home' })]);
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('adds a monitor widget when a monitor is selected', () => {
@@ -89,11 +85,10 @@ describe('DashboardConfig', () => {
   // active is filed under the group, not the All Servers sentinel (refs #337).
   it("files a new widget under the active group's own bucket", () => {
     const group = mintVirtualProfileId();
-    profileState = {
-      profiles: [{ id: 'profile-1', name: 'Home' }],
+    useProfileStore.setState({
       currentProfileId: group,
-      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: ['profile-1'] }],
-    };
+      virtualProfiles: [{ id: group, name: 'Backyard', memberProfileIds: [asProfileId('profile-1')] }],
+    });
 
     render(<DashboardConfig />);
 

@@ -7,28 +7,19 @@
  * current profile's - otherwise a cross-profile token gets sent to the
  * wrong host.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render } from '@testing-library/react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { MonitorRecentEvents } from '../MonitorRecentEvents';
 import { asProfileId, type Event, type Monitor } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
-
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: (profileId?: string) => ({
-    profile: { id: profileId ?? 'current-profile', portalUrl: 'https://portal.test' },
-    settings: {
-      thumbnailFallbackChain: [],
-      eventsThumbnailFit: 'contain',
-      forceDisableMultiPort: false,
-    },
-  }),
-}));
-
-vi.mock('../../../hooks/useFreshAccessToken', () => ({
-  useFreshAccessToken: () => ({ token: 'tok', isFresh: true }),
-}));
 
 vi.mock('../../../stores/monitorSeen', () => ({
   useMonitorSeenStore: (sel: (s: { markSeen: () => void }) => unknown) => sel({ markSeen: vi.fn() }),
@@ -80,6 +71,18 @@ describe('MonitorRecentEvents thumbnail-chain profile scoping (refs #337 I2)', (
       toggleHidden: vi.fn(),
       refetch: vi.fn(),
     });
+    seedProfiles([makeProfile('current-profile'), makeProfile('profile-b')], {
+      current: 'current-profile',
+      settings: {
+        'current-profile': { thumbnailFallbackChain: [], eventsThumbnailFit: 'contain' as never, forceDisableMultiPort: false },
+        'profile-b': { thumbnailFallbackChain: [], eventsThumbnailFit: 'contain' as never, forceDisableMultiPort: false },
+      },
+    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('builds the thumbnail chain with the deep route profileId, not the current profile', () => {

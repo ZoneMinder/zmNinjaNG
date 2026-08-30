@@ -11,12 +11,19 @@
  * DropdownMenuContent's children (the actual menu-item render logic under
  * test) are always present in the DOM.
  */
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+
+vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
+vi.mock('../../lib/security/secureStorage', () => import('../../tests/fake-secure-storage'));
+
 import { ProfileSwitcher } from '../profile-switcher';
 import { mintVirtualProfileId, asProfileId } from '../../api/types';
 import { useSettingsStore } from '../../stores/settings';
+import { useProfileStore } from '../../stores/profile';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', () => ({
@@ -36,14 +43,10 @@ vi.mock('sonner', () => ({
   },
 }));
 
-vi.mock('../../lib/logger', () => ({
-  log: { profile: vi.fn() },
-  LogLevel: { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3, NONE: 4 },
-}));
-
-vi.mock('zustand/react/shallow', () => ({
-  useShallow: (fn: unknown) => fn,
-}));
+vi.mock('../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, profile: vi.fn() } };
+});
 
 vi.mock('../ui/dropdown-menu', () => ({
   DropdownMenu: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -62,26 +65,19 @@ vi.mock('../ui/dropdown-menu', () => ({
   ),
 }));
 
-const switchProfileMock = vi.fn().mockResolvedValue(undefined);
-
-vi.mock('../../stores/profile', () => ({
-  useProfileStore: (selector: (state: unknown) => unknown) => selector(mockProfileState),
-}));
-
-let mockProfileState: {
-  profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>;
-  virtualProfiles: Array<{ id: string; name: string; memberProfileIds: string[] }>;
-  currentProfileId: string | null;
-  switchProfile: typeof switchProfileMock;
-};
-
+// Seeds the real profile store. Only the aggregate (virtual-profile) switch
+// path is exercised by clicks in this file, which never touches the network
+// (no session/bootstrap calls), so no api client needs scripting here.
 function setProfiles(profiles: Array<{ id: string; name: string; portalUrl: string; disabled?: boolean }>) {
-  mockProfileState = {
-    profiles,
-    virtualProfiles: [],
-    currentProfileId: profiles[0]?.id ?? null,
-    switchProfile: switchProfileMock,
-  };
+  seedProfiles(profiles.map((p) => makeProfile(p.id, { name: p.name, portalUrl: p.portalUrl, disabled: p.disabled })));
+}
+
+function setVirtualProfiles(virtualProfiles: Array<{ id: string; name: string; memberProfileIds: string[] }>) {
+  useProfileStore.setState({ virtualProfiles: virtualProfiles as never });
+}
+
+function setCurrentProfileId(id: string) {
+  useProfileStore.setState({ currentProfileId: asProfileId(id) });
 }
 
 const profileA = { id: 'profile-a', name: 'Home', portalUrl: 'https://a.example.com' };
@@ -89,8 +85,12 @@ const profileB = { id: 'profile-b', name: 'Office', portalUrl: 'https://b.exampl
 
 describe('ProfileSwitcher', () => {
   beforeEach(() => {
-    switchProfileMock.mockClear();
     navigateMock.mockClear();
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   // No built-in aggregate is offered any more, at any profile count: groups
@@ -110,10 +110,8 @@ describe('ProfileSwitcher', () => {
 
     beforeEach(() => {
       setProfiles([profileA, profileB]);
-      mockProfileState.currentProfileId = group;
-      mockProfileState.virtualProfiles = [
-        { id: group, name: 'Backyard', memberProfileIds: ['profile-b'] },
-      ];
+      setCurrentProfileId(group);
+      setVirtualProfiles([{ id: group, name: 'Backyard', memberProfileIds: ['profile-b'] }]);
     });
 
     it("names the group on the trigger", () => {
@@ -126,7 +124,7 @@ describe('ProfileSwitcher', () => {
     // the id current with nothing behind it. Nothing is aggregating then, so
     // naming it "All Servers" would claim a selection the user does not have.
     it('does not claim All Servers when the current group no longer exists', () => {
-      mockProfileState.virtualProfiles = [];
+      setVirtualProfiles([]);
 
       render(<ProfileSwitcher />);
 
@@ -145,22 +143,20 @@ describe('ProfileSwitcher', () => {
       expect(screen.getByTestId(`profile-switcher-active-virtual-${group}`)).toBeInTheDocument();
     });
 
-    it('switches to the group id when its entry is clicked', () => {
-      mockProfileState.currentProfileId = 'profile-a';
+    it('switches to the group id when its entry is clicked', async () => {
+      setCurrentProfileId('profile-a');
 
       render(<ProfileSwitcher />);
       fireEvent.click(screen.getByTestId(`profile-switcher-virtual-${group}`));
 
-      expect(switchProfileMock).toHaveBeenCalledWith(group);
+      await waitFor(() => expect(useProfileStore.getState().currentProfileId).toBe(group));
     });
 
     // The group has its own lastRoute bucket, and a switch used to discard it
     // and land on /monitors every time (refs #337).
     it('lands on the page the group was last on', async () => {
       setProfiles([profileA, profileB]);
-      mockProfileState.virtualProfiles = [
-        { id: group, name: 'Backyard', memberProfileIds: ['profile-a', 'profile-b'] },
-      ];
+      setVirtualProfiles([{ id: group, name: 'Backyard', memberProfileIds: ['profile-a', 'profile-b'] }]);
       useSettingsStore.getState().updateProfileSettings(asProfileId(group), { lastRoute: '/timeline' });
 
       render(<ProfileSwitcher />);
@@ -175,24 +171,22 @@ describe('ProfileSwitcher', () => {
     it('disables a group whose members are all unselectable', () => {
       const profileC = { id: 'profile-c', name: 'Shed', portalUrl: 'https://c.example.com' };
       setProfiles([profileA, profileB, { ...profileC, disabled: true }]);
-      mockProfileState.virtualProfiles = [
-        { id: group, name: 'Backyard', memberProfileIds: ['profile-c'] },
-      ];
+      setVirtualProfiles([{ id: group, name: 'Backyard', memberProfileIds: ['profile-c'] }]);
 
       render(<ProfileSwitcher />);
       const entry = screen.getByTestId(`profile-switcher-virtual-${group}`);
       expect(entry).toBeDisabled();
 
       fireEvent.click(entry);
-      expect(switchProfileMock).not.toHaveBeenCalled();
+      // Disabled entries never call switchProfile; the current profile
+      // (reset to profile-a by this test's own setProfiles call) is unchanged.
+      expect(useProfileStore.getState().currentProfileId).toBe(asProfileId('profile-a'));
     });
 
     // One selectable server aggregates nothing, whichever group is named.
     it('hides groups once fewer than 2 profiles are selectable', () => {
       setProfiles([profileA, { ...profileB, disabled: true }]);
-      mockProfileState.virtualProfiles = [
-        { id: group, name: 'Backyard', memberProfileIds: ['profile-b'] },
-      ];
+      setVirtualProfiles([{ id: group, name: 'Backyard', memberProfileIds: ['profile-b'] }]);
 
       render(<ProfileSwitcher />);
 

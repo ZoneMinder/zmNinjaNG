@@ -1,11 +1,18 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { toast } from 'sonner';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { MonitorCard } from '../MonitorCard';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
+import { useProfileStore } from '../../../stores/profile';
 import { asProfileId } from '../../../api/types';
 import type { Monitor, MonitorStatus } from '../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
+import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 const OTHER_PROFILE_ID = asProfileId('other-profile');
 
@@ -19,24 +26,6 @@ vi.mock('../MonitorHoverPreview', () => ({
   MonitorHoverPreview: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('../../../hooks/useCurrentProfile', () => ({
-  useProfileById: () => ({
-    profile: { id: 'test', portalUrl: 'https://test', cgiUrl: 'https://test/cgi', apiUrl: 'https://test/api' },
-    settings: { viewMode: 'streaming', hoverPreview: { eventsList: true, eventsGrid: false, monitorsList: true, monitorsGrid: false, dashboard: true, timeline: true, notifications: true } },
-  }),
-  // useOpenMonitorEvents (imported by MonitorCard) reads the current profile
-  // directly, independent of the profileId prop under test here.
-  useCurrentProfile: () => ({
-    currentProfile: { id: 'test' },
-  }),
-}));
-
-const switchProfileMock = vi.fn(() => Promise.resolve());
-vi.mock('../../../stores/profile', () => ({
-  useProfileStore: (selector: (state: { switchProfile: typeof switchProfileMock }) => unknown) =>
-    selector({ switchProfile: switchProfileMock }),
-}));
-
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -48,18 +37,10 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('../../../lib/logger', () => ({
-  log: {
-    monitorCard: vi.fn(),
-  },
-  LogLevel: {
-    DEBUG: 0,
-    INFO: 1,
-    WARN: 2,
-    ERROR: 3,
-    NONE: 4,
-  },
-}));
+vi.mock('../../../lib/logger', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../lib/logger')>();
+  return { ...actual, log: { ...actual.log, monitorCard: vi.fn() } };
+});
 
 vi.mock('sonner', () => ({
   toast: {
@@ -68,19 +49,25 @@ vi.mock('sonner', () => ({
   },
 }));
 
-vi.mock('../../../stores/auth', () => ({
-  useAuthStore: (selector: (state: { version: string }) => unknown) =>
-    selector({ version: '1.38.0' }),
-  useAuthSlice: () => ({ version: '1.38.0' }),
-}));
-
 describe('MonitorCard', () => {
   beforeEach(() => {
     mockNavigate.mockClear();
-    switchProfileMock.mockReset();
-    switchProfileMock.mockResolvedValue(undefined);
     vi.mocked(toast.error).mockClear();
     useMonitorSeenStore.setState({ profileWatermarks: {} });
+    seedProfiles([makeProfile('test'), makeProfile('other-profile')], {
+      current: 'test',
+      settings: {
+        test: {
+          viewMode: 'streaming',
+          hoverPreview: { eventsList: true, eventsGrid: false, monitorsList: true, monitorsGrid: false, dashboard: true, timeline: true, notifications: true } as never,
+        },
+      },
+    });
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('calls settings callback when settings button is clicked', async () => {
@@ -230,7 +217,7 @@ describe('MonitorCard', () => {
 
     await user.click(screen.getByTestId('monitor-player'));
 
-    expect(switchProfileMock).not.toHaveBeenCalled();
+    expect(useProfileStore.getState().currentProfileId).toBe('test');
     expect(mockNavigate).toHaveBeenCalledWith(
       `/all/monitors/${OTHER_PROFILE_ID}/1`,
       { state: { from: '/monitors' } }
@@ -244,7 +231,7 @@ describe('MonitorCard', () => {
 
     await user.click(screen.getByTestId('monitor-player'));
 
-    expect(switchProfileMock).not.toHaveBeenCalled();
+    expect(useProfileStore.getState().currentProfileId).toBe('test');
     expect(mockNavigate).toHaveBeenCalledWith('/monitors/1', { state: { from: '/monitors' } });
   });
 
@@ -264,7 +251,7 @@ describe('MonitorCard', () => {
 
     await user.click(screen.getByTestId('monitor-events-button'));
 
-    expect(switchProfileMock).not.toHaveBeenCalled();
+    expect(useProfileStore.getState().currentProfileId).toBe('test');
     expect(mockNavigate).toHaveBeenCalledWith(
       `/events?monitorId=1&profileId=${OTHER_PROFILE_ID}`,
       { state: { from: '/monitors' } }

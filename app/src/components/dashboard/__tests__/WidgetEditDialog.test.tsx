@@ -1,30 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { WidgetEditDialog } from '../WidgetEditDialog';
-import { useProfileScope } from '../../../hooks/useProfileScope';
-import { getSession } from '../../../services/sessions';
-import { getMonitors } from '../../../api/monitors';
-import { asProfileId } from '../../../api/types';
+import { ALL_PROFILES_ID } from '../../../api/types';
 import type { DashboardWidget } from '../../../stores/dashboard';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
-}));
-vi.mock('../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  // useEventTags is mocked below, but stores/profile.ts (pulled in via other
-  // real hooks in the import graph) calls this at module load time.
-  registerSessionsGate: vi.fn(),
-}));
-vi.mock('../../../api/monitors', () => ({
-  getMonitors: vi.fn(),
 }));
 vi.mock('../../../hooks/useEventTags', () => ({
   useEventTags: () => ({ availableTags: [], tagsSupported: false }),
@@ -56,8 +46,8 @@ vi.mock('../../../stores/dashboard', () => ({
     selector({ updateWidget }),
 }));
 
-const profileA = { id: asProfileId('profile-a'), name: 'Home' };
-const profileB = { id: asProfileId('profile-b'), name: 'Work' };
+const profileA = makeProfile('profile-a', { name: 'Home' });
+const profileB = makeProfile('profile-b', { name: 'Work' });
 
 const widget: DashboardWidget = {
   id: 'widget-1',
@@ -67,24 +57,21 @@ const widget: DashboardWidget = {
   layout: { i: 'widget-1', x: 0, y: 0, w: 4, h: 2 },
 };
 
-function clientFor(id: string) {
-  return { profile: id } as unknown as import('../../../api/client').ApiClient;
+function monitorsFor(profileId: string) {
+  return { monitors: [{ Monitor: { Id: '1', Name: `Cam-${profileId}`, Function: 'Modect', Enabled: '1' } }] };
 }
 
 describe('WidgetEditDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all',
-      profile: null,
-      profiles: [profileA, profileB],
-      settings: {},
-    } as never);
-    vi.mocked(getSession).mockImplementation((id) => ({ profileId: id, client: clientFor(id), timezone: 'UTC' }));
-    vi.mocked(getMonitors).mockImplementation(async (client) => {
-      const id = (client as unknown as { profile: string }).profile;
-      return { monitors: [{ Monitor: { Id: '1', Name: `Cam-${id}`, Deleted: false } }] } as never;
-    });
+    seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
+    installApiClient(profileA.id, fakeApiClient({ '/monitors.json': monitorsFor(profileA.id), '/servers.json': { servers: [] } }));
+    installApiClient(profileB.id, fakeApiClient({ '/monitors.json': monitorsFor(profileB.id), '/servers.json': { servers: [] } }));
+  });
+
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('picking profile B and saving pins the monitor widget to B (refs #337)', async () => {

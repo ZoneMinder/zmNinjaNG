@@ -6,62 +6,81 @@
  * entirely and have nowhere to put a note.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
+
 import { AccountPermissionsCard } from '../AccountPermissionsCard';
-import { asProfileId } from '../../../api/types';
-import { SYSTEM_NONE_PERMISSIONS } from '../../../lib/permissions/zm-permissions';
+import { createHttpError } from '../../../lib/http/types';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-let mockPermissions: unknown;
-let mockLoading = false;
-vi.mock('../../../hooks/usePermissions', () => ({
-  usePermissions: () => ({ permissions: mockPermissions, isLoading: mockLoading }),
-}));
+const profileId = makeProfile('p1', { username: 'bob' }).id;
 
-const profileId = asProfileId('p1');
+function renderCard() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <AccountPermissionsCard profileId={profileId} />
+    </QueryClientProvider>
+  );
+}
 
 describe('AccountPermissionsCard', () => {
-  it('lists the level ZoneMinder reported for each column', () => {
-    mockPermissions = {
-      system: 'View',
-      monitors: 'Edit',
-      stream: 'None',
-      events: 'View',
-      control: 'None',
-      groups: 'View',
-    };
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
 
-    render(<AccountPermissionsCard profileId={profileId} />);
+  it('lists the level ZoneMinder reported for each column', async () => {
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(profileId, fakeApiClient({
+      '/users.json': {
+        users: [{ User: {
+          Username: 'bob', System: 'View', Monitors: 'Edit', Stream: 'None', Events: 'View', Control: 'None', Groups: 'View',
+        } }],
+      },
+    }));
 
-    expect(screen.getByTestId('account-permission-system')).toHaveTextContent('View');
+    renderCard();
+
+    await waitFor(() => expect(screen.getByTestId('account-permission-system')).toHaveTextContent('View'));
     expect(screen.getByTestId('account-permission-monitors')).toHaveTextContent('Edit');
     expect(screen.getByTestId('account-permission-stream')).toHaveTextContent('None');
   });
 
-  it('says a column is undetermined rather than inventing a level', () => {
-    // An account below System View cannot read its own row, so everything but
-    // System stays genuinely unknown.
-    mockPermissions = SYSTEM_NONE_PERMISSIONS;
+  it('says a column is undetermined rather than inventing a level', async () => {
+    // An account below System View cannot read its own row (a 401 naming
+    // insufficient privileges), so everything but System stays unknown.
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
+    installApiClient(profileId, fakeApiClient({
+      '/users.json': () => {
+        throw createHttpError(401, 'Unauthorized', { success: false, data: { name: 'Insufficient Privileges' } }, {});
+      },
+    }));
 
-    render(<AccountPermissionsCard profileId={profileId} />);
+    renderCard();
 
-    expect(screen.getByTestId('account-permission-system')).toHaveTextContent('None');
+    await waitFor(() => expect(screen.getByTestId('account-permission-system')).toHaveTextContent('None'));
     expect(screen.getByTestId('account-permission-events')).toHaveTextContent(
       'server.permission_unknown',
     );
   });
 
   it('shows nothing until the probe settles', () => {
-    mockPermissions = undefined;
-    mockLoading = true;
+    // Username set but no /users.json route installed and no waitFor: the
+    // probe is still in flight when this assertion runs.
+    seedProfiles([makeProfile('p1', { username: 'bob' })]);
 
-    render(<AccountPermissionsCard profileId={profileId} />);
+    renderCard();
 
     expect(screen.queryByTestId('account-permissions-card')).not.toBeInTheDocument();
-    mockLoading = false;
   });
 });

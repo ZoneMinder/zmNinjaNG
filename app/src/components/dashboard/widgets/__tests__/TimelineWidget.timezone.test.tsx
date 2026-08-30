@@ -10,13 +10,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, waitFor, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+vi.mock('../../../../api/store-gates', () => import('../../../../tests/fake-store-gates'));
+vi.mock('../../../../lib/security/secureStorage', () => import('../../../../tests/fake-secure-storage'));
+
 import { TimelineWidget } from '../TimelineWidget';
-import { useProfileScope } from '../../../../hooks/useProfileScope';
-import { useBandwidthSettings } from '../../../../hooks/useBandwidthSettings';
-import { getSession } from '../../../../services/sessions';
+import * as sessions from '../../../../services/sessions';
 import { getEvents } from '../../../../api/events';
-import { asProfileId } from '../../../../api/types';
+import { ALL_PROFILES_ID } from '../../../../api/types';
 import type { EventData } from '../../../../api/types';
+import { seedProfiles, resetProfileFixture, makeProfile, fakeApiClient } from '../../../../tests/profile-fixture';
+import { installApiClient, resetFakeStoreGates } from '../../../../tests/fake-store-gates';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (k: string) => k }),
@@ -36,34 +40,19 @@ vi.mock('recharts', () => ({
   YAxis: () => null,
   Tooltip: () => null,
 }));
-vi.mock('../../../../hooks/useBandwidthSettings', () => ({
-  useBandwidthSettings: vi.fn(),
-}));
-vi.mock('../../../../hooks/useProfileScope', () => ({
-  useProfileScope: vi.fn(),
-}));
-vi.mock('../../../../services/sessions', () => ({
-  getSession: vi.fn(),
-  getCurrentSession: vi.fn(),
-  registerSessionsGate: vi.fn(),
-}));
 vi.mock('../../../../api/events', () => ({
   getEvents: vi.fn(),
 }));
 
 // UTC and America/New_York differ by 4h in June (both DST-observing at that
 // date), so the same wall-clock string resolves 4h apart in real instant.
-const profileA = { id: asProfileId('profile-a'), name: 'Home', timezone: 'UTC' };
-const profileB = { id: asProfileId('profile-b'), name: 'Work', timezone: 'America/New_York' };
+const profileA = makeProfile('profile-a', { name: 'Home', timezone: 'UTC' });
+const profileB = makeProfile('profile-b', { name: 'Work', timezone: 'America/New_York' });
 
 function event(id: string, startDateTime: string): EventData {
   return {
     Event: { Id: id, Name: `Event-${id}`, StartDateTime: startDateTime, Cause: 'Motion', Length: '10', Notes: '' },
   } as EventData;
-}
-
-function clientFor(id: string) {
-  return { profile: id } as unknown as import('../../../../api/client').ApiClient;
 }
 
 function renderWidget() {
@@ -82,22 +71,26 @@ describe('TimelineWidget - owning-profile timezone buckets (refs #337)', () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(new Date('2026-06-15T12:00:00Z'));
-    vi.mocked(useBandwidthSettings).mockReturnValue({ timelineHeatmapInterval: 60000 } as never);
-    vi.mocked(useProfileScope).mockReturnValue({
-      mode: 'all', profile: null, profiles: [profileA, profileB], settings: {},
-    } as never);
-    vi.mocked(getSession).mockImplementation((id) => ({
-      profileId: id, client: clientFor(id), timezone: 'UTC',
-    }));
+    // Both profiles default to bandwidthMode 'normal', whose real
+    // getBandwidthSettings() gives timelineHeatmapInterval 60000 - the same
+    // value the old mock hardcoded.
+    seedProfiles([profileA, profileB], { current: ALL_PROFILES_ID });
+    // Distinct client instances per profile so the by-reference branch below
+    // (in the kept-mocked getEvents) can tell them apart.
+    installApiClient(profileA.id, fakeApiClient());
+    installApiClient(profileB.id, fakeApiClient());
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    resetProfileFixture();
+    resetFakeStoreGates();
   });
 
   it('same wall-clock time from two different-timezone profiles lands in two different hour buckets', async () => {
+    const clientA = sessions.getSession(profileA.id).client;
     vi.mocked(getEvents).mockImplementation(async (client) => {
-      const id = (client as unknown as { profile: string }).profile;
+      const id = client === clientA ? profileA.id : profileB.id;
       return { events: [event(id === profileA.id ? '1' : '2', '2026-06-15 06:00:00')] } as never;
     });
 
