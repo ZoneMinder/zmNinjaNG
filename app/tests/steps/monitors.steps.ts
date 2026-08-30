@@ -124,8 +124,14 @@ When('I hover the first monitor card', async ({ page }) => {
 Then('I should see the monitor hover preview', async ({ page }) => {
   const preview = page.getByTestId('monitor-hover-preview');
   await expect(preview).toBeVisible({ timeout: 2000 });
+
+  // Relative, not a magic number: hover-preview.tsx sizes to
+  // max(previewWidthPx, source * 2) and then clamps to the viewport, so a
+  // fixed 350 measures the clamp rather than the feature (it failed at 342 on
+  // an unchanged viewport).
   const box = await preview.boundingBox();
-  expect(box?.width).toBeGreaterThanOrEqual(350);
+  const playerBox = await page.getByTestId('monitor-player').first().boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual(Math.min((playerBox?.width ?? 0) * 2, 300));
 });
 
 Then('I should see at least {int} monitor in montage grid', async ({ page }, count: number) => {

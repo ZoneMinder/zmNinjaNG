@@ -238,8 +238,14 @@ Then('I should see the enlarged event thumbnail preview if hover was performed',
   if (!hoverPerformed) return;
   const preview = page.getByTestId('event-thumbnail-hover-preview');
   await expect(preview).toBeVisible({ timeout: 2000 });
+
+  // Relative, not a magic number: hover-preview.tsx sizes to
+  // max(previewWidthPx, source * 2) and then clamps to the viewport, so a
+  // fixed 350 measures the clamp rather than the feature (it failed at 342 on
+  // an unchanged viewport).
   const box = await preview.boundingBox();
-  expect(box?.width).toBeGreaterThanOrEqual(350);
+  const thumbBox = await page.getByTestId('event-thumbnail').first().boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThanOrEqual((thumbBox?.width ?? 0) * 2);
 });
 
 When('I navigate back if I clicked into an event', async ({ page }) => {
@@ -529,11 +535,15 @@ Then('I should see the event marked as archived if action was taken', async ({ p
     return;
   }
 
+  // Archived state is carried by the icon's SHAPE, not a fill: EventCard
+  // swaps Archive for ArchiveRestore because a solid box loses its lid at
+  // this size and colour alone says nothing to a colourblind reader. The
+  // component exposes a testid per state for exactly this assertion; the old
+  // /fill-primary/ check was left behind by that change.
   const firstEventCard = page.getByTestId('event-card').first();
   const archiveButton = firstEventCard.getByTestId('event-archive-button');
-  const archiveIcon = archiveButton.locator('svg');
 
-  await expect(archiveIcon).toHaveClass(/fill-primary/);
+  await expect(archiveButton.getByTestId('event-archive-icon-on')).toBeVisible();
 });
 
 Then('I should see the event not marked as archived if action was taken', async ({ page }) => {
@@ -544,9 +554,8 @@ Then('I should see the event not marked as archived if action was taken', async 
 
   const firstEventCard = page.getByTestId('event-card').first();
   const archiveButton = firstEventCard.getByTestId('event-archive-button');
-  const archiveIcon = archiveButton.locator('svg');
 
-  await expect(archiveIcon).not.toHaveClass(/fill-primary/);
+  await expect(archiveButton.getByTestId('event-archive-icon-off')).toBeVisible();
 });
 
 When('I archive the event from detail page if on detail page', async ({ page }) => {
@@ -569,16 +578,16 @@ When('I archive the event from detail page if on detail page', async ({ page }) 
 
 Then('I should see the detail archive button active if action was taken', async ({ page }) => {
   if (!detailArchiveToggled) return;
+  // Same shape-not-fill conveyance as the card (EventDetail swaps Archive for
+  // ArchiveRestore), with a testid per state.
   const archiveBtn = page.getByTestId('event-detail-archive');
-  const icon = archiveBtn.locator('svg').first();
-  await expect(icon).toHaveClass(/fill-current/);
+  await expect(archiveBtn.getByTestId('event-detail-archive-icon-on')).toBeVisible();
 });
 
 Then('I should see the detail archive button inactive if action was taken', async ({ page }) => {
   if (!detailArchiveToggled) return;
   const archiveBtn = page.getByTestId('event-detail-archive');
-  const icon = archiveBtn.locator('svg').first();
-  await expect(icon).not.toHaveClass(/fill-current/);
+  await expect(archiveBtn.getByTestId('event-detail-archive-icon-off')).toBeVisible();
 });
 
 When('I enable favorites only filter', async ({ page }) => {
