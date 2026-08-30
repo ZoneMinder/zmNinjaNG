@@ -291,14 +291,22 @@ export default function NotificationSettings() {
     // outcome; settings.enabled is only the user's intent. Reporting the
     // toggle told users push was active when registration had failed.
     if (mode === 'direct' && settings?.enabled) {
-      // FCM registration is native-only (pushNotifications.initialize returns
-      // on web), so notificationId can never be set here. A red "not
-      // registered" would damn an impossibility; say what is actually true.
+      // Off-native, direct mode delivers by polling the events API
+      // (useNotificationAutoConnect starts the poller on desktop and web);
+      // FCM registration is native-only, so notificationId can never be set
+      // here and the registered/not-registered split would damn an
+      // impossibility. Report the thing that actually runs: the poller.
       if (!Platform.isNative) {
-        return (
+        const polling = currentProfile ? getEventPoller(currentProfile.id).isRunning() : false;
+        return polling ? (
+          <Badge variant="default" className="gap-1.5 bg-blue-500">
+            <CheckCircle className="h-3 w-3" />
+            {t('notifications.status.direct_polling')}
+          </Badge>
+        ) : (
           <Badge variant="secondary" className="gap-1.5">
             <AlertCircle className="h-3 w-3" />
-            {t('notifications.status.direct_native_only')}
+            {t('notifications.status.direct_poller_stopped')}
           </Badge>
         );
       }

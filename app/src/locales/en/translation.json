@@ -1000,7 +1000,8 @@
       "connecting": "Connecting...",
       "direct_active": "Direct mode active",
       "direct_not_registered": "Direct mode not registered",
-      "direct_native_only": "Direct mode needs the mobile app"
+      "direct_polling": "Polling for events",
+      "direct_poller_stopped": "Poller not running"
     },
     "switch_profile_title": "Switch Profile?",
     "switch_profile_desc": "This notification is from \"{{profile}}\". Switch to this profile to view the event?",
