@@ -89,3 +89,9 @@ test('proveRed fails a behavior change that brings no unit test', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('a ratchet baseline is bookkeeping, not source', () => {
+  const split = classify(['app/.quality-baseline.json', 'app/.lint-baseline.json', 'app/src/hooks/__tests__/x.test.ts']);
+  assert.deepEqual(split.source, []);
+  assert.equal(skipReason('test: migrate', split), 'no source file changed');
+});

@@ -34,7 +34,11 @@ export const SKIP_TYPES = ['docs', 'chore', 'ci', 'refactor', 'build', 'style', 
 
 const UNIT_TEST = /^app\/src\/.*\.test\.(ts|tsx)$/;
 const TEST_SUPPORT = /^app\/src\/tests\/|\/__tests__\/|^app\/tests\/steps\//;
-const NON_CODE = /^(docs\/|agents\/|\.github\/|.*\.md$|.*\.rst$|app\/src\/locales\/|app\/tests\/features\/)/;
+// Ratchet baselines record a count; changing one is bookkeeping, not
+// behaviour. Counting them as source made a pure test migration (tests
+// changed, a baseline lowered, no app code touched) demand a red proof it
+// cannot give, since its tests rightly pass on the old code too.
+const NON_CODE = /^(docs\/|agents\/|\.github\/|.*\.md$|.*\.rst$|app\/src\/locales\/|app\/tests\/features\/|app\/\.[\w-]+-baseline\.json$)/;
 
 /** Split a changed-file list into what to run, what to carry along, and what counts as behavior. */
 export function classify(files) {
