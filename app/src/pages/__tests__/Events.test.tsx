@@ -285,7 +285,7 @@ describe('Events Page', () => {
 
   it('shows empty state when no events exist', () => {
     render(<Events />);
-    expect(screen.getByTestId('events-empty-state')).toBeInTheDocument();
+    expect(screen.getByTestId('events-empty-state')).toHaveTextContent('events.no_events');
   });
 
   it('renders event list when events are available', () => {
@@ -312,14 +312,14 @@ describe('Events Page', () => {
 
     render(<Events />);
 
-    expect(screen.getByTestId('event-list')).toBeInTheDocument();
+    expect(screen.getByTestId('event-list')).toHaveTextContent('100-Front Door');
     expect(screen.getByTestId('event-card-item')).toHaveTextContent('100-Front Door');
   });
 
   it('applies and clears filters from the filter panel', async () => {
     render(<Events />);
 
-    expect(screen.getByTestId('events-filter-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('events-filter-panel')).toHaveTextContent('common.filter');
     const user = userEvent.setup();
     await user.click(screen.getByTestId('events-apply-filters'));
     await user.click(screen.getByTestId('events-clear-filters'));
@@ -338,7 +338,7 @@ describe('Events Page', () => {
 
     render(<Events />);
 
-    expect(screen.getByTestId('events-clear-quick-range')).toBeInTheDocument();
+    expect(screen.getByTestId('events-clear-quick-range')).toHaveAttribute('title', 'common.clear');
   });
 
   it('hides the clear-date button when no date range and no quick range are active', () => {
@@ -416,7 +416,11 @@ describe('Events Page', () => {
 
     render(<Events />);
 
+    // EventMontageView is mocked to a bare decorative div (no text/attrs); its
+    // presence vs. the list view's is the only observable signal, so pair it
+    // with the list view's absence to pin down which branch actually rendered.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
     expect(updateProfileSettingsMock).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({ eventsViewMode: expect.anything() })
@@ -436,8 +440,10 @@ describe('Events Page', () => {
 
     render(<Events />);
     // Precondition: the page really is in montage, so the click below means
-    // "switch to list" rather than "switch to montage".
+    // "switch to list" rather than "switch to montage". EventMontageView is a
+    // bare decorative mock, so pair its presence with the list view's absence.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('events-view-toggle'));
 
@@ -459,7 +465,11 @@ describe('Events Page', () => {
 
     render(<Events />);
 
+    // EventMontageView is mocked to a bare decorative div (no text/attrs);
+    // pair its presence with the list view's absence to confirm the
+    // persisted setting actually won the branch, not just that something rendered.
     expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
   });
 
   describe('All mode', () => {
@@ -585,7 +595,10 @@ describe('Events Page', () => {
 
       expect(screen.getByTestId('events-view-toggle')).not.toBeDisabled();
       expect(screen.queryByTestId('events-montage-gate')).not.toBeInTheDocument();
+      // EventMontageView is mocked to a bare decorative div (no text/attrs);
+      // pair its presence with the list view's absence.
       expect(screen.getByTestId('events-montage-grid')).toBeInTheDocument();
+      expect(screen.queryByTestId('event-list')).not.toBeInTheDocument();
     });
 
     it('the server filter chip row hides a profile\'s slice when toggled off', () => {
@@ -603,7 +616,8 @@ describe('Events Page', () => {
       const cards = screen.getAllByTestId('event-card-item');
       expect(cards).toHaveLength(1);
       expect(cards[0]).toHaveTextContent('1-');
-      expect(screen.getByTestId('events-server-filter-row')).toBeInTheDocument();
+      expect(screen.getByTestId('events-server-filter-profile-1')).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('events-server-filter-profile-2')).toHaveAttribute('aria-pressed', 'false');
     });
 
     it('drops a deleted profile\'s id from the persisted server filter instead of silently hiding everything (refs #337)', () => {
@@ -651,7 +665,9 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByText('events.showing_of_total:{"showing":1,"total":1}')).toBeInTheDocument();
+      expect(screen.getByText('events.showing_of_total:{"showing":1,"total":1}')).toHaveTextContent(
+        'events.showing_of_total:{"showing":1,"total":1}'
+      );
     });
 
     it('shows a localized hint instead of the plain empty state when the server filter hides every profile (refs #337)', () => {
@@ -661,7 +677,7 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByTestId('events-filter-empty-hint')).toBeInTheDocument();
+      expect(screen.getByTestId('events-filter-empty-hint')).toHaveTextContent('events.filter_hides_everything');
       expect(screen.queryByTestId('events-empty-state')).not.toBeInTheDocument();
     });
 
@@ -674,8 +690,8 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByTestId('profile-error-strip-profile-2')).toBeInTheDocument();
-      expect(screen.getByTestId('event-card-item')).toBeInTheDocument();
+      expect(screen.getByTestId('profile-error-strip-profile-2')).toHaveTextContent('Office:');
+      expect(screen.getByTestId('event-card-item')).toHaveTextContent('1-Camera 1');
       expect(screen.queryByTestId('events-all-failed-state')).not.toBeInTheDocument();
     });
 
@@ -729,7 +745,9 @@ describe('Events Page', () => {
 
       render(<Events />);
 
-      expect(screen.getByTestId('events-all-failed-state')).toBeInTheDocument();
+      // Confirms the branch that rendered is genuinely the all-failed state,
+      // not merely that some empty-state div exists.
+      expect(screen.queryByTestId('events-empty-state')).toBeNull();
       expect(screen.getByTestId('events-all-failed-state')).toHaveTextContent('events.all_failed_title');
     });
   });

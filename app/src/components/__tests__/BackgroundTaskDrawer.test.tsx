@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { BackgroundTaskDrawer } from '../BackgroundTaskDrawer';
 import type { BackgroundTask } from '../../stores/backgroundTasks';
 
@@ -83,7 +83,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const badge = screen.getByTestId('background-tasks-badge');
-      expect(badge).toBeInTheDocument();
+      expect(badge.tagName).toBe('BUTTON');
       expect(badge).toHaveTextContent('2');
       expect(badge).toHaveTextContent('backgroundTasks.completed');
     });
@@ -128,7 +128,8 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const collapsed = screen.getByTestId('background-tasks-collapsed');
-      expect(collapsed).toBeInTheDocument();
+      const progressIndicator = within(collapsed).getByRole('progressbar').firstElementChild as HTMLElement;
+      expect(progressIndicator).toHaveStyle({ transform: 'translateX(-55%)' });
       expect(collapsed).toHaveTextContent('45%');
     });
 
@@ -192,9 +193,9 @@ describe('BackgroundTaskDrawer', () => {
       const title = screen.getByTestId('background-tasks-title');
       const taskList = screen.getByTestId('background-tasks-list');
 
-      expect(drawer).toBeInTheDocument();
+      expect(drawer).toContainElement(taskList);
       expect(title).toHaveTextContent('backgroundTasks.title');
-      expect(taskList).toBeInTheDocument();
+      expect(taskList).toContainElement(screen.getByTestId('task-item-1'));
     });
 
     it('should show active task badge', () => {
@@ -221,7 +222,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const badge = screen.getByText('2 backgroundTasks.active');
-      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveClass('bg-secondary');
     });
 
     it('should show clear completed button when there are completed tasks', () => {
@@ -241,7 +242,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const clearButton = screen.getByTestId('clear-completed-button');
-      expect(clearButton).toBeInTheDocument();
+      expect(clearButton).toHaveTextContent('backgroundTasks.clear_completed');
 
       fireEvent.click(clearButton);
       expect(mockClearCompleted).toHaveBeenCalled();
@@ -312,9 +313,9 @@ describe('BackgroundTaskDrawer', () => {
       const progressBar = screen.getByTestId('task-progress-bar');
       const progressText = screen.getByTestId('task-progress-text');
 
-      expect(taskItem).toBeInTheDocument();
+      expect(taskItem).toContainElement(taskTitle);
       expect(taskTitle).toHaveTextContent('MyVideo.mp4');
-      expect(progressBar).toBeInTheDocument();
+      expect(progressBar.parentElement).toHaveAttribute('aria-valuenow', '65');
       expect(progressText).toHaveTextContent('65%');
     });
 
@@ -338,7 +339,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const sizeText = screen.getByTestId('task-size-text');
-      expect(sizeText).toBeInTheDocument();
+      expect(sizeText).toHaveTextContent('4.8 MB / 9.5 MB');
     });
 
     it('should show cancel button for active tasks with cancelFn', () => {
@@ -359,7 +360,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const cancelButton = screen.getByTestId('task-cancel-button');
-      expect(cancelButton).toBeInTheDocument();
+      expect(cancelButton).toHaveAttribute('aria-label', 'common.cancel');
 
       fireEvent.click(cancelButton);
       expect(mockCancelTask).toHaveBeenCalledWith('task-1');
@@ -382,7 +383,7 @@ describe('BackgroundTaskDrawer', () => {
       render(<BackgroundTaskDrawer />);
 
       const removeButton = screen.getByTestId('task-remove-button');
-      expect(removeButton).toBeInTheDocument();
+      expect(removeButton).toHaveAttribute('aria-label', 'common.remove');
 
       fireEvent.click(removeButton);
       expect(mockRemoveTask).toHaveBeenCalledWith('task-1');

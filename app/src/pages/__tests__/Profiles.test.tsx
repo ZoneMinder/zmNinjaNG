@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Profiles from '../Profiles';
 import { mintVirtualProfileId } from '../../api/types';
@@ -149,9 +149,13 @@ describe('Profiles Page', () => {
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-list')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-card')).toBeInTheDocument();
-    expect(screen.getByTestId('profile-active-indicator')).toBeInTheDocument();
+    // storeState([HOME], 'p1') is one profile, so the list holds exactly one card.
+    const cards = within(screen.getByTestId('profile-list')).getAllByTestId('profile-card');
+    expect(cards).toHaveLength(1);
+    // HOME.isDefault is true, so its card carries the Default badge.
+    expect(cards[0]).toHaveTextContent('profiles.default');
+    // The active indicator belongs to HOME's own card, not just the document.
+    expect(cards[0]).toContainElement(screen.getByTestId('profile-active-indicator'));
     expect(screen.getByTestId('profile-name')).toHaveTextContent('Home');
   });
 
@@ -164,7 +168,7 @@ describe('Profiles Page', () => {
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-new-group-button')).toHaveTextContent('profiles.new_group');
     expect(screen.queryByTestId('profile-card-all')).not.toBeInTheDocument();
     expect(screen.queryByTestId('profile-card-all-note')).not.toBeInTheDocument();
   });
@@ -189,10 +193,13 @@ describe('Profiles Page', () => {
 
     render(<Profiles />);
 
-    expect(screen.getByTestId('profile-disabled-badge')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-disabled-badge')).toHaveTextContent('profiles.disabled');
     expect(screen.queryByTestId('profile-switch-button-p2')).not.toBeInTheDocument();
     // Edit, delete, and the re-enable toggle stay available, in the row menu.
-    expect(screen.getByTestId('profile-actions-menu-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('profile-actions-menu-p2')).toHaveAttribute(
+      'aria-label',
+      'profiles.more_actions'
+    );
   });
 
   it('shows an error toast when disabling the active profile is rejected', async () => {
@@ -247,7 +254,7 @@ describe('Profiles Page', () => {
       render(<Profiles />);
 
       const card = screen.getByTestId(`profile-card-virtual-${GROUP.id}`);
-      expect(card.querySelector('[data-testid="profile-active-indicator"]')).toBeInTheDocument();
+      expect(card.querySelector('[data-testid="profile-active-indicator"]')).not.toBeNull();
     });
 
     it('switches to the group id from its switch button', async () => {
@@ -285,7 +292,7 @@ describe('Profiles Page', () => {
 
       useProfileStoreMock.mockReturnValue(storeState([HOME, OFFICE], 'p1', []));
       render(<Profiles />);
-      expect(screen.getByTestId('profile-new-group-button')).toBeInTheDocument();
+      expect(screen.getByTestId('profile-new-group-button')).toHaveTextContent('profiles.new_group');
     });
 
     it('opens the dialog in edit mode from the group card', async () => {
@@ -350,8 +357,11 @@ describe('Profiles Page', () => {
 
       expect(switchProfileMock).not.toHaveBeenCalled();
       expect(card).toHaveTextContent('profiles.group_no_active_members');
-      // Still fixable: edit and delete are the way out.
-      expect(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`)).toBeInTheDocument();
+      // Still fixable: edit and delete are the way out, through this menu.
+      expect(screen.getByTestId(`profile-actions-menu-virtual-${GROUP.id}`)).toHaveAttribute(
+        'aria-label',
+        'profiles.more_actions'
+      );
     });
 
     it('reports a failed group delete instead of closing silently', async () => {

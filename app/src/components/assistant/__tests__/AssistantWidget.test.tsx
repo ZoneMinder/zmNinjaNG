@@ -61,16 +61,18 @@ describe('AssistantWidget', () => {
       mockIsMobile = false;
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
-      expect(screen.getByTestId('assistant-panel')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-mobile-sheet')).not.toBeInTheDocument();
+      // Fixed bottom-right placement is the desktop card's own layout, not the
+      // mobile sheet's inset-x-0 bottom sheet.
+      expect(screen.getByTestId('assistant-panel')).toHaveClass('fixed', 'bottom-4', 'right-4');
+      expect(screen.queryByTestId('assistant-mobile-sheet')).toBeNull();
     });
 
     it('renders the mobile sheet, not the desktop card, when mobile', () => {
       mockIsMobile = true;
       useAssistantPanelStore.setState({ state: 'open' });
       render(<AssistantWidget />);
-      expect(screen.getByTestId('assistant-mobile-sheet')).toBeInTheDocument();
-      expect(screen.queryByTestId('assistant-panel')).not.toBeInTheDocument();
+      expect(screen.getByTestId('assistant-mobile-sheet')).toHaveAttribute('role', 'dialog');
+      expect(screen.queryByTestId('assistant-panel')).toBeNull();
     });
   });
 
@@ -139,7 +141,7 @@ describe('AssistantWidget', () => {
     render(<AssistantWidget />);
 
     const fab = screen.getByTestId('assistant-fab');
-    expect(fab).toBeInTheDocument();
+    expect(fab).toHaveAttribute('type', 'button');
     expect(fab).toHaveAccessibleName('assistant.reopen');
     // Ninjii's logo replaces the lucide icon in the FAB (refs #246); it's
     // decorative since the button's own aria-label already names Ninjii.
@@ -154,12 +156,17 @@ describe('AssistantWidget', () => {
     useAssistantPanelStore.setState({ state: 'open' });
     render(<AssistantWidget />);
 
-    expect(screen.queryByTestId('assistant-fab')).not.toBeInTheDocument();
-    expect(screen.getByTestId('assistant-panel')).toBeInTheDocument();
-    expect(screen.getByTestId('ask-panel-stub')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-clear')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-minimize')).toBeInTheDocument();
-    expect(screen.getByTestId('assistant-close')).toBeInTheDocument();
+    expect(screen.queryByTestId('assistant-fab')).toBeNull();
+    // Default size from the panel store, reflected onto the resizable card.
+    expect(screen.getByTestId('assistant-panel')).toHaveStyle({
+      '--assistant-w': `${ASSISTANT_PANEL.defaultWidth}px`,
+      '--assistant-h': `${ASSISTANT_PANEL.defaultHeight}px`,
+    });
+    // Open, not minimized: AskPanel sits outside the 'hidden' wrapper.
+    expect(screen.getByTestId('ask-panel-stub').closest('.hidden')).toBeNull();
+    expect(screen.getByTestId('assistant-clear')).toHaveAttribute('aria-label', 'assistant.clear');
+    expect(screen.getByTestId('assistant-minimize')).toHaveAttribute('aria-label', 'assistant.minimize');
+    expect(screen.getByTestId('assistant-close')).toHaveAttribute('aria-label', 'common.close');
     // Ninjii's logo in the header, to the left of the title (refs #246).
     expect(screen.getByAltText('assistant.title')).toHaveAttribute('src', NINJII_LOGO_URL);
   });
@@ -198,8 +205,9 @@ describe('AssistantWidget', () => {
 
     expect(useAssistantPanelStore.getState().state).toBe('minimized');
     // AskPanel stays mounted (hidden via CSS) so the conversation and any
-    // in-flight turn survive the minimize (refs #246).
-    expect(screen.getByTestId('ask-panel-stub')).toBeInTheDocument();
+    // in-flight turn survive the minimize (refs #246): it's still in the
+    // DOM, now inside the wrapper that just gained the 'hidden' class.
+    expect(screen.getByTestId('ask-panel-stub').closest('.hidden')).not.toBeNull();
   });
 
   it('close button closes the panel', async () => {

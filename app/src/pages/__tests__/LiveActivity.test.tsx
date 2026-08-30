@@ -204,7 +204,7 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
     });
     expect(screen.queryByText(/Backyard/)).not.toBeInTheDocument();
     // The header used to read "Front Door(3):Alarmed"; the id is gone and the
@@ -220,7 +220,7 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByRole('img', { name: 'Alarmed' })).toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Alarmed' })).toHaveAccessibleName('Alarmed');
     });
     expect(screen.getByRole('img', { name: 'Alarmed' })).toHaveAttribute('title', 'Alarmed');
   });
@@ -248,7 +248,7 @@ describe('LiveActivity', () => {
       render(<LiveActivity />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('Driveway')).toBeInTheDocument();
+        expect(screen.getByText('Driveway')).toHaveTextContent('Driveway');
       });
     });
 
@@ -272,7 +272,7 @@ describe('LiveActivity', () => {
       render(<LiveActivity />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('Driveway')).toBeInTheDocument();
+        expect(screen.getByText('Driveway')).toHaveTextContent('Driveway');
       });
     });
 
@@ -282,7 +282,7 @@ describe('LiveActivity', () => {
       render(<LiveActivity />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('Front Door')).toBeInTheDocument();
+        expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
       });
       expect(screen.queryByText('Driveway')).not.toBeInTheDocument();
     });
@@ -336,7 +336,7 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
     });
 
     const settled = tileRenders.count;
@@ -350,7 +350,7 @@ describe('LiveActivity', () => {
     expect(tileRenders.count - settled).toBeLessThan(10);
     // The tile is still on screen, so the bound above is not passing because
     // the page went blank.
-    expect(screen.getByText('Front Door')).toBeInTheDocument();
+    expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
   });
 
   it('labels a tile with how long its alarm episode has run', async () => {
@@ -406,7 +406,7 @@ describe('LiveActivity', () => {
       timeout: 5000,
     });
     expect(screen.queryByTestId('live-activity-tile')).not.toBeInTheDocument();
-    expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet');
   }, 10000);
 
   it('shows a monitor again when it alarms after a dismissal was released', async () => {
@@ -443,14 +443,14 @@ describe('LiveActivity', () => {
     });
 
     quiet = true;
-    await waitFor(() => expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet'));
     // Give the quiet polls time to release the dismissal before it re-alarms.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     });
     alarmAgain = true;
 
-    await waitFor(() => expect(screen.getByText('Front Door')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByText('Front Door')).toHaveTextContent('Front Door'), {
       timeout: 5000,
     });
   }, 10000);
@@ -503,9 +503,9 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
     });
-    expect(screen.getByTestId('live-activity-fullscreen')).toBeInTheDocument();
+    expect(screen.getByTestId('live-activity-fullscreen')).toHaveTextContent('Live Activity');
     expect(screen.queryByTestId('live-activity-settings-btn')).not.toBeInTheDocument();
     expect(screen.queryByTestId('live-activity-fullscreen-btn')).not.toBeInTheDocument();
     // The only control left is the way back out.
@@ -534,7 +534,7 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText(/Network Error/)).toBeInTheDocument();
+      expect(screen.getByText(/Network Error/)).toHaveTextContent(/Network Error/);
     });
     expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
   });
@@ -547,7 +547,11 @@ describe('LiveActivity', () => {
     render(<LiveActivity />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByTestId('live-activity-loading')).toBeInTheDocument();
+      // One skeleton tile per column, times two rows - tied to this fixture's
+      // monitorGridCols: 2, not a magic number.
+      expect(screen.getByTestId('live-activity-loading').children).toHaveLength(
+        env.settings.monitorGridCols * 2
+      );
     });
     expect(screen.queryByTestId('live-activity-empty')).not.toBeInTheDocument();
   });
@@ -790,7 +794,7 @@ describe('LiveActivity', () => {
     render(<LiveActivityFast />, { wrapper });
 
     await waitFor(() => {
-      expect(screen.getByText('Front Door')).toBeInTheDocument();
+      expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
     });
     await waitFor(
       () => {
@@ -798,7 +802,7 @@ describe('LiveActivity', () => {
       },
       { timeout: 5000 }
     );
-    expect(screen.getByTestId('live-activity-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('live-activity-empty')).toHaveTextContent('All quiet');
   }, 10000);
 
   // All mode aggregates every scope profile's alarm fanout instead of being
@@ -873,9 +877,9 @@ describe('LiveActivity', () => {
       expect(screen.queryByTestId('live-activity-all-mode-notice')).not.toBeInTheDocument();
 
       await waitFor(() => {
-        expect(screen.getByText('Front Door')).toBeInTheDocument();
+        expect(screen.getByText('Front Door')).toHaveTextContent('Front Door');
       });
-      expect(screen.getByText('Garage')).toBeInTheDocument();
+      expect(screen.getByText('Garage')).toHaveTextContent('Garage');
       const chips = screen.getAllByTestId('montage-profile-chip');
       expect(chips.map((c) => c.textContent).sort()).toEqual(['One', 'Two']);
     });
@@ -925,7 +929,7 @@ describe('LiveActivity', () => {
       render(<LiveActivityAllMode />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('p2-cam4')).toBeInTheDocument();
+        expect(screen.getByText('p2-cam4')).toHaveTextContent('p2-cam4');
       });
       expect(screen.queryByText('p1-cam4')).not.toBeInTheDocument();
 
@@ -953,11 +957,10 @@ describe('LiveActivity', () => {
 
       render(<LiveActivityAllMode />, { wrapper });
 
-      await waitFor(() => {
-        expect(screen.getByTestId('live-activity-watch-cap-notice')).toBeInTheDocument();
-      });
       // Cap is 24 of 30 requested: 6 dropped.
-      expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('6');
+      await waitFor(() => {
+        expect(screen.getByTestId('live-activity-watch-cap-notice')).toHaveTextContent('6');
+      });
       expect(vi.mocked(reimportedGetAlarmStatus).mock.calls.length).toBe(24);
       // Round-robin, not profile-order truncation: every profile still has
       // at least one polled monitor.
@@ -992,7 +995,7 @@ describe('LiveActivity', () => {
       render(<LiveActivityAllMode />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('p1-23')).toBeInTheDocument();
+        expect(screen.getByText('p1-23')).toHaveTextContent('p1-23');
       });
 
       // p2 joins with 4 more monitors: total 28 > the 24 cap, so a re-slice
@@ -1022,7 +1025,7 @@ describe('LiveActivity', () => {
       );
 
       // The resident, still-alarming tile must never have left the screen.
-      expect(screen.getByText('p1-23')).toBeInTheDocument();
+      expect(screen.getByText('p1-23')).toHaveTextContent('p1-23');
 
       // The cap is still a real ceiling, not blown open by the exemption:
       // 28 requested, 24 watched (1 resident + 23 round-robin), 4 dropped.
@@ -1087,7 +1090,7 @@ describe('LiveActivity', () => {
       render(<LiveActivityAllMode />, { wrapper });
 
       await waitFor(() => {
-        expect(screen.getByText('p1-cam3')).toBeInTheDocument();
+        expect(screen.getByText('p1-cam3')).toHaveTextContent('p1-cam3');
       });
       expect(screen.queryByText('p2-cam3')).not.toBeInTheDocument();
     });
@@ -1118,11 +1121,12 @@ describe('LiveActivity', () => {
       const settingsButton = await screen.findByTestId('live-activity-settings-btn');
       fireEvent.click(settingsButton);
 
-      expect(screen.getByTestId('live-activity-settings-dialog')).toBeInTheDocument();
+      expect(screen.getByTestId('live-activity-settings-dialog')).toHaveTextContent('Live Activity settings');
       // The ignore-list section's ProfilePicker only ever appears when
       // scopeProfiles was actually threaded through - a gate regression
-      // would render the dialog with no way to pick a profile at all.
-      expect(screen.getByTestId('page-profile-picker')).toBeInTheDocument();
+      // would render the dialog with no way to pick a profile at all. Its
+      // selected value is the one scope profile passed in ('One'/p1).
+      expect(screen.getByTestId('page-profile-picker')).toHaveTextContent('One');
     });
 
     it('toggles fullscreen in All mode and persists it to the ALL bucket', async () => {
@@ -1194,7 +1198,7 @@ describe('LiveActivity', () => {
 
       render(<LiveActivityAllMode />, { wrapper });
 
-      await waitFor(() => expect(captured.onGridChange).toBeDefined());
+      await waitFor(() => expect(typeof captured.onGridChange).toBe('function'));
       act(() => {
         captured.onGridChange!(4);
       });
