@@ -368,6 +368,7 @@
       "system_model_eval_running": "En cours… {{done}}/{{total}}",
       "system_model_eval_score": "Score {{pass}}/{{total}}",
       "system_model_eval_failed": "Échec de l'éval",
+      "native_unsupported_os": "Les modèles sur l'appareil nécessitent iOS {{version}} ou plus récent. Mettez iOS à jour pour les utiliser, ou utilisez plutôt un serveur Ollama, configuré ci-dessous.",
       "native_unsupported_memory": "Les modèles sur l'appareil ne sont pas pris en charge sur cet appareil : mémoire insuffisante pour les exécuter. Utilisez plutôt un serveur Ollama, configuré ci-dessous.",
       "on_device_mobile_disabled": "Les modèles sur l'appareil ne sont pas disponibles sur téléphone ou tablette : ils demandent plus de mémoire qu'une application mobile ne peut utiliser, et les réponses prennent des minutes. Utilisez plutôt un serveur Ollama, configuré ci-dessous.",
       "no_webgpu": "Nécessite WebGPU, indisponible sur cet appareil.",

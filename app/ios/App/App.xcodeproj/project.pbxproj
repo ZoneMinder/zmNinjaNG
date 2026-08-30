@@ -442,6 +442,7 @@
 				FRAMEWORK_SEARCH_PATHS = "$(inherited) $(PROJECT_DIR)";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 2.2.1;
+				OTHER_LDFLAGS = "$(inherited) -weak_framework llama";
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = com.zoneminder.zmNinjaNG;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -468,6 +469,7 @@
 				FRAMEWORK_SEARCH_PATHS = "$(inherited) $(PROJECT_DIR)";
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
 				MARKETING_VERSION = 2.2.1;
+				OTHER_LDFLAGS = "$(inherited) -weak_framework llama";
 				PRODUCT_BUNDLE_IDENTIFIER = com.zoneminder.zmNinjaNG;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";

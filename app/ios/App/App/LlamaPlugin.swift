@@ -22,6 +22,20 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // 5.5 GiB physical-memory floor for on-device inference.
     private static let memoryFloor: UInt64 = UInt64(5.5 * 1024 * 1024 * 1024)
 
+    // llama.cpp publishes its xcframework built for iOS 16.4 (upstream's
+    // build-xcframework.sh hardcodes that floor), above this app's own 16.0
+    // deployment target, so llama.framework is weak-linked: on 16.0-16.3 dyld
+    // skips it at launch instead of killing the process, and every symbol in it
+    // is null. Nothing may reach LlamaEngine without this check (issue #421).
+    static let minimumOS = "16.4"
+    private var engineAvailable: Bool {
+        if #available(iOS 16.4, *) { return true }
+        return false
+    }
+    private func rejectUnavailable(_ call: CAPPluginCall) {
+        call.reject("On-device models require iOS \(LlamaPlugin.minimumOS)", "OS_UNSUPPORTED")
+    }
+
     private lazy var session: URLSession = {
         URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }()
@@ -40,6 +54,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     }
 
     @objc private func handleMemoryWarning() {
+        guard engineAvailable else { return }
         LlamaEngine.shared.freeContextUnderPressure()
     }
 
@@ -57,7 +72,9 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // MARK: - Capability
 
     @objc func isSupported(_ call: CAPPluginCall) {
-        if ProcessInfo.processInfo.physicalMemory < LlamaPlugin.memoryFloor {
+        if !engineAvailable {
+            call.resolve(["supported": false, "reason": "os", "minimumOs": LlamaPlugin.minimumOS])
+        } else if ProcessInfo.processInfo.physicalMemory < LlamaPlugin.memoryFloor {
             call.resolve(["supported": false, "reason": "memory"])
         } else {
             // Advertised chat window = device tier minus the triage reserve; the provider reports
@@ -79,6 +96,13 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
 
     @objc func deleteModel(_ call: CAPPluginCall) {
         guard let modelId = call.getString("modelId") else { return call.reject("modelId is required") }
+        // The file is the engine's, but it is still just a file: delete it even
+        // where the engine cannot run, so a model downloaded before an OS
+        // downgrade is not stranded on disk.
+        guard engineAvailable else {
+            if let url = try? modelURL(modelId) { try? FileManager.default.removeItem(at: url) }
+            return call.resolve()
+        }
         // Never free the model out from under a running chat (use-after-free).
         if LlamaEngine.shared.isBusy {
             return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
@@ -93,6 +117,9 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // MARK: - Download
 
     @objc func downloadModel(_ call: CAPPluginCall) {
+        // No point spending gigabytes of the user's bandwidth on a model this
+        // OS cannot load.
+        guard engineAvailable else { return rejectUnavailable(call) }
         guard let modelId = call.getString("modelId") else { return call.reject("modelId is required") }
         guard let urlStr = call.getString("url"), let url = URL(string: urlStr) else {
             return call.reject("url is required")
@@ -168,6 +195,8 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         let contextSize = min(call.getInt("contextSize") ?? 8192, deviceContextSize())
         let cacheSlot = call.getInt("cacheSlot") ?? 0 // 0 = chat, 1 = triage (separate KV sequences)
 
+        guard engineAvailable else { return rejectUnavailable(call) }
+
         guard let url = try? modelURL(modelId), FileManager.default.fileExists(atPath: url.path) else {
             return call.reject("Model is not downloaded", "MODEL_NOT_DOWNLOADED")
         }
@@ -205,11 +234,13 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     }
 
     @objc func cancelChat(_ call: CAPPluginCall) {
+        guard engineAvailable else { return call.resolve() }
         LlamaEngine.shared.cancelChat()
         call.resolve()
     }
 
     @objc func unload(_ call: CAPPluginCall) {
+        guard engineAvailable else { return call.resolve() }
         if LlamaEngine.shared.isBusy {
             return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
         }

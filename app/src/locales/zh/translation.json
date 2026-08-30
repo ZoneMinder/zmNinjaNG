@@ -368,6 +368,7 @@
       "system_model_eval_running": "运行中… {{done}}/{{total}}",
       "system_model_eval_score": "得分 {{pass}}/{{total}}",
       "system_model_eval_failed": "评测失败",
+      "native_unsupported_os": "设备端模型需要 iOS {{version}} 或更高版本。请升级 iOS 后使用，或改用下方配置的 Ollama 服务器。",
       "native_unsupported_memory": "此设备不支持设备端模型：内存不足，无法运行。请改用 Ollama 服务器，在下方设置。",
       "on_device_mobile_disabled": "手机和平板不支持设备端模型：所需内存超出移动应用的限制，且回答需要数分钟。请改用下方配置的 Ollama 服务器。",
       "no_webgpu": "需要 WebGPU，此设备不支持。",
