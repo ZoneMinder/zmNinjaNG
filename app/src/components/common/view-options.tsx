@@ -11,6 +11,7 @@
  * rather than a toolbar button.
  */
 
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MoreVertical } from 'lucide-react';
 import { Button } from '../ui/button';
@@ -37,9 +38,14 @@ interface ViewOptionsMenuProps {
 
 export function ViewOptionsMenu({ testId, children }: ViewOptionsMenuProps) {
   const { t } = useTranslation();
+  // Controlled for the same reason as the Events filter popover: the items in
+  // here change app state, and these menus sit on screens whose live streams
+  // re-render constantly. An uncontrolled menu lost its open state on one of
+  // those renders and shut mid-interaction.
+  const [open, setOpen] = useState(false);
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"

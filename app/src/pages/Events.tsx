@@ -5,7 +5,7 @@
  * Uses virtualization for performance with large lists.
  */
 
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -55,6 +55,7 @@ export default function Events() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
   const { currentProfile, settings, isAllMode } = useCurrentProfile();
   // Settings-update target: the real profile id in single mode, or the
   // active aggregate's id while aggregating (currentProfile stays null there)
@@ -569,7 +570,14 @@ export default function Events() {
                   onCustomGridSubmit={gridControls.handleCustomGridSubmit}
                 />
               )}
-              <Popover>
+              {/* Controlled: every filter setter writes the choice straight to
+                  the settings store, which re-renders this page through
+                  useCurrentProfile. An uncontrolled Popover lost its open
+                  state on that re-render, so ticking one monitor or the
+                  favourites switch slammed the panel shut and the user had to
+                  reopen it for every single choice. Owning the state here
+                  means only a deliberate dismissal closes it. */}
+              <Popover open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     variant={activeFilterCount > 0 ? 'default' : 'outline'}
