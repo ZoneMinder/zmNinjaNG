@@ -30,6 +30,21 @@ Read before tests, UI work, navigation work, or platform checks.
   The reference is `hooks/__tests__/useMonitors.test.tsx`. Never mock
   `zustand/react/shallow` as a passthrough: it hides the selector loop the
   real store exists to catch, and three files were doing it.
+- A new gate assertion (anything under `app/src/tests/`) is proven red
+  against a scratch violation, then the scratch is removed in the same
+  commit; proven-red classifies that directory as gate work and does not
+  demand a red run against the previous commit.
+- `npm run test:mutation` flips one branch in auth, sessions, url-builder
+  and schema-tolerance and expects each module's tests to go red. Run it
+  when touching those modules or their tests; it is not in the gates because
+  it runs each suite once per mutation.
+- Vitest does not type-check. Run `npx tsc -b` before pushing test changes;
+  ten migrated files carried bare strings where a `ProfileId` was expected
+  and passed at runtime.
+- Hover-intent previews are unit-tested (`hover-preview.test.tsx`, fake
+  timers) and not e2e-tested: `HoverPreview` opens on a 700ms timer and
+  cancels on mouseleave, and a synthetic cursor over a polling list loses
+  that race three runs in three. Do not add a hover scenario.
 - Unit tests live beside source in `__tests__/`.
 - Browser e2e uses `app/tests/features/*.feature` and screen-specific step files in `app/tests/steps/`. Do not add direct Playwright specs.
 - Rename or add a step and the generated specs go stale: run `npx bddgen`
@@ -48,7 +63,9 @@ Read before tests, UI work, navigation work, or platform checks.
 
 ## Platforms
 
-- Automated e2e is Chromium only: `npm run test:e2e`.
+- Automated e2e is Chromium only: `npm run test:e2e`. Nothing runs it on a
+  schedule: CI's job skips (no reachable ZoneMinder) and `make_release.sh`
+  asks, reading `app/.e2e-last-run.json` to say when it last ran here.
 - Android, iPhone, and iPad suites are manual Appium screenshot checks.
 - Native OS flows such as PiP, biometrics, push, downloads, sharing, and lifecycle require device verification.
 - UI work considers Electron, iOS, Android, portrait, and landscape. Record unavailable manual checks in handoff.
@@ -58,6 +75,7 @@ Read before tests, UI work, navigation work, or platform checks.
 ```bash
 # Run from app/
 npm test
+npm run test:mutation
 npx tsc -b
 npm run build
 npm run test:e2e -- <feature>.feature

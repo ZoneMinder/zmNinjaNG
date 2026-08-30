@@ -155,6 +155,17 @@ matching reality, fixing it is a protocol change like any rule edit.
   `?token=` leaked into server logs (e1393724); plaintext fallback on
   secure-store failure became drop-and-re-auth (a2cc647d). Web at-rest
   crypto is obfuscation, not confidentiality.
+- ZoneMinder streams carry the access token in the query string, not a
+  header: `img`/`video` elements cannot set one. `lib/zm/url-builder.ts`,
+  `api/events.ts`, and `services/discovery.ts` append it by design and
+  `sanitizeLogMessage` redacts it on the way to a log. Do not "fix" it out
+  of stream or playback URLs; every feed and event replay breaks. The
+  Auth tokens contract forbids refresh tokens there, not access tokens.
+- `login.json` hashes the password server-side: ~0.6s a call against the
+  test server, twenty times any other endpoint. Never log in twice for one
+  action. Discovery returns the login it performed as `loginResponse`, and
+  the add-server form installs it with `setTokens` (#416); the edit-profile
+  path still relies on discovery's own login for its `cgiUrl`.
 - A ZoneMinder server with auth disabled returns login success with no
   tokens: track `requiresAuth` explicitly instead of deriving freshness
   from token presence, or no-auth servers refresh-loop forever (cf0d3b8f).
@@ -197,15 +208,6 @@ matching reality, fixing it is a protocol change like any rule edit.
   `status` never received a response, and take the host from the request
   URL, never from the message; matching wording would encode four
   platforms' prose (65f7a963).
-
-## Auth
-
-- ZoneMinder streams carry the access token in the query string, not a
-  header: `img`/`video` elements cannot set one. `lib/zm/url-builder.ts`,
-  `api/events.ts`, and `services/discovery.ts` append it by design and
-  `sanitizeLogMessage` redacts it on the way to a log. Do not "fix" it out
-  of stream or playback URLs; every feed and event replay breaks. The
-  Auth tokens contract forbids refresh tokens there, not access tokens.
 
 ## Libraries and state
 

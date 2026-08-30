@@ -13,6 +13,16 @@ import {
   internalMockFiles,
 } from '../../scripts/quality-ratchet.mjs';
 
+import path from 'node:path';
+const walkTests = (dir = path.resolve(__dirname, '..'), acc: string[] = []): string[] => {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) walkTests(full, acc);
+    else if (/\.test\.tsx?$/.test(e.name)) acc.push(full);
+  }
+  return acc;
+};
+
 const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as Record<string, number>;
 
 describe('quality ratchet (.quality-baseline.json)', () => {
@@ -38,6 +48,14 @@ describe('quality ratchet (.quality-baseline.json)', () => {
       counts.avoidedTermHits,
       `${counts.avoidedTermHits} > baseline ${baseline.avoidedTermHits}; use the glossary's canonical term`,
     ).toBeLessThanOrEqual(baseline.avoidedTermHits);
+  });
+
+  it('no test file stubs zustand/react/shallow', () => {
+    // A passthrough useShallow hides the selector loop the real store exists
+    // to catch. Seven files carried one; three looped against the real store.
+    // Zero is the number, not a ratchet.
+    const offenders = walkTests().filter((f) => /vi\.mock\(['"]zustand\/react\/shallow['"]/.test(fs.readFileSync(f, 'utf8')));
+    expect(offenders, `useShallow stubbed in:\n${offenders.join('\n')}`).toEqual([]);
   });
 
   it('baseline has not been raised without leaving room to shrink', () => {

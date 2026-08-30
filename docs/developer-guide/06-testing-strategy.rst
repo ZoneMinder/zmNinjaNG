@@ -129,58 +129,63 @@ Vitest loads ``src/tests/setup.ts`` before any test file. That is where the
 Capacitor plugin mocks live, so a component that dynamically imports
 ``@capacitor/haptics`` on a native platform does not explode under Node.
 
-Mocking What the Component Depends On
--------------------------------------
+Mocking the Boundary, Not the App
+---------------------------------
 
 ``MonitorCard`` reaches for a Zustand store, the current profile, React Router,
 i18next, and a child component that opens a live video stream. Rendering it
 untouched in Node would try to hit a ZoneMinder server. The test would be slow,
 would fail when the server is down, and would no longer be a unit test.
 
-``vi.mock(path, factory)`` fixes that by replacing the module. Vitest hoists
-these calls above the imports and registers the factory against the resolved
-module id. The path is relative to the *test* file, so the test's
-``'../../../stores/dashboard'`` and the component's ``'../../stores/dashboard'``
-resolve to the same module, and the component receives the object the factory
-returned. The real file is never evaluated.
+``vi.mock(path, factory)`` replaces a module. Vitest hoists these calls above
+the imports and registers the factory against the resolved module id, so the
+test's ``'../../../api/store-gates'`` and the app's ``'../api/store-gates'``
+resolve to the same module and the app receives what the factory returned.
+Always pass the factory: a bare ``vi.mock(path)`` auto-stubs at runtime while
+the import keeps the real types, and TypeScript rejects the
+``.mockReturnValue()`` you were about to write.
 
-Always pass the factory. A bare ``vi.mock('../../../stores/profile')`` asks
-Vitest to auto-stub the module at runtime, but the import keeps the real
-module's types, so TypeScript rejects the ``.mockReturnValue()`` call you were
-about to write.
+What to mock is the decision that matters, and the testing playbook fixes it:
+mock the **boundary**, never the app. The boundary is ``api/*`` (the HTTP
+client and the functions that call it), platform plugins (``setup.ts`` already
+mocks Capacitor), third-party modules such as React Router, i18next and toast,
+and a heavy leaf child that would open a stream or a canvas. The stores,
+hooks, services and components in between run for real.
 
-Mocking a store
-~~~~~~~~~~~~~~~
+The reason is a failure mode a mocked store cannot show. In production
+``useShallow`` wraps a selector and compares its result field by field; a
+selector that mints a fresh array or object on every call defeats that and the
+component re-renders forever through ``useSyncExternalStore``. A test that
+stubs the store, or stubs ``useShallow`` to the identity function, sees a clean
+pass. Seven test files in this repository carried exactly that stub; against
+the real store three of them looped with "Maximum update depth exceeded", and
+the quality ratchet now fails any file that reintroduces it.
 
-A Zustand store is called as a hook with a selector function, and the store
-hands the selector its current state (see :doc:`03-state-management-zustand`).
-A mock only has to be a function of the same shape, so the factory returns one
-that calls the selector against a literal:
+Seeding the real stores
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``src/tests/profile-fixture.ts`` is the one way to do it. Two hoisted
+one-liners swap the boundary for fakes; ``seedProfiles`` fills the real
+profile, settings and auth stores; ``installApiClient`` scripts the responses
+the real session registry's client will return. An unscripted request rejects,
+so a test cannot pass on a request nobody scripted.
 
 .. code:: tsx
 
    // src/components/dashboard/__tests__/DashboardConfig.test.tsx, trimmed
-   // (the real file also mocks stores/profile the same way; that mock is
-   // where the 'profile-1' asserted below comes from)
-   const addWidget = vi.fn();
+   vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
+   vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake-secure-storage'));
 
-   vi.mock('../../../stores/dashboard', () => ({
-     useDashboardStore: (selector: (state: { addWidget: typeof addWidget }) => unknown) =>
-       selector({ addWidget }),
-   }));
+   import { seedProfiles, resetProfileFixture } from '../../../tests/profile-fixture';
+   import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
+   import { useDashboardStore } from '../../../stores/dashboard';
 
-   vi.mock('zustand/react/shallow', () => ({
-     useShallow: (fn: unknown) => fn,
-   }));
+   beforeEach(() => seedProfiles(['profile-1']));
+   afterEach(() => { resetProfileFixture(); resetFakeStoreGates(); });
 
-``useShallow`` is stubbed to the identity function because in production it
-wraps a selector to compare results field by field, and the mock store has no
-subscription machinery for it to guard.
-
-The test then asserts on ``addWidget``, which is the behavior a user gets.
-(This file uses the older synchronous ``fireEvent`` instead of the awaited
-``userEvent`` shown earlier; both flush the re-render before the next line,
-``userEvent`` just simulates the browser more faithfully.)
+The test then asserts on the store, which is where a user's click ends up.
+No ``addWidget`` spy: the real action ran, and the widget is either in the
+real store or it is not.
 
 .. code:: tsx
 
@@ -194,15 +199,20 @@ The test then asserts on ``addWidget``, which is the behavior a user gets.
      });
      fireEvent.click(screen.getByTestId('widget-add-button'));
 
-     expect(addWidget).toHaveBeenCalledWith(
-       'profile-1',
-       expect.objectContaining({
-         type: 'monitor',
-         title: 'My Monitor',
-         settings: { monitorIds: ['1'], feedFit: 'contain' },
-       })
-     );
+     const widgets = useDashboardStore.getState().widgets['profile-1'];
+     expect(widgets).toHaveLength(1);
+     expect(widgets[0]).toMatchObject({
+       type: 'monitor',
+       title: 'My Monitor',
+       settings: { monitorIds: ['1'], feedFit: 'contain' },
+     });
    });
+
+Assert values, not existence. ``toBeInTheDocument()`` says an element
+rendered and nothing about what it shows; the quality ratchet counts those
+too. The first file converted this way found a real bug: "the progress bar
+exists" became "the bar reports 40%", and it did not, because ``Progress``
+never forwarded ``value`` to its Radix root.
 
 Mocking React Query
 ~~~~~~~~~~~~~~~~~~~

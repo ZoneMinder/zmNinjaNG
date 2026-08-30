@@ -353,8 +353,13 @@ holds the pre-change code, and fails when they pass there. A test that is
 green on the code it claims to guard cannot catch the bug; this is rule
 P2 as a command. Three such tests had passed review here before the job
 existed, each found only by stashing the fix and re-running by hand. The
-job skips ranges whose commit type carries no behavior change (``docs``,
-``chore``, ``refactor`` and the like) and prints the reason. The quality
+job proves every changed unit test, whatever the PR title says; a title type
+that carries no behavior change (``docs``, ``chore``, ``refactor``) only
+excuses a source change that brings no test, which is what a real refactor
+looks like. Ratchet baselines and the repo-hygiene tests under
+``app/src/tests/`` are bookkeeping and gate work, not behavior: a new gate
+assertion is proven red against a scratch violation before it lands, not
+against the previous commit, where its violation does not yet exist. The quality
 ratchet
 (`quality-ratchet.mjs <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/scripts/quality-ratchet.mjs>`__,
 gated by ``quality-ratchet.test.ts``) records three counts in
