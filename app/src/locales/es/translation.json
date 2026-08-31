@@ -368,6 +368,7 @@
       "system_model_eval_running": "Ejecutando… {{done}}/{{total}}",
       "system_model_eval_score": "Puntuación {{pass}}/{{total}}",
       "system_model_eval_failed": "Prueba fallida",
+      "native_unsupported_os": "Los modelos en el dispositivo necesitan iOS {{version}} o posterior. Actualiza iOS para usarlos o usa un servidor Ollama, configurado abajo.",
       "native_unsupported_memory": "Este dispositivo no admite modelos en el dispositivo: no tiene suficiente memoria para ejecutarlos. Usa un servidor Ollama en su lugar, configurado abajo.",
       "on_device_mobile_disabled": "Los modelos en el dispositivo no están disponibles en teléfonos ni tabletas: necesitan más memoria de la que puede usar una app móvil y las respuestas tardan minutos. Usa un servidor Ollama, configurado abajo.",
       "no_webgpu": "Requiere WebGPU, no disponible en este dispositivo.",

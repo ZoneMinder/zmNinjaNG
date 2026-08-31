@@ -3,7 +3,15 @@ import type { PluginListenerHandle } from '@capacitor/core';
 export interface NativeLlmPlugin {
   // `contextSize` (present when supported) is the device-tiered chat window the provider adopts
   // for both the chat param and its contextWindow getter: RAM-derived, minus the triage reserve.
-  isSupported(): Promise<{ supported: boolean; reason?: 'platform' | 'memory'; contextSize?: number }>;
+  // `reason: 'os'` comes with `minimumOs`: llama.cpp publishes its xcframework built for a
+  // higher iOS than this app's deployment target, so on older systems llama.framework is
+  // weak-linked away and the engine cannot run at all (issue #421).
+  isSupported(): Promise<{
+    supported: boolean;
+    reason?: 'platform' | 'memory' | 'os';
+    contextSize?: number;
+    minimumOs?: string;
+  }>;
   isModelDownloaded(options: { modelId: string }): Promise<{ downloaded: boolean; sizeBytes?: number; path?: string }>;
   downloadModel(options: { modelId: string; url: string }): Promise<void>; // resolves when download completes; progress via listener
   cancelDownload(): Promise<void>;

@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import LlamaBridgeInterface
 import UIKit
 
 /// Native LLM plugin: downloads GGUF models and runs on-device inference via llama.cpp (Metal).
@@ -22,6 +23,43 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // 5.5 GiB physical-memory floor for on-device inference.
     private static let memoryFloor: UInt64 = UInt64(5.5 * 1024 * 1024 * 1024)
 
+    // llama.cpp publishes its xcframework built for iOS 16.4 (upstream's
+    // build-xcframework.sh hardcodes that floor), above this app's own 16.0
+    // deployment target, and it binds Accelerate's cblas_sgemm$NEWLAPACK$ILP64,
+    // which does not exist before 16.4. dyld binds everything the app links at
+    // launch, so linking llama at all - even weakly - kills the app on 16.0-16.3
+    // before any of this code runs (issue #421). The engine therefore lives in
+    // LlamaBridge.framework, which the app embeds but never links, and which is
+    // loaded by hand below once the OS is known to be new enough.
+    static let minimumOS = "16.4"
+
+    // The bridge class carries an explicit @objc name, so this is the bare
+    // runtime name, NOT module-qualified. Keep it in step with the
+    // @objc(LlamaEngineBridge) attribute on the class.
+    private static let bridgeClassName = "LlamaEngineBridge"
+
+    /// The loaded engine, or nil where llama cannot run. Resolved once: a
+    /// failure here is a permanent property of the device, not a transient.
+    private static let engine: LlamaEngineBridging? = {
+        guard #available(iOS 16.4, *) else { return nil }
+        guard let frameworks = Bundle.main.privateFrameworksURL,
+              let bundle = Bundle(url: frameworks.appendingPathComponent("LlamaBridge.framework")),
+              bundle.load(),
+              let type = NSClassFromString(bridgeClassName) as? NSObject.Type,
+              let engine = type.init() as? LlamaEngineBridging
+        else {
+            CAPLog.print("[LlamaPlugin] on-device engine unavailable on this OS") // log-safe: no user data
+            return nil
+        }
+        return engine
+    }()
+
+    private var engineAvailable: Bool { LlamaPlugin.engine != nil }
+
+    private func rejectUnavailable(_ call: CAPPluginCall) {
+        call.reject("On-device models require iOS \(LlamaPlugin.minimumOS)", "OS_UNSUPPORTED")
+    }
+
     private lazy var session: URLSession = {
         URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }()
@@ -40,7 +78,7 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     }
 
     @objc private func handleMemoryWarning() {
-        LlamaEngine.shared.freeContextUnderPressure()
+        LlamaPlugin.engine?.freeContextUnderPressure()
     }
 
     // Triage runs in the second KV slot of the shared unified pool; reserve its cells from the
@@ -57,7 +95,9 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // MARK: - Capability
 
     @objc func isSupported(_ call: CAPPluginCall) {
-        if ProcessInfo.processInfo.physicalMemory < LlamaPlugin.memoryFloor {
+        if !engineAvailable {
+            call.resolve(["supported": false, "reason": "os", "minimumOs": LlamaPlugin.minimumOS])
+        } else if ProcessInfo.processInfo.physicalMemory < LlamaPlugin.memoryFloor {
             call.resolve(["supported": false, "reason": "memory"])
         } else {
             // Advertised chat window = device tier minus the triage reserve; the provider reports
@@ -79,11 +119,19 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
 
     @objc func deleteModel(_ call: CAPPluginCall) {
         guard let modelId = call.getString("modelId") else { return call.reject("modelId is required") }
+        // The file is the engine's, but it is still just a file: delete it even
+        // where the engine cannot run, so a model downloaded before an OS
+        // downgrade is not stranded on disk.
+        guard engineAvailable else {
+            if let url = try? modelURL(modelId) { try? FileManager.default.removeItem(at: url) }
+            return call.resolve()
+        }
         // Never free the model out from under a running chat (use-after-free).
-        if LlamaEngine.shared.isBusy {
+        guard let engine = LlamaPlugin.engine else { return call.resolve() }
+        if engine.isBusy {
             return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
         }
-        LlamaEngine.shared.unloadIfLoaded(modelId: modelId)
+        engine.unloadIfLoaded(modelId: modelId)
         if let url = try? modelURL(modelId) {
             try? FileManager.default.removeItem(at: url)
         }
@@ -93,6 +141,9 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     // MARK: - Download
 
     @objc func downloadModel(_ call: CAPPluginCall) {
+        // No point spending gigabytes of the user's bandwidth on a model this
+        // OS cannot load.
+        guard engineAvailable else { return rejectUnavailable(call) }
         guard let modelId = call.getString("modelId") else { return call.reject("modelId is required") }
         guard let urlStr = call.getString("url"), let url = URL(string: urlStr) else {
             return call.reject("url is required")
@@ -168,6 +219,8 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
         let contextSize = min(call.getInt("contextSize") ?? 8192, deviceContextSize())
         let cacheSlot = call.getInt("cacheSlot") ?? 0 // 0 = chat, 1 = triage (separate KV sequences)
 
+        guard let engine = LlamaPlugin.engine else { return rejectUnavailable(call) }
+
         guard let url = try? modelURL(modelId), FileManager.default.fileExists(atPath: url.path) else {
             return call.reject("Model is not downloaded", "MODEL_NOT_DOWNLOADED")
         }
@@ -178,11 +231,11 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
             // generation touches the flag: a concurrent, CHAT_BUSY-rejected call must not toggle
             // it (its defer would re-enable the idle timer while the first chat still runs).
             // Matches Android's gate-before-flag ordering.
-            let ownsScreen = !LlamaEngine.shared.isBusy
+            let ownsScreen = !engine.isBusy
             if ownsScreen { DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = true } }
             defer { if ownsScreen { DispatchQueue.main.async { UIApplication.shared.isIdleTimerDisabled = false } } }
             do {
-                let result = try LlamaEngine.shared.chat(
+                let result = try engine.chat(
                     modelId: modelId, modelPath: url.path, messagesJson: messagesJson,
                     temperature: temperature, maxTokens: maxTokens, contextSize: contextSize, cacheSlot: cacheSlot,
                     onStatus: { [weak self] phase, progress, tokens, cached, chunk, chunks in
@@ -191,13 +244,11 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
                             "chunk": chunk, "chunks": chunks, "slot": cacheSlot,
                         ])
                     })
-                call.resolve([
-                    "content": result.content,
-                    "promptTokens": result.promptTokens,
-                    "completionTokens": result.completionTokens,
-                ])
-            } catch LlamaEngineError.busy {
-                call.reject(LlamaEngineError.busy.localizedDescription, "CHAT_BUSY")
+                call.resolve(result)
+            } catch let error as NSError
+                where error.domain == LlamaEngineBridgingErrorDomain
+                    && error.code == LlamaEngineBridgingBusyCode {
+                call.reject(error.localizedDescription, "CHAT_BUSY")
             } catch {
                 call.reject(error.localizedDescription, "ENGINE_FAILED")
             }
@@ -205,15 +256,16 @@ public class LlamaPlugin: CAPPlugin, CAPBridgedPlugin, URLSessionDownloadDelegat
     }
 
     @objc func cancelChat(_ call: CAPPluginCall) {
-        LlamaEngine.shared.cancelChat()
+        LlamaPlugin.engine?.cancelChat()
         call.resolve()
     }
 
     @objc func unload(_ call: CAPPluginCall) {
-        if LlamaEngine.shared.isBusy {
+        guard let engine = LlamaPlugin.engine else { return call.resolve() }
+        if engine.isBusy {
             return call.reject("A reply is being generated; try again when it finishes", "CHAT_BUSY")
         }
-        LlamaEngine.shared.unload()
+        engine.unload()
         call.resolve()
     }
 

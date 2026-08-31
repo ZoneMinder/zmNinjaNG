@@ -32,9 +32,14 @@ vi.mock('../../../hooks/useCapacitorListener', () => ({ useCapacitorListener: us
 // Defaults unsupported so every test that doesn't touch this explicitly keeps
 // the pre-existing "note + forced Ollama" behavior on a native platform.
 let nativeSupported: boolean | undefined = false;
-let nativeUnsupportedReason: 'platform' | 'memory' | undefined;
+let nativeUnsupportedReason: 'platform' | 'memory' | 'os' | undefined;
+let nativeMinimumOs: string | undefined;
 vi.mock('../../../hooks/useNativeLlmSupported', () => ({
-  useNativeLlmSupported: () => ({ supported: nativeSupported, reason: nativeUnsupportedReason }),
+  useNativeLlmSupported: () => ({
+    supported: nativeSupported,
+    reason: nativeUnsupportedReason,
+    minimumOs: nativeMinimumOs,
+  }),
 }));
 
 // Same seam for the OS-hosted Apple Foundation Models backend. Defaults
@@ -137,6 +142,7 @@ describe('AssistantSection backend picker and gating', () => {
     isNative = false;
     nativeSupported = false;
     nativeUnsupportedReason = undefined;
+    nativeMinimumOs = undefined;
     appleSupported = false;
     appleUnsupportedReason = undefined;
     geminiSupported = false;
@@ -223,6 +229,25 @@ describe('AssistantSection backend picker and gating', () => {
         'settings.assistant.native_unsupported_memory',
       );
       expect(within(note).queryByText('settings.assistant.on_device_mobile_disabled')).not.toBeInTheDocument();
+    });
+
+    // llama.cpp's xcframework is built for a higher iOS than the app's own
+    // floor, so on an older OS the framework is absent and the feature has to
+    // name the version instead of blaming the device's memory (issue #421).
+    it('names the required OS version when the plugin reports reason "os"', async () => {
+      isNative = true;
+      nativeSupported = false;
+      nativeUnsupportedReason = 'os';
+      nativeMinimumOs = '16.4';
+      render(
+        <AssistantSection settings={enabledSettings} update={vi.fn()} currentProfile={profile} updateSettings={vi.fn()} />,
+      );
+
+      const note = await screen.findByTestId('assistant-on-device-unavailable');
+      expect(within(note).getByText('settings.assistant.native_unsupported_os')).toHaveTextContent(
+        'settings.assistant.native_unsupported_os',
+      );
+      expect(within(note).queryByText('settings.assistant.native_unsupported_memory')).not.toBeInTheDocument();
     });
 
     it('falls back to the generic note when the probe failed without a reason', async () => {

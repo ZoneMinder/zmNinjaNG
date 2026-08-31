@@ -119,6 +119,8 @@ WebGPU on-device does not run in a mobile browser engine, but a recent iPhone or
 
 Qualifying takes memory, not a particular device generation: the app checks your device's physical memory at startup and offers **On-device (Download model)** above roughly 6GB. A device below the threshold never sees the option, so there is nothing to turn off if the app decides not to offer it.
 
+It also takes iOS 16.4 or later. The inference engine the app embeds is built for that version, so on an older iOS it is not loaded at all and **Settings > Ninjii** says so instead of offering the option. The rest of the app works normally; update iOS, or point the assistant at an Ollama server.
+
 iPhone and iPad run the model on the device's GPU through Metal, which is what makes it usable: replies take a couple of seconds. Ollama is still the more accurate backend when you have a server to point at.
 
 The model is a single fixed choice (Qwen3 4B Instruct), unlike the desktop and web picker above. **Settings > Ninjii > Model** shows its download size, about 2.5GB, and **Download** fetches it once, the same background task you can watch or cancel that other downloads use. It stays on your device until you tap **Delete**, and nothing about it changes on later app updates unless you delete and download it again.

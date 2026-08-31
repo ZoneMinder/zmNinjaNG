@@ -35,10 +35,14 @@ declare global {
 export interface NativeLlmSupport {
   /** undefined while the probe is in flight. */
   supported: boolean | undefined;
-  /** The plugin's stated reason when unsupported ('memory' today). Absent
+  /** The plugin's stated reason when unsupported ('memory' or 'os'). Absent
    *  when the probe rejected or the platform has no plugin at all, so the UI
    *  can distinguish "this device can't run it" from "no native backend here". */
-  reason?: 'platform' | 'memory';
+  reason?: 'platform' | 'memory' | 'os';
+  /** The iOS version the engine needs, sent with reason 'os'. Native owns the
+   *  number - it is llama.cpp's build floor, not ours - so the note quotes what
+   *  the plugin reports rather than a copy that can drift. */
+  minimumOs?: string;
 }
 
 export function useNativeLlmSupported(): NativeLlmSupport {
@@ -63,7 +67,9 @@ export function useNativeLlmSupported(): NativeLlmSupport {
     import('../plugins/native-llm')
       .then(({ NativeLlm }) => NativeLlm.isSupported())
       .then((result) => {
-        if (!cancelled) setSupport({ supported: result.supported, reason: result.reason });
+        if (!cancelled) {
+          setSupport({ supported: result.supported, reason: result.reason, minimumOs: result.minimumOs });
+        }
       })
       .catch(() => {
         if (!cancelled) setSupport({ supported: false });
