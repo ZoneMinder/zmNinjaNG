@@ -112,7 +112,6 @@
 		DC10E70100000000000F0004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DC10E70100000000000F0005 /* ImageNotification.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ImageNotification.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DC11AA0200000000000F0002 /* LlamaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaPlugin.swift; sourceTree = "<group>"; };
-		DC11AA0200000000000F0004 /* LlamaEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LlamaEngine.swift; sourceTree = "<group>"; };
 		DC12AA0200000000000F0002 /* AppleIntelligencePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleIntelligencePlugin.swift; sourceTree = "<group>"; };
 		DC31AE432F5DAA5700F5EABD /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DC3ECBB92EFC1BDC00F7400B /* AppRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AppRelease.entitlements; sourceTree = "<group>"; };
@@ -209,7 +208,6 @@
 				DC55AA0100000000000F0002 /* SSLTrustPlugin.swift */,
 				DC11AA0200000000000F0002 /* LlamaPlugin.swift */,
 				DC12AA0200000000000F0002 /* AppleIntelligencePlugin.swift */,
-				DC11AA0200000000000F0004 /* LlamaEngine.swift */,
 				DC55AA0100000000000F0004 /* SafeAreaPlugin.swift */,
 				DC55AA0100000000000F0006 /* X509CertInfo.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
