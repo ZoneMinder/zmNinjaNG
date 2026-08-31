@@ -1,5 +1,36 @@
 # Changelog
 
+## [zmNinjaNg-2.2.1](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.2.1) (2026-08-31)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.2.0...zmNinjaNg-2.2.1)
+
+**Fixed bugs:**
+
+- App will not open on IOS 16.1.2 [\#421](https://github.com/ZoneMinder/zmNinjaNg/issues/421)
+- Montage view frozen when cameras are set up in OnDemand+Keyframes \(without full encoding\) [\#383](https://github.com/ZoneMinder/zmNinjaNg/issues/383)
+- Zoom should reset back to 100% when switching monitors [\#382](https://github.com/ZoneMinder/zmNinjaNg/issues/382)
+- Zone overlay draws percent coords into the pixel viewBox, so zones shrink into the corner [\#378](https://github.com/ZoneMinder/zmNinjaNg/issues/378)
+- PTZ pad shows tilt arrows on pan-only drivers \(CanPan/CanTilt ignored\) [\#373](https://github.com/ZoneMinder/zmNinjaNg/issues/373)
+- \[Bug\] Montage fullscreen: videos letterboxed/shifted because tile heights include a header that does not render in flow [\#359](https://github.com/ZoneMinder/zmNinjaNg/issues/359)
+- \[Bug\] Compact mode: gap between fullscreen toolbar and content \(hardcoded 2rem clearance vs compact h-8\) [\#358](https://github.com/ZoneMinder/zmNinjaNg/issues/358)
+- \[Bug\] Tablet/desktop layout: scrolled content renders behind the status bar \(safe-area padding scrolls with content\) [\#357](https://github.com/ZoneMinder/zmNinjaNg/issues/357)
+- \[Bug\] Android: status bar icons unreadable when app theme differs from system theme \(SystemBars style never set\) [\#356](https://github.com/ZoneMinder/zmNinjaNg/issues/356)
+- \[Bug\] Android 15/16: app chrome renders under status bar — `--sai-*` never resolves on Android \(Capacitor 8 injected vars not consumed\) [\#355](https://github.com/ZoneMinder/zmNinjaNg/issues/355)
+- Local Network permission needed in Android 17, help the user allow it [\#350](https://github.com/ZoneMinder/zmNinjaNg/issues/350)
+
+**Refactoring:**
+
+- Fable codebase review, 2026-08-29 [\#392](https://github.com/ZoneMinder/zmNinjaNg/issues/392)
+- Fable review, pillar 13 \(instruction system overhead\), 2026-08-29 [\#391](https://github.com/ZoneMinder/zmNinjaNg/issues/391)
+- Fable codebase review, 2026-08-06 [\#348](https://github.com/ZoneMinder/zmNinjaNg/issues/348)
+
+**Closed issues:**
+
+- Pick the initial Streaming Mode from monitor count and multi-port, and say why [\#385](https://github.com/ZoneMinder/zmNinjaNg/issues/385)
+- Difficult to scroll down viewing monitor or events, related to screen resolution [\#365](https://github.com/ZoneMinder/zmNinjaNg/issues/365)
+- Dead code: useImageError hook has no callers [\#353](https://github.com/ZoneMinder/zmNinjaNg/issues/353)
+- Live monitor tiles show a broken or garbled thumbnail after a long background on mobile [\#352](https://github.com/ZoneMinder/zmNinjaNg/issues/352)
+
 ## [zmNinjaNg-2.2.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.2.0) (2026-08-08)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.1.0...zmNinjaNg-2.2.0)
