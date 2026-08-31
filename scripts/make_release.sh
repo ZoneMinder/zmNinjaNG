@@ -83,70 +83,79 @@ apply_bump() {
     echo ""
 }
 
+# Every release chooses its version here, whether or not $TAG already exists.
+# Deterministic bump targets for the menu (also the fallback when Claude is unavailable).
+MAJOR=$(echo "$VERSION" | cut -d. -f1)
+MINOR=$(echo "$VERSION" | cut -d. -f2)
+PATCH=$(echo "$VERSION" | cut -d. -f3)
+V_PATCH="${MAJOR}.${MINOR}.$((PATCH + 1))"
+V_MINOR="${MAJOR}.$((MINOR + 1)).0"
+V_MAJOR="$((MAJOR + 1)).0.0"
+
 if [ "$TAG_EXISTS" = true ]; then
-    # Deterministic bump targets for the menu (also the fallback when Claude is unavailable).
-    MAJOR=$(echo "$VERSION" | cut -d. -f1)
-    MINOR=$(echo "$VERSION" | cut -d. -f2)
-    PATCH=$(echo "$VERSION" | cut -d. -f3)
-    V_PATCH="${MAJOR}.${MINOR}.$((PATCH + 1))"
-    V_MINOR="${MAJOR}.$((MINOR + 1)).0"
-    V_MAJOR="$((MAJOR + 1)).0.0"
-
     echo "⚠️  Tag '$TAG' already exists. You likely want a new version."
+else
+    echo "Current version is $VERSION; tag '$TAG' does not exist yet."
+fi
+echo ""
+echo "Analyzing closed issues to recommend a bump (one Claude call, closed-issue based)..."
+
+# --plan is best-effort: it always exits 0. Human progress prints to stderr
+# (visible); the KEY=VALUE result lines print to stdout (captured here).
+PLAN_OUT="$(node scripts/generate_notice.mjs --plan --version "$VERSION" --cache "$RELEASE_DRAFT_CACHE")" || true
+REC_BUMP="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^RECOMMENDED_BUMP=//p' | tail -1)"
+SUGGESTED_VERSION="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^SUGGESTED_VERSION=//p' | tail -1)"
+
+if [ -n "$REC_BUMP" ] && [ -n "$SUGGESTED_VERSION" ]; then
+    DRAFT_CACHE_VALID=true
     echo ""
-    echo "Analyzing closed issues to recommend a bump (one Claude call, closed-issue based)..."
-
-    # --plan is best-effort: it always exits 0. Human progress prints to stderr
-    # (visible); the KEY=VALUE result lines print to stdout (captured here).
-    PLAN_OUT="$(node scripts/generate_notice.mjs --plan --version "$VERSION" --cache "$RELEASE_DRAFT_CACHE")" || true
-    REC_BUMP="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^RECOMMENDED_BUMP=//p' | tail -1)"
-    SUGGESTED_VERSION="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^SUGGESTED_VERSION=//p' | tail -1)"
-
-    if [ -n "$REC_BUMP" ] && [ -n "$SUGGESTED_VERSION" ]; then
-        DRAFT_CACHE_VALID=true
-        echo ""
-        echo "🤖 Claude recommends a ${REC_BUMP} release: $VERSION -> ${SUGGESTED_VERSION}"
-    else
-        REC_BUMP="patch"
-        SUGGESTED_VERSION="$V_PATCH"
-        echo ""
-        echo "ℹ️  No Claude suggestion available. Defaulting to a patch bump; you can still choose below."
-    fi
-
+    echo "🤖 Claude recommends a ${REC_BUMP} release: $VERSION -> ${SUGGESTED_VERSION}"
+else
+    REC_BUMP="patch"
+    SUGGESTED_VERSION="$V_PATCH"
     echo ""
-    echo "How should this release be versioned?"
-    echo "  1) Suggested: ${REC_BUMP} -> ${SUGGESTED_VERSION}"
-    echo "  2) patch      -> ${V_PATCH}"
-    echo "  3) minor      -> ${V_MINOR}"
-    echo "  4) major      -> ${V_MAJOR}"
-    echo "  5) Enter a version manually"
+    echo "ℹ️  No Claude suggestion available. Defaulting to a patch bump; you can still choose below."
+fi
+
+echo ""
+echo "How should this release be versioned?"
+echo "  1) Suggested: ${REC_BUMP} -> ${SUGGESTED_VERSION}"
+echo "  2) patch      -> ${V_PATCH}"
+echo "  3) minor      -> ${V_MINOR}"
+echo "  4) major      -> ${V_MAJOR}"
+echo "  5) Enter a version manually"
+if [ "$TAG_EXISTS" = true ]; then
     echo "  6) Move existing tag to current commit (no bump, overwrite)"
-    read -p "Choose [1-6] or anything else to abort: " choice
-    case "$choice" in
-        1) apply_bump "$SUGGESTED_VERSION" ;;
-        2) apply_bump "$V_PATCH" ;;
-        3) apply_bump "$V_MINOR" ;;
-        4) apply_bump "$V_MAJOR" ;;
-        5)
-            read -p "New version (X.Y.Z): " manual_ver
-            if ! printf '%s' "$manual_ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-                echo "❌ '$manual_ver' is not a valid X.Y.Z version. Aborting."
-                exit 1
-            fi
-            apply_bump "$manual_ver"
-            ;;
-        6)
+else
+    echo "  6) Release $VERSION as-is (no bump)"
+fi
+read -p "Choose [1-6] or anything else to abort: " choice
+case "$choice" in
+    1) apply_bump "$SUGGESTED_VERSION" ;;
+    2) apply_bump "$V_PATCH" ;;
+    3) apply_bump "$V_MINOR" ;;
+    4) apply_bump "$V_MAJOR" ;;
+    5)
+        read -p "New version (X.Y.Z): " manual_ver
+        if ! printf '%s' "$manual_ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "❌ '$manual_ver' is not a valid X.Y.Z version. Aborting."
+            exit 1
+        fi
+        apply_bump "$manual_ver"
+        ;;
+    6)
+        if [ "$TAG_EXISTS" = true ]; then
             echo ""
             echo "Will move tag '$TAG' to current commit."
             OVERWRITE_TAG=true
             echo ""
-            ;;
-        *)
-            echo "Aborted."
-            exit 0
-            ;;
-    esac
-fi
+        fi
+        ;;
+    *)
+        echo "Aborted."
+        exit 0
+        ;;
+esac
 
 # --- Step 2: Check for uncommitted changes ---
 DIRTY_FILES=$(git status --porcelain)
