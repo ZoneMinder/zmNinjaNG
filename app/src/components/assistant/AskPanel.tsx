@@ -48,7 +48,7 @@ import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant
 import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, resolveCoverage, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
 import { planToolCalls, type PlannedToolCall } from '../../lib/assistant/plan';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
-import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
+import { classifyRequest, buildNoToolPrompt, latestExchange, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
@@ -654,6 +654,9 @@ export function AskPanel() {
             serverNames,
             monitorRoster.map((m) => m.name),
             monitorRoster.length > 0 ? objectLabels : [],
+            // The previous exchange, so "yes" and "how today looking?"
+            // classify with their topic (refs #440).
+            latestExchange(history),
           );
       const kind: RequestKind = verdict.kind;
       log.assistant('Request classified', LogLevel.DEBUG, {
@@ -706,7 +709,7 @@ export function AskPanel() {
         // no place adds nothing.
         const coverageSlots =
           monitorScanHits.length === 0 && monitorRoster.length > 0
-            ? await resolveCoverage(text, monitorRoster, provider, controller.signal, collectTrace)
+            ? await resolveCoverage(text, monitorRoster, provider, controller.signal, collectTrace, latestExchange(history))
             : {};
         const resolution = resolveMonitorMention(monitorScanHits, coverageSlots, monitorRoster);
         const monitorLine = buildMonitorSystemLine(resolution);

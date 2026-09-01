@@ -713,6 +713,10 @@ export const ASSISTANT = {
   // Monitor names change when someone renames a camera, which is rarer still;
   // same session-length cache as the object vocabulary (monitor-stage.ts).
   monitorRosterCacheMs: 30 * 60 * 1000,
+  // Each turn of the previous exchange is trimmed to this many characters
+  // before riding the parse and coverage calls as context (refs #440): a
+  // hint, not a transcript.
+  parseContextCharacters: 240,
   // A parsed question fans out one list_events per window x monitor
   // (plan.ts); past this many calls the free tool loop's judgment beats a
   // mechanical fan-out.

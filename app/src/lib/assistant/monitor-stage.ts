@@ -24,6 +24,7 @@ import { scanTimeExpressions } from './timeframe-stage';
 import { sanitizeModelText } from './sanitize';
 import { isAbortError } from '../is-abort-error';
 import type { AssistantProvider, TraceEntry } from './types';
+import { buildContextualQuestion, type ParseContext } from './triage';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
 
@@ -169,6 +170,7 @@ export function buildCoveragePrompt(names: readonly string[]): string {
   return [
     'You match a place in one message to the security cameras of a home. Reply with ONLY one JSON object.',
     `Cameras: ${names.join(', ')}.`,
+    'The message may include an earlier exchange for context: the place can come from it ("what about the garage?" after a garage answer).',
     '"place": the exact place or camera words the message contains ("" when none; time words such as today or yesterday are not places).',
     '"covered": true when a listed camera means that place, in any language, or the place is an area containing a camera\'s own area; false when "place" is "" or no listed camera truly watches it: a camera elsewhere on the property is false, never the closest one.',
     '"monitors": every listed camera that watches the place or sits inside it ([] when "covered" is false).',
@@ -225,11 +227,13 @@ export async function resolveCoverage(
   provider: AssistantProvider,
   signal: AbortSignal,
   onTrace?: (entry: TraceEntry) => void,
+  /** The previous exchange, so a follow-up's place resolves (refs #440). */
+  context?: ParseContext,
 ): Promise<ParsedMonitorSlots> {
   if (roster.length === 0) return {};
   const names = roster.map((entry) => entry.name);
   try {
-    const result = await provider.complete(buildCoveragePrompt(names), question, signal, buildCoverageSchema(names));
+    const result = await provider.complete(buildCoveragePrompt(names), buildContextualQuestion(question, context), signal, buildCoverageSchema(names));
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (coverage)` } });
     }
