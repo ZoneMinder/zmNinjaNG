@@ -273,24 +273,33 @@ export async function extractTimeframes(
     seen.add(key);
     deduped.push(phrase);
   }
-  // Containment dedup (refs #434): the scan emits the halves of a compound
-  // ("lunch", "5 days ago") while the model copies it whole ("at lunch 5
-  // days ago"); querying both the whole day and the band would double the
-  // fan-out, so a phrase contained in a longer one is absorbed by it.
+  const namedTime = deduped.length > 0;
+
+  const resolvedByKey = new Map<string, WindowFields>();
+  for (const phrase of namedTime ? deduped : ['today']) {
+    const fields = await interpretWhen(phrase, provider, now, timezone, signal);
+    if ('error' in fields && fields.error) continue;
+    resolvedByKey.set(normalizeWhenPhrase(phrase), fields as WindowFields);
+  }
+
+  // Containment dedup, resolution-aware (refs #434, #438): the scan emits
+  // the halves of a compound ("lunch", "5 days ago") while the model copies
+  // it whole; querying both the whole day and the band would double the
+  // fan-out, so a contained phrase is absorbed - but ONLY by a container
+  // that actually resolved. "all this week" once swallowed the scan-vouched
+  // "this week" and then failed to interpret, leaving the turn nothing.
   const union = deduped.filter((phrase) => {
     const key = normalizeWhenPhrase(phrase);
     return !deduped.some((other) => {
       const otherKey = normalizeWhenPhrase(other);
-      return otherKey !== key && otherKey.includes(key);
+      return otherKey !== key && otherKey.includes(key) && resolvedByKey.has(otherKey);
     });
   });
-  const namedTime = union.length > 0;
 
   const resolved: ResolvedTimeframe[] = [];
   for (const phrase of namedTime ? union : ['today']) {
-    const fields = await interpretWhen(phrase, provider, now, timezone, signal);
-    if ('error' in fields && fields.error) continue;
-    resolved.push({ phrase, fields: fields as WindowFields });
+    const fields = resolvedByKey.get(normalizeWhenPhrase(phrase));
+    if (fields !== undefined) resolved.push({ phrase, fields });
   }
 
   // Neither path named a time: the default period, kept even if it failed to

@@ -98,6 +98,17 @@ after any prompt or provider change and put both scores in the PR.
   schema change. The fix is structural, not wording: a whole-roster
   selection leaves the slot unset, since it pins nothing an unpinned query
   lacks and is the false-cover signature.
+- One question per judgment beats one consolidated call (refs #438,
+  measured 2026-09): place coverage judged inside the full parse prompt
+  failed live ("rear of my house" -> no-coverage with a Backyard monitor
+  listed) and a `thinking` self-explanation field only ROTATED the failures
+  across four wordings (each fix broke a previously passing case). The same
+  model on a dedicated three-field coverage prompt scores 18/18 on every
+  one of those cases, reasoning off, no extra rules. The interpreter's
+  `meaning` field (restate which days the phrase covers, decoded first in
+  every branch) is the same pattern at micro scale: "all this week" decoded
+  none:true without it and a real window with it. Split the interrogation
+  before tuning its wording.
 - The full parse (refs #432, `prompt-eval.mts parse`, temp 0, 2026-09):
   slots as array enums (monitors as a SET, subject, objects) with an
   umbrella-coverage rule (a house contains what its monitors watch) scores 30/30
@@ -109,7 +120,9 @@ after any prompt or provider change and put both scores in the PR.
   parse scores 36/36 and the separate extraction call is gone on the roster
   lane; the eval's extract stage still measures the roster-less fallback's
   model-only recall, where multi-phrase misses are pre-existing and the
-  scan union covers them.
+  scan union covers them. After the #438 split, routing scores 24/24 and
+  coverage 18/18, with every interpret class at 100% including the new
+  calendar-week field and the meaning-first branches.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).

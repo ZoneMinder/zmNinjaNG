@@ -20,6 +20,10 @@ import { getMonitors } from '../../api/monitors';
 import { getSession } from '../../services/sessions';
 import { asProfileId } from '../../api/types';
 import { normalizeMonitorName } from './monitor-ref';
+import { scanTimeExpressions } from './timeframe-stage';
+import { sanitizeModelText } from './sanitize';
+import { isAbortError } from '../is-abort-error';
+import type { AssistantProvider, TraceEntry } from './types';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { log, LogLevel } from '../logger';
 
@@ -154,4 +158,87 @@ export function buildMonitorSystemLine(resolution: MonitorMentionResolution): st
     );
   }
   return '';
+}
+
+/** Model-facing (rule 5 exempt): the DEDICATED coverage interrogation
+ *  (refs #438). Judged inside the consolidated parse prompt, place coverage
+ *  failed live twice and every rewording rotated the failures; this focused
+ *  prompt, same model, measures 8/8 across all of them. One question per
+ *  judgment. */
+export function buildCoveragePrompt(names: readonly string[]): string {
+  return [
+    'You match a place in one message to the security cameras of a home. Reply with ONLY one JSON object.',
+    `Cameras: ${names.join(', ')}.`,
+    '"place": the exact place or camera words the message contains ("" when none; time words such as today or yesterday are not places).',
+    '"covered": true when a listed camera means that place, in any language, or the place is an area containing a camera\'s own area; false when "place" is "" or no listed camera truly watches it: a camera elsewhere on the property is false, never the closest one.',
+    '"monitors": every listed camera that watches the place or sits inside it ([] when "covered" is false).',
+  ].join('\n');
+}
+
+/** The coverage reply as a schema: monitors constrained to the real names,
+ *  so nothing can be hallucinated. */
+export function buildCoverageSchema(names: readonly string[]): Record<string, unknown> {
+  return {
+    type: 'object',
+    properties: {
+      place: { type: 'string' },
+      covered: { type: 'boolean' },
+      monitors: { type: 'array', items: { type: 'string', enum: [...names] } },
+    },
+    required: ['place', 'covered', 'monitors'],
+    additionalProperties: false,
+  };
+}
+
+/** The camera slots out of one coverage reply, every guard in code: names
+ *  filtered to the roster; a contradiction (covered false with real names)
+ *  and a whole-roster selection both leave the slots unset (refs #430,
+ *  #432); a place that is only time words is no place. Bookkeeping over the
+ *  constrained reply, not language rules. */
+export function deriveMonitorSlots(
+  raw: { place?: unknown; covered?: unknown; monitors?: unknown },
+  names: readonly string[],
+): ParsedMonitorSlots {
+  const named = Array.isArray(raw.monitors)
+    ? raw.monitors.filter((m): m is string => typeof m === 'string' && names.includes(m))
+    : undefined;
+  if (raw.covered === true && named && named.length > 0) {
+    return named.length < names.length ? { monitors: named } : {};
+  }
+  if (raw.covered === false) {
+    if (named && named.length > 0) return {};
+    const place = typeof raw.place === 'string' ? raw.place : '';
+    const rest = scanTimeExpressions(place).reduce((text, phrase) => text.replace(phrase, ' '), place);
+    return /[\p{L}\p{N}]/u.test(rest) ? { noMatch: true } : { monitors: [] };
+  }
+  return {};
+}
+
+/**
+ * One focused model call resolving which cameras the question's place means
+ * (refs #438). Runs only when the deterministic scan found nothing; a failed
+ * call degrades to empty slots, which is exactly the pre-coverage behavior.
+ */
+export async function resolveCoverage(
+  question: string,
+  roster: MonitorRosterEntry[],
+  provider: AssistantProvider,
+  signal: AbortSignal,
+  onTrace?: (entry: TraceEntry) => void,
+): Promise<ParsedMonitorSlots> {
+  if (roster.length === 0) return {};
+  const names = roster.map((entry) => entry.name);
+  try {
+    const result = await provider.complete(buildCoveragePrompt(names), question, signal, buildCoverageSchema(names));
+    if (result.exchange) {
+      onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (coverage)` } });
+    }
+    return deriveMonitorSlots(JSON.parse(sanitizeModelText(result.text, 'coverage')) as Record<string, unknown>, names);
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    log.assistant('Coverage call failed; running unpinned', LogLevel.WARN, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
 }

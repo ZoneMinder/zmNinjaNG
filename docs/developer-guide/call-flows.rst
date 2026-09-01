@@ -2185,38 +2185,27 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    old English keyword overrule (``requiresLiveData``) is deleted rather
    than maintained as a vocabulary.
 
-   The same round is the PARSE (refs #427, #432): with a roster, the prompt
-   carries the monitor names and the install's label vocabulary, and
-   ``buildTriageSchema`` extends the verdict with ``place`` (the question's
-   own place words, copied), ``covered`` (a boolean, because a name enum
-   cannot express abstention), ``monitors`` (an ARRAY over the real names,
-   because "front of my house" means several monitors), ``subject``
-   (events/monitors/server/groups/other), ``objects`` (an array over the
-   recorded labels, so "folks" or "Leute" land on ``person`` in any
-   language), and ``when`` (the time phrases, copied verbatim - the separate
-   extraction model call and its Ollama overlap are gone on this lane, refs
-   #434; ``extractTimeframes`` unions the parsed phrases with its scan,
-   drops any phrase contained in a longer one, and interprets as before,
-   keeping its own extraction call only for roster-less turns). ``parseTriageSlots`` derives everything in code: a place
-   ``covered`` denies with nothing named is ``noMatch``, a place that is only
-   time words is none, a contradiction (``covered`` false while real names
-   are filled in, observed live, refs #430) leaves the slots unset rather
-   than asserting a false no-coverage claim, and values outside the enums
-   are dropped. ``buildMonitorSystemLine`` turns the outcome into one
-   system line (resolved monitors pin their ``monitorId``\ s; ``noMatch``
-   gets the never-attribute guard), and ``planToolCalls`` (``plan.ts``)
-   composes the tool calls the slots determine - one ``list_events`` per
-   window x monitor with the parsed ``objectType`` - handing them to the
-   loop as ``plannedCalls``; a same-window fan-out is merged back into ONE
-   result in code (``mergePlannedEventResults``: summed counts, recomputed
-   busiest hour, one summary sentence), so cross-monitor totals are never
-   the model's arithmetic (refs #436). A whole-vocabulary ``objects``
-   selection derives no filter (the creep signature; a filter of every
-   label would exclude no-detection events). A null plan is today's free
-   loop, unchanged.
-   Asked "how many people came to my front door yesterday" with no door
-   monitor, the assistant used to answer "3 people came to your front door"
-   from a garage monitor's events.
+   The same round is the ROUTING PARSE (refs #432, #438): with a roster,
+   the prompt carries the install's label vocabulary and the schema extends
+   the verdict with ``subject`` (events/monitors/server/groups/other),
+   ``objects`` (an array over the recorded labels, so "folks" or "Leute"
+   land on ``person`` in any language), and ``when`` (the time phrases,
+   copied verbatim; ``extractTimeframes`` unions them with its scan, keeps a
+   contained phrase unless its container actually resolved, and interprets
+   as before, running its own extraction call only for roster-less turns).
+   ``parseTriageSlots`` validates everything in code; a whole-vocabulary
+   ``objects`` selection derives no filter (the creep signature).
+
+   Place coverage is deliberately a SEPARATE, focused call (refs #438):
+   judged inside the consolidated prompt it failed live twice and every
+   rewording rotated the failures, while ``resolveCoverage``
+   (``monitor-stage.ts``) - a three-field prompt asking only place, covered,
+   and monitors - measures perfectly on the same cases. It runs only when
+   the deterministic scan found nothing; ``deriveMonitorSlots`` keeps the
+   code guards (roster-validated names, the covered/named contradiction and
+   whole-roster selections resolve to unset, a time-word place is no place),
+   and a failed call degrades to an unpinned turn. The slots feed
+   ``buildMonitorSystemLine`` and ``planToolCalls`` exactly as before.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
    · → :doc:`15-assistant`
 

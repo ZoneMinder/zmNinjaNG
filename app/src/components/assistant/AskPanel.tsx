@@ -45,7 +45,7 @@ import { TOOLS, specializeToolSchemas, withServerArg } from '../../lib/assistant
 import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
-import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
+import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, resolveCoverage, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
 import { planToolCalls, type PlannedToolCall } from '../../lib/assistant/plan';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
@@ -658,10 +658,9 @@ export function AskPanel() {
       const kind: RequestKind = verdict.kind;
       log.assistant('Request classified', LogLevel.DEBUG, {
         kind,
-        monitors: verdict.monitors,
-        noMatch: verdict.noMatch,
         subject: verdict.subject,
         objects: verdict.objects,
+        when: verdict.when,
       });
 
       // Every timeframe the question names is extracted and resolved BEFORE the
@@ -697,12 +696,19 @@ export function AskPanel() {
         ctx.resolvedTimeframes = resolved;
         turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
 
-        // The camera slots become one system line, exactly like the
-        // timeframe line (refs #427, #432): resolved monitors pin their
+        // Coverage is its own focused model call (refs #438): judged inside
+        // the consolidated parse it failed live and every rewording rotated
+        // the failures; this call measures 8/8 on the same cases. It runs
+        // only when the deterministic scan found nothing, and a failure
+        // degrades to an unpinned turn. The slots become one system line,
+        // exactly like the timeframe line: resolved monitors pin their
         // monitorIds, a no-coverage place gets the do-not-attribute guard,
-        // no place adds nothing. The scan outvotes the model; a roster-less
-        // turn (group mode, fetch failure) resolves to none.
-        const resolution = resolveMonitorMention(monitorScanHits, verdict, monitorRoster);
+        // no place adds nothing.
+        const coverageSlots =
+          monitorScanHits.length === 0 && monitorRoster.length > 0
+            ? await resolveCoverage(text, monitorRoster, provider, controller.signal, collectTrace)
+            : {};
+        const resolution = resolveMonitorMention(monitorScanHits, coverageSlots, monitorRoster);
         const monitorLine = buildMonitorSystemLine(resolution);
         if (monitorLine) turnSystem = `${turnSystem}\n${monitorLine}`;
 

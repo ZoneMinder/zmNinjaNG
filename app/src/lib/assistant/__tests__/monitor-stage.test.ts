@@ -124,3 +124,66 @@ describe('buildMonitorSystemLine', () => {
     expect(buildMonitorSystemLine({ kind: 'none' })).toBe('');
   });
 });
+
+import { resolveCoverage, buildCoveragePrompt, buildCoverageSchema, deriveMonitorSlots } from '../monitor-stage';
+import type { AssistantProvider } from '../types';
+import { vi } from 'vitest';
+
+/**
+ * The dedicated coverage call (refs #438). Judged inside the consolidated
+ * parse prompt, place coverage failed live twice ("rear of my house" ->
+ * NO_MATCH with a Backyard camera present) and every rewording rotated the
+ * failures; the same model on this focused prompt measures 8/8 across every
+ * failure case. One question per judgment.
+ */
+describe('coverage call', () => {
+  const roster = [
+    { id: '2', name: 'Backyard(JPEG)' },
+    { id: '3', name: 'FrontDoor' },
+  ];
+
+  it('sends the focused prompt and constrained schema, deriving the slots', async () => {
+    const provider = {
+      complete: vi.fn().mockResolvedValue({ text: '{"place":"rear of my house","covered":true,"monitors":["Backyard(JPEG)"]}' }),
+    } as unknown as AssistantProvider;
+    const slots = await resolveCoverage('how was the rear of my house all this week?', roster, provider, new AbortController().signal);
+
+    const [system, question, , schema] = vi.mocked(provider.complete).mock.calls[0];
+    expect(system).toBe(buildCoveragePrompt(roster.map((m) => m.name)));
+    expect(system).toContain('Backyard(JPEG), FrontDoor');
+    expect(question).toBe('how was the rear of my house all this week?');
+    expect(schema).toEqual(buildCoverageSchema(roster.map((m) => m.name)));
+    expect(slots).toEqual({ monitors: ['Backyard(JPEG)'] });
+  });
+
+  it('degrades to empty slots when the call fails', async () => {
+    const provider = { complete: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as AssistantProvider;
+    await expect(resolveCoverage('q', roster, provider, new AbortController().signal)).resolves.toEqual({});
+  });
+});
+
+/** The derivation guards live on, in code: they are bookkeeping over the
+ *  constrained reply, not language rules (refs #430, #432, #438). */
+describe('deriveMonitorSlots', () => {
+  const names = ['FrontDoor', 'Garage Outdoor'];
+
+  it('maps covered names, derives noMatch, and drops junk', () => {
+    expect(deriveMonitorSlots({ place: 'front door', covered: true, monitors: ['FrontDoor'] }, names)).toEqual({
+      monitors: ['FrontDoor'],
+    });
+    expect(deriveMonitorSlots({ place: 'basement stairs', covered: false, monitors: [] }, names)).toEqual({
+      noMatch: true,
+    });
+    expect(deriveMonitorSlots({ place: '', covered: false, monitors: [] }, names)).toEqual({ monitors: [] });
+    expect(deriveMonitorSlots({ place: 'x', covered: true, monitors: ['Bogus'] }, names)).toEqual({});
+  });
+
+  it('keeps the contradiction and whole-roster guards', () => {
+    expect(deriveMonitorSlots({ place: 'front door', covered: false, monitors: ['FrontDoor'] }, names)).toEqual({});
+    expect(deriveMonitorSlots({ place: 'front door', covered: true, monitors: names }, names)).toEqual({});
+  });
+
+  it('treats a time-word place as no place', () => {
+    expect(deriveMonitorSlots({ place: 'today', covered: false, monitors: [] }, names)).toEqual({ monitors: [] });
+  });
+});

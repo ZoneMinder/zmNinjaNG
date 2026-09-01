@@ -51,11 +51,11 @@ import { isAbortError } from '../is-abort-error';
 export const WINDOW_SCHEMA: Record<string, unknown> = {
   anyOf: [
     // rolling span ending now: both halves are meaningless alone.
-    { type: 'object', properties: { lastCount: { type: 'number' }, lastUnit: { type: 'string', enum: [...WINDOW_UNITS] } }, required: ['lastCount', 'lastUnit'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, lastCount: { type: 'number' }, lastUnit: { type: 'string', enum: [...WINDOW_UNITS] } }, required: ['meaning', 'lastCount', 'lastUnit'], additionalProperties: false },
     // one calendar day ("yesterday").
-    { type: 'object', properties: { daysAgo: { type: 'number' } }, required: ['daysAgo'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, daysAgo: { type: 'number' } }, required: ['meaning', 'daysAgo'], additionalProperties: false },
     // one calendar day narrowed to a clock band ("this morning").
-    { type: 'object', properties: { daysAgo: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['daysAgo', 'fromTime', 'toTime'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, daysAgo: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['meaning', 'daysAgo', 'fromTime', 'toTime'], additionalProperties: false },
     // most recent such weekday, optionally narrowed to a clock band
     // ("on sunday", "last tuesday night"). The lone branch that KEEPS fromTime/
     // toTime optional: splitting it into a bare and a with-times branch (as the
@@ -64,28 +64,30 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
     // Unlike the day branches, the weekday word dominates the phrase, so the
     // model reads the split as license to stop early. FM wants required fields;
     // qwen needs this one optional; the 150/150 gate decides it.
-    { type: 'object', properties: { weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['weekday'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['meaning', 'weekday'], additionalProperties: false },
+    // a calendar week, Monday-anchored; code works out the dates (refs #438).
+    { type: 'object', properties: { meaning: { type: 'string' }, week: { type: 'string', enum: ['this', 'last'] } }, required: ['meaning', 'week'], additionalProperties: false },
     // a span between two weekdays ("between mon and tue"); code works out the
     // dates, so the model never anchors the wrong calendar day (refs #434).
-    { type: 'object', properties: { fromWeekday: { type: 'string', enum: [...WEEKDAYS] }, toWeekday: { type: 'string', enum: [...WEEKDAYS] } }, required: ['fromWeekday', 'toWeekday'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, fromWeekday: { type: 'string', enum: [...WEEKDAYS] }, toWeekday: { type: 'string', enum: [...WEEKDAYS] } }, required: ['meaning', 'fromWeekday', 'toWeekday'], additionalProperties: false },
     // a bare ordinal day-of-month ("the 21st").
-    { type: 'object', properties: { dayOfMonth: { type: 'number' } }, required: ['dayOfMonth'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, dayOfMonth: { type: 'number' } }, required: ['meaning', 'dayOfMonth'], additionalProperties: false },
     // that ordinal narrowed to a clock band.
-    { type: 'object', properties: { dayOfMonth: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['dayOfMonth', 'fromTime', 'toTime'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, dayOfMonth: { type: 'number' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['meaning', 'dayOfMonth', 'fromTime', 'toTime'], additionalProperties: false },
     // one explicit calendar date ("July 15").
-    { type: 'object', properties: { date: { type: 'string' } }, required: ['date'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, date: { type: 'string' } }, required: ['meaning', 'date'], additionalProperties: false },
     // that date narrowed to a clock band ("July 15 morning").
-    { type: 'object', properties: { date: { type: 'string' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['date', 'fromTime', 'toTime'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, date: { type: 'string' }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['meaning', 'date', 'fromTime', 'toTime'], additionalProperties: false },
     // whole weekends ago; code computes the two dates.
-    { type: 'object', properties: { weekend: { type: 'string', enum: ['this', 'last', 'two-ago'] } }, required: ['weekend'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, weekend: { type: 'string', enum: ['this', 'last', 'two-ago'] } }, required: ['meaning', 'weekend'], additionalProperties: false },
     // calendar span, both ends inclusive ("april", "june 1 to 15").
-    { type: 'object', properties: { fromDate: { type: 'string' }, toDate: { type: 'string' } }, required: ['fromDate', 'toDate'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, fromDate: { type: 'string' }, toDate: { type: 'string' } }, required: ['meaning', 'fromDate', 'toDate'], additionalProperties: false },
     // calendar span open at the end ("since july 1").
-    { type: 'object', properties: { fromDate: { type: 'string' } }, required: ['fromDate'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, fromDate: { type: 'string' } }, required: ['meaning', 'fromDate'], additionalProperties: false },
     // calendar span open at the start ("until july 15").
-    { type: 'object', properties: { toDate: { type: 'string' } }, required: ['toDate'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, toDate: { type: 'string' } }, required: ['meaning', 'toDate'], additionalProperties: false },
     // no time limit at all.
-    { type: 'object', properties: { none: { type: 'boolean' } }, required: ['none'], additionalProperties: false },
+    { type: 'object', properties: { meaning: { type: 'string' }, none: { type: 'boolean' } }, required: ['meaning', 'none'], additionalProperties: false },
   ],
 };
 
@@ -240,6 +242,7 @@ export function buildInterpreterPrompt(now: Date, timezone: string): string {
     '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}. "the day before yesterday" -> {"daysAgo":2}.',
     '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}; "last tuesday" -> {"weekday":"tuesday"}.',
     '- fromWeekday + toWeekday: a span between two weekdays, full names. "between mon and tue" -> {"fromWeekday":"monday","toWeekday":"tuesday"}; "from friday to sunday" -> {"fromWeekday":"friday","toWeekday":"sunday"}. Code works out the dates, so do NOT send fromDate/toDate for these.',
+    '- "week": a calendar week, Monday-anchored. "this week" or "all this week" -> {"week":"this"}; "last week" -> {"week":"last"}. Code works out the dates; never send fromDate/toDate for these.',
     '- dayOfMonth: a bare ordinal, just the number. "the 21st" -> {"dayOfMonth":21}; "on the 3rd" -> {"dayOfMonth":3}. Code picks the most recent past such day, so do NOT work out the date yourself.',
     '- weekend: which past weekend, ONLY when the phrase literally says "weekend". "this weekend" -> {"weekend":"this"}; "last weekend" -> {"weekend":"last"}; "two weekends ago" -> {"weekend":"two-ago"}. Code works out the two dates.',
     '- date: one explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
@@ -250,6 +253,11 @@ export function buildInterpreterPrompt(now: Date, timezone: string): string {
     'Keep BOTH halves of a compound phrase, in any language: a day word and a part of the day both survive. "yesterday evening" -> {"daysAgo":1,"fromTime":"18:00","toTime":"23:59"}; "hier apres-midi" -> {"daysAgo":1,"fromTime":"12:00","toTime":"18:00"}.',
     'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}; "ce matin" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "el fin de semana pasado" -> {"weekend":"last"}.',
     'A calendar day word is never a rolling span: "today" is daysAgo 0, NOT lastCount 1 day. A part of the day is never a rolling span either.',
+    // The self-explanation, decoded FIRST in every branch (refs #438).
+    // Measured: "all this week" decoded none:true (no time limit) without
+    // it and a real window with it; restating the meaning puts the phrase's
+    // actual coverage in front of the decoder before any field is chosen.
+    'ALWAYS fill "meaning" first: one short sentence saying exactly which days (and hours) the phrase covers. Then the fields that express it.',
   ].join('\n');
 }
 

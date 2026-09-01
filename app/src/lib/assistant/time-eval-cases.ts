@@ -104,6 +104,12 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   // the model never computes the dates; checked on the resolved range.
   { phrase: 'between mon and tue', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-13') },
   { phrase: 'from friday to sunday', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-17') },
+  // calendar weeks (refs #438): the week field exists so "this week" never
+  // needs model date arithmetic; the rolling reading stays acceptable where
+  // both are defensible.
+  { phrase: 'this week', cls: 'weekday', ok: (f, r) => f.week === 'this' || startsOn(r, '2026-07-13') },
+  { phrase: 'all this week', cls: 'weekday', ok: (f, r) => f.week === 'this' || startsOn(r, '2026-07-13') },
+  { phrase: 'last week', cls: 'weekday', ok: (f, r) => f.week === 'last' || (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) || startsOn(r, '2026-07-06') },
   // lunch is a part-of-day band (refs #434)
   { phrase: 'at lunch 5 days ago', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-14') && band(f.fromTime, '10:00', '12:00') && band(f.toTime, '12:00', '14:00') },
   // weekend (code computes the two dates from the `weekend` field; resolved
@@ -130,7 +136,7 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   { phrase: 'all time', cls: 'no-time', ok: (f) => f.none === true || Object.keys(f).length === 0 },
   { phrase: 'ever', cls: 'no-time', ok: (f) => f.none === true || Object.keys(f).length === 0 },
   // non-English (de / es / fr)
-  { phrase: 'letzte Woche', cls: 'non-english', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) },
+  { phrase: 'letzte Woche', cls: 'non-english', ok: (f) => (f.lastUnit === 'week' && f.lastCount === 1) || (f.lastUnit === 'day' && f.lastCount === 7) || f.week === 'last' },
   { phrase: 'ayer', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-18') },
   { phrase: 'ce matin', cls: 'non-english', ok: (f, r) => startsOn(r, '2026-07-19') && band(f.fromTime, '05:00', '08:00') && band(f.toTime, '11:00', '13:00') },
   { phrase: 'el fin de semana pasado', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-11') && endsOnDate(r, '2026-07-13') },
@@ -173,6 +179,7 @@ export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
   { question: 'who came by between mon and tue?', expect: ['between mon and tue'] },
   { question: 'How may folks came to the front of my house between mon and tue?', expect: ['between mon and tue'] },
   { question: 'who came at lunch 5 days ago', expect: ['lunch', '5 days ago'] },
+  { question: 'how was the rear of my house all this week?', expect: ['all this week'] },
   { question: 'was war letzte Woche bei mir los', expect: ['letzte woche'] },
   { question: 'what cameras do I have', none: true },
   { question: 'is the server ok', none: true },
