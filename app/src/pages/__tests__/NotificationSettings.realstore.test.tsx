@@ -9,7 +9,7 @@
  * mirrors.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import NotificationSettings from '../NotificationSettings';
@@ -17,7 +17,6 @@ import { useCurrentProfile, useProfileById } from '../../hooks/useCurrentProfile
 import { useProfileScope } from '../../hooks/useProfileScope';
 import { useNotificationStore } from '../../stores/notifications';
 import { Platform } from '../../lib/platform';
-import { getEventPoller } from '../../services/eventPoller';
 
 // Platform.isNative is a getter; spy on it rather than assigning.
 let nativeSpy: ReturnType<typeof vi.spyOn> | undefined;
@@ -53,8 +52,21 @@ vi.mock('../../api/monitors', () => ({
 vi.mock('../../api/notifications', () => ({
   checkNotificationsApiSupport: vi.fn().mockResolvedValue(true),
 }));
+const pollerState = vi.hoisted(() => ({
+  running: false,
+  listeners: new Set<() => void>(),
+  setRunning(running: boolean) {
+    pollerState.running = running;
+    for (const listener of pollerState.listeners) listener();
+  },
+}));
 vi.mock('../../services/eventPoller', () => ({
-  getEventPoller: vi.fn(() => ({ isRunning: () => false, stop: vi.fn() })),
+  getEventPoller: vi.fn(() => ({ isRunning: () => pollerState.running, stop: vi.fn() })),
+  isEventPollerRunning: vi.fn(() => pollerState.running),
+  subscribeEventPollers: (listener: () => void) => {
+    pollerState.listeners.add(listener);
+    return () => pollerState.listeners.delete(listener);
+  },
   stopEventPoller: vi.fn(),
 }));
 vi.mock('../../components/NotificationBadge', () => ({
@@ -143,6 +155,8 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
 
   afterEach(() => {
     useNotificationStore.setState({ profileSettings: {} });
+    pollerState.running = false;
+    pollerState.listeners.clear();
     nativeSpy?.mockRestore();
     nativeSpy = undefined;
   });
@@ -162,13 +176,31 @@ describe('NotificationSettings direct-mode badge reflects registration, not inte
   });
 
   it('off-native shows polling when the poller runs', () => {
-    vi.mocked(getEventPoller).mockReturnValue({ isRunning: () => true, stop: vi.fn() } as never);
+    pollerState.running = true;
     useNotificationStore.getState().updateProfileSettings(profileA.id, {
       enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
     });
     renderPage();
     expect(screen.getByText('notifications.status.direct_polling').textContent)
       .toBe('notifications.status.direct_polling');
+  });
+
+  // The poller starts asynchronously after the mode switch, so the badge that
+  // read isRunning() during render was stale until an unrelated re-render (the
+  // user navigating away and back) happened to re-read it.
+  it('flips to polling when the poller starts after render, without a remount', () => {
+    useNotificationStore.getState().updateProfileSettings(profileA.id, {
+      enabled: true, notificationMode: 'direct', host: 'a.zm.local', notificationId: null,
+    });
+    renderPage();
+    expect(screen.getByText('notifications.status.direct_poller_stopped').textContent)
+      .toBe('notifications.status.direct_poller_stopped');
+
+    act(() => pollerState.setRunning(true));
+
+    expect(screen.getByText('notifications.status.direct_polling').textContent)
+      .toBe('notifications.status.direct_polling');
+    expect(screen.queryByText('notifications.status.direct_poller_stopped')).toBeNull();
   });
 
   it('says not registered when direct push is on but registration never succeeded', () => {

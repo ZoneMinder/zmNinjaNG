@@ -38,7 +38,13 @@ vi.mock('../../lib/logger', () => ({
   },
 }));
 
-import { getEventPoller, stopAllEventPollers, stopEventPoller } from '../eventPoller';
+import {
+  getEventPoller,
+  isEventPollerRunning,
+  stopAllEventPollers,
+  stopEventPoller,
+  subscribeEventPollers,
+} from '../eventPoller';
 
 // --- Helpers ---
 
@@ -354,5 +360,50 @@ describe('EventPollerService', () => {
     expect(deps.onEvent).toHaveBeenCalledWith(
       expect.objectContaining({ MonitorName: 'Monitor 99' }),
     );
+  });
+});
+
+/**
+ * The direct-mode badge read `isRunning()` imperatively, so it showed
+ * "Poller not running" until something else re-rendered the page: running
+ * state was neither observable nor true until the first poll resolved.
+ */
+describe('observable running state', () => {
+  let deps: ReturnType<typeof makeDeps>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+    deps = makeDeps();
+    mockGetMonitors.mockResolvedValue({ monitors: [] });
+    mockGetEvents.mockResolvedValue({ events: [] });
+  });
+
+  afterEach(() => {
+    stopEventPoller('profile-1');
+    vi.useRealTimers();
+  });
+
+  it('is running from the moment start() is called, before the first poll resolves', () => {
+    getEventPoller('profile-1').start('profile-1', deps);
+    expect(isEventPollerRunning('profile-1')).toBe(true);
+  });
+
+  it('notifies subscribers on start and on stop', async () => {
+    const seen: boolean[] = [];
+    const unsubscribe = subscribeEventPollers(() => seen.push(isEventPollerRunning('profile-1')));
+
+    await getEventPoller('profile-1').start('profile-1', deps);
+    await vi.advanceTimersByTimeAsync(0);
+    stopEventPoller('profile-1');
+    unsubscribe();
+
+    expect(seen[0]).toBe(true);
+    expect(seen[seen.length - 1]).toBe(false);
+  });
+
+  it('reports nothing running for a profile that never started - no phantom entry', () => {
+    expect(isEventPollerRunning('never-polled')).toBe(false);
+    stopEventPoller('never-polled');
   });
 });

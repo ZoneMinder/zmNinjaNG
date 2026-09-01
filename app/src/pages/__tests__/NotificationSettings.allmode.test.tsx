@@ -32,6 +32,8 @@ vi.mock('../../api/notifications', () => ({
 }));
 vi.mock('../../services/eventPoller', () => ({
   getEventPoller: () => ({ isRunning: () => false, stop: vi.fn() }),
+  isEventPollerRunning: () => false,
+  subscribeEventPollers: () => () => {},
   stopEventPoller: vi.fn(),
 }));
 // startEventPoller reaches into eventPoller/session wiring only exercised by
