@@ -122,7 +122,14 @@ after any prompt or provider change and put both scores in the PR.
   model-only recall, where multi-phrase misses are pre-existing and the
   scan union covers them. After the #438 split, routing scores 24/24 and
   coverage 18/18, with every interpret class at 100% including the new
-  calendar-week field and the meaning-first branches.
+  calendar-week field and the meaning-first branches. With the #440
+  context and app-default additions, routing scores 36/36 (standalone
+  status questions, bare follow-ups with the previous exchange embedded)
+  and coverage 20/20; the tool-less chat lane fabricated a healthy-system
+  report when handed a misrouted question ("no recent events detected"
+  after a turn reporting 86), so it now carries the action lane's
+  never-state wording and the kind/subject contradiction flip backs it in
+  code.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).

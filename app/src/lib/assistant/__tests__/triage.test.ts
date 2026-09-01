@@ -340,3 +340,98 @@ describe('classifyRequest objects creep guard', () => {
     expect(verdict.objects).toEqual(['car', 'truck']);
   });
 });
+
+import { buildContextualQuestion, latestExchange } from '../triage';
+
+/**
+ * Refs #440, observed live: standalone "how today looking?" classified CHAT
+ * and the tool-less turn fabricated a healthy-system report. Follow-ups and
+ * app-default status questions.
+ */
+describe('contextual classification', () => {
+  it('embeds the previous exchange around the latest message', () => {
+    const q = buildContextualQuestion('yes', { user: 'how was the rear this week?', assistant: 'Backyard had 86 events.' });
+    expect(q).toContain('how was the rear this week?');
+    expect(q).toContain('Backyard had 86 events.');
+    expect(q.trim().endsWith('yes')).toBe(true);
+  });
+
+  it('returns the bare question without context', () => {
+    expect(buildContextualQuestion('hello')).toBe('hello');
+  });
+
+  it('trims oversized context turns', () => {
+    const q = buildContextualQuestion('yes', { user: 'x'.repeat(2000), assistant: 'y' });
+    expect(q.length).toBeLessThan(1000);
+  });
+
+  it('finds the latest completed exchange in a thread', () => {
+    expect(
+      latestExchange([
+        { role: 'user', text: 'older q' },
+        { role: 'assistant', text: 'older a' },
+        { role: 'user', text: 'rear this week?' },
+        { role: 'assistant', text: '86 events.' },
+        { role: 'user', text: 'yes' },
+      ]),
+    ).toEqual({ user: 'rear this week?', assistant: '86 events.' });
+    expect(latestExchange([{ role: 'user', text: 'first ever' }])).toBeUndefined();
+  });
+
+  it('passes the contextual question to the provider', async () => {
+    const provider = providerSaying('{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["today"]}');
+    await classifyRequest(
+      provider,
+      'how today looking?',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor'],
+      ['person'],
+      { user: 'rear this week?', assistant: '86 events.' },
+    );
+    const [, text] = vi.mocked(provider.complete).mock.calls[0];
+    expect(text).toContain('rear this week?');
+    expect((text as string).trim().endsWith('how today looking?')).toBe(true);
+  });
+
+  // A CHAT verdict whose own slots say the message is about the system is
+  // self-contradictory; routing a real question to the tool-less lane is
+  // the worse failure (it fabricates), so code flips it (refs #440).
+  it('flips CHAT with a system subject to zoneminder', async () => {
+    const provider = providerSaying('{"kind":"CHAT","subject":"events","objects":[],"when":["today"]}');
+    const verdict = await classifyRequest(
+      provider,
+      'how today looking?',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor'],
+      ['person'],
+    );
+    expect(verdict.kind).toBe('zoneminder');
+  });
+
+  it('leaves CHAT with subject other alone', async () => {
+    const provider = providerSaying('{"kind":"CHAT","subject":"other","objects":[],"when":[]}');
+    const verdict = await classifyRequest(
+      provider,
+      'see you tomorrow',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor'],
+      ['person'],
+    );
+    expect(verdict.kind).toBe('chat');
+  });
+
+  it('forbids the chat lane from stating or offering system facts', () => {
+    const prompt = buildNoToolPrompt('BASE', 'chat');
+    expect(prompt).toContain('never state any camera, event, or server condition');
+    expect(prompt).toContain('Never say you will check');
+  });
+});

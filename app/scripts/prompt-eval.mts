@@ -567,6 +567,8 @@ const PARSE_LABELS = ['car', 'person', 'truck'];
 const R_PLAIN = ['Garage Outdoor', 'Driveway'];
 interface ParseCase {
   q: string;
+  /** Previous exchange to classify in light of (refs #440). */
+  context?: { user: string; assistant: string };
   kind: string;
   subject?: string;
   objects?: string[];
@@ -587,6 +589,15 @@ const PARSE_CASES: ParseCase[] = [
   { q: 'what cameras do I have', kind: 'ZONEMINDER', subject: 'monitors' },
   { q: 'hello', kind: 'CHAT' },
   { q: 'arm the backyard camera', kind: 'ACTION' },
+  // Standalone status questions default to the system (refs #440, observed
+  // live: "how today looking?" went CHAT and the tool-less turn fabricated).
+  { q: 'how today looking?', kind: 'ZONEMINDER', subject: 'events', when: ['today'] },
+  { q: 'anything happening?', kind: 'ZONEMINDER', subject: 'events' },
+  { q: 'see you tomorrow', kind: 'CHAT' },
+  // Follow-ups carry the previous exchange (refs #440).
+  { q: 'yes', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week. Want a breakdown?' }, kind: 'ZONEMINDER', subject: 'events' },
+  { q: 'what about the garage?', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week.' }, kind: 'ZONEMINDER', subject: 'events' },
+  { q: 'thanks!', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week.' }, kind: 'CHAT' },
 ];
 
 /** Coverage cases (refs #438), scored through the production coverage call
@@ -595,6 +606,7 @@ const R_HOUSE = ['FrontDoor', 'Backyard(JPEG)', 'Basement', 'Front Yard', 'Garag
 const R_DOOR = ['Garage Outdoor', 'Doorbell'];
 interface CoverageCase {
   q: string;
+  context?: { user: string; assistant: string };
   roster: string[];
   /** Exact expected monitor set. */
   monitors?: string[];
@@ -614,6 +626,7 @@ const COVERAGE_CASES: CoverageCase[] = [
   { q: 'how busy was the front of my abode over the week?', roster: R_HOUSE, monitorsWithin: ['FrontDoor', 'Front Yard'] },
   { q: 'summarize today', roster: R_PLAIN, unpinned: true },
   { q: 'who came at lunch 5 days ago', roster: R_PLAIN, unpinned: true },
+  { q: 'what about the garage?', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events.' }, roster: R_HOUSE, monitorsWithin: ['Garage Indoor', 'Garage Outdoor'] },
 ];
 
 function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean {
@@ -621,8 +634,9 @@ function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean 
 }
 
 async function scoreParse(runs: number) {
-  const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots } = await import('../src/lib/assistant/triage');
+  const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots, buildContextualQuestion } = await import('../src/lib/assistant/triage');
   const { buildCoveragePrompt, buildCoverageSchema, deriveMonitorSlots } = await import('../src/lib/assistant/monitor-stage');
+  const { buildContextualQuestion: wrapQ } = await import('../src/lib/assistant/triage');
   const { scanTimeExpressions } = await import('../src/lib/assistant/timeframe-stage');
   const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
   let pass = 0;
@@ -636,7 +650,7 @@ async function scoreParse(runs: number) {
       try {
         const r = await chat({
           model: MODEL,
-          messages: [{ role: 'system', content: buildTriagePromptForEval(R_PLAIN, PARSE_LABELS) }, { role: 'user', content: c.q }],
+          messages: [{ role: 'system', content: buildTriagePromptForEval(R_PLAIN, PARSE_LABELS) }, { role: 'user', content: buildContextualQuestion(c.q, c.context) }],
           stream: false,
           max_tokens: 200,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
@@ -668,7 +682,7 @@ async function scoreParse(runs: number) {
       try {
         const r = await chat({
           model: MODEL,
-          messages: [{ role: 'system', content: buildCoveragePrompt(c.roster) }, { role: 'user', content: c.q }],
+          messages: [{ role: 'system', content: buildCoveragePrompt(c.roster) }, { role: 'user', content: wrapQ(c.q, c.context) }],
           stream: false,
           max_tokens: 200,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),

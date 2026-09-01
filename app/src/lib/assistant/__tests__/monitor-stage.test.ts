@@ -187,3 +187,25 @@ describe('deriveMonitorSlots', () => {
     expect(deriveMonitorSlots({ place: 'today', covered: false, monitors: [] }, names)).toEqual({ monitors: [] });
   });
 });
+
+/** Refs #440: a follow-up's place lives in the previous exchange. */
+describe('resolveCoverage with context', () => {
+  it('wraps the question with the previous exchange', async () => {
+    const provider = {
+      complete: vi.fn().mockResolvedValue({ text: '{"place":"garage","covered":true,"monitors":["Garage Outdoor"]}' }),
+    } as unknown as AssistantProvider;
+    const roster = [{ id: '5', name: 'Garage Outdoor' }, { id: '2', name: 'Backyard(JPEG)' }];
+    const slots = await resolveCoverage(
+      'what about the garage?',
+      roster,
+      provider,
+      new AbortController().signal,
+      undefined,
+      { user: 'how was the rear this week?', assistant: 'Backyard had 86 events.' },
+    );
+    const [, question] = vi.mocked(provider.complete).mock.calls[0];
+    expect(question).toContain('how was the rear this week?');
+    expect((question as string).trim().endsWith('what about the garage?')).toBe(true);
+    expect(slots).toEqual({ monitors: ['Garage Outdoor'] });
+  });
+});

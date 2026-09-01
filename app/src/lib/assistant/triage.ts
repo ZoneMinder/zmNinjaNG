@@ -18,9 +18,49 @@
  */
 import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry } from './types';
 import { sanitizeModelText } from './sanitize';
+import { log, LogLevel } from '../logger';
 import { isAbortError } from '../is-abort-error';
+import { ASSISTANT } from '../zmninja-ng-constants';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
+
+/** The previous completed exchange, for classifying a follow-up (refs #440):
+ *  "yes" or "what about the garage?" is unreadable without it. */
+export interface ParseContext {
+  user: string;
+  assistant: string;
+}
+
+/** The latest completed user+assistant exchange BEFORE the message currently
+ *  being classified, or undefined on a fresh thread. */
+export function latestExchange(history: ReadonlyArray<{ role: string; text?: string }>): ParseContext | undefined {
+  for (let i = history.length - 1; i >= 1; i--) {
+    const assistant = history[i];
+    if (assistant.role !== 'assistant' || !assistant.text) continue;
+    for (let j = i - 1; j >= 0; j--) {
+      const user = history[j];
+      if (user.role === 'user' && user.text) return { user: user.text, assistant: assistant.text };
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+/** The question as the parse and coverage calls receive it: bare, or wrapped
+ *  with the previous exchange so a short follow-up carries its topic. Both
+ *  turns are trimmed hard - the context is a hint, not a transcript. */
+export function buildContextualQuestion(question: string, context?: ParseContext): string {
+  if (!context) return question;
+  const trim = (text: string) =>
+    text.length > ASSISTANT.parseContextCharacters ? `${text.slice(0, ASSISTANT.parseContextCharacters)}...` : text;
+  return [
+    'Earlier exchange, for context only:',
+    `user: ${trim(context.user)}`,
+    `assistant: ${trim(context.assistant)}`,
+    '',
+    `The LATEST message, the one to classify: ${question}`,
+  ].join('\n');
+}
 
 /** What the events/monitors/server question is about; `other` falls back to
  *  the free tool loop (refs #432). */
@@ -97,7 +137,9 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
   '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
   '  "what happened <any period>", "how many <thing> came <any period>", "did anyone come by",',
   '  "show me <camera>". A message that mixes a greeting or small talk with such a question is',
-  '  still ZONEMINDER: any part asking about their place decides.',
+  '  still ZONEMINDER: any part asking about their place decides. A status question about a period',
+  '  with no other topic ("how is today looking", "how are things", "anything happening?") is',
+  '  ZONEMINDER too: in this app it asks what the cameras saw.',
   // Refs #337, observed live: "compare warehouse and cabin" classified CHAT, and
   // the tool-less turn answered it with a greeting. The names of the user's
   // own servers are the one piece of context that decides such a message, and
@@ -122,6 +164,8 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
   ...(monitors.length > 0
     ? [
         ...(labels.length > 0 ? [`Detected object labels on this installation: ${labels.join(', ')}.`] : []),
+        'The message may arrive with an earlier exchange shown for context: classify the LATEST message',
+        'read in its light - a bare "yes", "do it", or a short follow-up continues that exchange\'s topic.',
         'Also fill these fields about the message, judged by meaning in any language:',
         '"subject": what the message asks about. events - what happened, who or what came by, was seen,',
         "detected, or counted. monitors - the camera list or a camera's state. server - health or whether",
@@ -284,6 +328,9 @@ export async function classifyRequest(
   /** Recorded object labels, so the parse can map "folks"/"Leute" onto the
    *  install's own vocabulary (refs #432). Only used with a roster. */
   objectLabels: readonly string[] = [],
+  /** The previous exchange, so follow-ups classify with their topic
+   *  (refs #440). */
+  context?: ParseContext,
 ): Promise<TriageVerdict> {
   try {
     // `complete`, not `chat`: a classifier handed the tool catalog, the
@@ -291,12 +338,23 @@ export async function classifyRequest(
     // instead of returning a verdict. The schema constrains a backend that
     // can enforce it to `{"kind":"..."}`; the parser still accepts the loose
     // one-word reply from a backend that cannot.
-    const result = await provider.complete(buildTriagePrompt(servers, monitors, objectLabels), question, signal, buildTriageSchema(monitors, objectLabels), onStatus);
+    const result = await provider.complete(buildTriagePrompt(servers, monitors, objectLabels), buildContextualQuestion(question, context), signal, buildTriageSchema(monitors, objectLabels), onStatus);
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
     }
     const text = sanitizeModelText(result.text, 'triage');
-    return { kind: parseRequestKind(text), ...parseTriageSlots(text, monitors, objectLabels) };
+    const slots = parseTriageSlots(text, monitors, objectLabels);
+    let kind = parseRequestKind(text);
+    // A CHAT verdict whose own slots say the message is about the system is
+    // self-contradictory (refs #440), and routing a real question to the
+    // tool-less lane is the worse failure: it fabricates. Code flips it.
+    if (kind === 'chat' && slots.subject !== undefined && slots.subject !== 'other') {
+      log.assistant('CHAT verdict contradicts its own subject; routing to the data lane', LogLevel.WARN, {
+        subject: slots.subject,
+      });
+      kind = 'zoneminder';
+    }
+    return { kind, ...slots };
   } catch (error) {
     if (isAbortError(error)) throw error;
     return { kind: 'zoneminder' };
@@ -333,6 +391,13 @@ export const NO_TOOL_INSTRUCTIONS: Record<Exclude<RequestKind, 'zoneminder'>, st
     'yourself, and mention once that you are an AI assistant for the user\'s ZoneMinder system. A greeting,',
     'a thank you, or small talk gets one short warm reply. Never call a tool, and never invent any camera,',
     'event, or server information.',
+    // Observed live (refs #440): a misrouted follow-up got "the system is
+    // running smoothly... no recent events detected" - every clause invented,
+    // no tool had run. Same wording that measurably stopped this on the
+    // action lane (refs #270).
+    'Never say you will check, look up, or fetch anything, and never ask whether to: you cannot on this',
+    'turn - and never state any camera, event, or server condition, count, or status: no tool has run, so',
+    'you have retrieved nothing and have nothing to report.',
   ].join('\n'),
 };
 

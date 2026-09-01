@@ -2186,7 +2186,13 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    than maintained as a vocabulary.
 
    The same round is the ROUTING PARSE (refs #432, #438): with a roster,
-   the prompt carries the install's label vocabulary and the schema extends
+   the prompt carries the install's label vocabulary, the previous exchange
+   rides along trimmed so a bare "yes" or "what about the garage?"
+   classifies with its topic (``latestExchange`` /
+   ``buildContextualQuestion``, refs #440), a status question about a period
+   with no other topic defaults to the system, and a CHAT verdict that
+   contradicts its own subject is flipped to the data lane in code (the
+   tool-less lane fabricates when handed a real question). The schema extends
    the verdict with ``subject`` (events/monitors/server/groups/other),
    ``objects`` (an array over the recorded labels, so "folks" or "Leute"
    land on ``person`` in any language), and ``when`` (the time phrases,
