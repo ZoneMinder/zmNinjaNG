@@ -1010,8 +1010,11 @@ describe('planned tool calls', () => {
     const answer = produced[produced.length - 1];
     expect(answer.role).toBe('assistant');
     expect(answer.text).toBe('3 events on FrontDoor.');
-    // The planned results ride into history as an ordinary tool round.
-    expect(produced.some((m) => m.role === 'tool' && m.toolResults?.length === 2)).toBe(true);
+    // The planned results ride into history as an ordinary tool round -
+    // merged to one when they share the window (refs #436).
+    const toolMsg = produced.find((m) => m.role === 'tool');
+    expect(toolMsg?.toolResults).toHaveLength(1);
+    expect(JSON.parse(toolMsg!.toolResults![0].output).matchCount).toBe(6);
     // Result cards from planned calls surface like any other.
     expect(answer.display).toEqual([{ kind: 'event', id: 'e1' }]);
   });
@@ -1032,5 +1035,43 @@ describe('planned tool calls', () => {
 
     // Executed once by the plan; the model's identical repeat is refused.
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** Refs #436: same-window planned calls reach the model as ONE merged result,
+ *  so cross-monitor totals are code arithmetic, never the model's. */
+describe('planned call coalescing', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('replays a merged single tool round to the model', async () => {
+    const outputs = [
+      '{"summary":"s1","window":{"from":"a","to":"b"},"matchCount":5,"countsByMonitor":{"FrontDoor":5},"objectCounts":{"person":5},"countsByHour":{"h1":5},"events":[{"id":"10","monitor":"FrontDoor","objects":["person"]}]}',
+      '{"summary":"s2","window":{"from":"a","to":"b"},"matchCount":12,"countsByMonitor":{"Front Yard":12},"objectCounts":{"person":8,"truck":4},"countsByHour":{"h1":3},"events":[{"id":"11","monitor":"Front Yard","objects":["person"]}]}',
+    ];
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce({ output: outputs[0] })
+      .mockResolvedValueOnce({ output: outputs[1] });
+    const tool = { name: 'list_events', description: 'd', schema: { type: 'object', properties: {} }, execute } as never;
+    const p = new MockProvider();
+    p.setScript([{ text: 'answer', toolCalls: [] }]);
+
+    const produced = await runAssistantTurn({
+      ...baseOpts(p, host(), [{ role: 'user', text: 'how busy was the front over the week?' }]),
+      tools: [tool],
+      plannedCalls: [
+        { name: 'list_events', input: { when: 'over the week', monitorId: '1', objectType: 'person' } },
+        { name: 'list_events', input: { when: 'over the week', monitorId: '4', objectType: 'person' } },
+      ],
+    });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    const toolMsg = produced.find((m) => m.role === 'tool');
+    expect(toolMsg?.toolResults).toHaveLength(1);
+    const body = JSON.parse(toolMsg!.toolResults![0].output);
+    expect(body.matchCount).toBe(17);
+    expect(body.objectCounts).toEqual({ person: 13, truck: 4 });
+    const assistantCallMsg = produced.find((m) => m.role === 'assistant' && m.toolCalls?.length);
+    expect(assistantCallMsg?.toolCalls).toHaveLength(1);
   });
 });

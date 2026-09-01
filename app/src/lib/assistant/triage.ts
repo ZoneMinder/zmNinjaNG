@@ -294,7 +294,12 @@ export function parseTriageSlots(
     slots.subject = raw.subject as QuerySubject;
   }
   if (labels.length > 0 && Array.isArray(raw.objects)) {
-    slots.objects = raw.objects.filter((o): o is string => typeof o === 'string' && labels.includes(o));
+    const objects = raw.objects.filter((o): o is string => typeof o === 'string' && labels.includes(o));
+    // Selecting the ENTIRE vocabulary is the objectType-creep signature
+    // (observed live on "how busy...", refs #436), and as a filter it
+    // silently EXCLUDES events with no detection at all. Mirror of the
+    // whole-roster monitors rule: derive no filter instead.
+    slots.objects = labels.length > 1 && objects.length === labels.length ? [] : objects;
   }
   if (Array.isArray(raw.when)) {
     slots.when = raw.when

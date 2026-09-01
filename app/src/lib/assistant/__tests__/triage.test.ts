@@ -342,3 +342,43 @@ describe('classifyRequest when-phrase slot', () => {
     expect(none.when).toBeUndefined();
   });
 });
+
+/** Refs #436, observed live: "how busy" names no object, yet objects came
+ *  back as the ENTIRE vocabulary, silently excluding no-detection events
+ *  from a busyness summary. The whole vocabulary is the creep signature,
+ *  mirror of the whole-roster monitors rule: no filter at all. */
+describe('classifyRequest objects creep guard', () => {
+  it('derives no filter when the model selects every recorded label', async () => {
+    const provider = providerSaying(
+      '{"kind":"ZONEMINDER","place":"front of my abode","covered":true,"monitors":["FrontDoor"],"subject":"events","objects":["person","car","truck"],"when":["over the week"]}',
+    );
+    const verdict = await classifyRequest(
+      provider,
+      'how busy was the front of my abode over the week?',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor', 'Garage Outdoor'],
+      ['car', 'person', 'truck'],
+    );
+    expect(verdict.objects).toEqual([]);
+  });
+
+  it('keeps a proper subset as the filter', async () => {
+    const provider = providerSaying(
+      '{"kind":"ZONEMINDER","place":"","covered":false,"monitors":[],"subject":"events","objects":["car","truck"],"when":["today"]}',
+    );
+    const verdict = await classifyRequest(
+      provider,
+      'any vehicles today',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor'],
+      ['car', 'person', 'truck'],
+    );
+    expect(verdict.objects).toEqual(['car', 'truck']);
+  });
+});

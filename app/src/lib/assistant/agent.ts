@@ -9,7 +9,7 @@
  * talk its way past (see tools.ts for why the actions were removed).
  */
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolCall, ToolContext, ToolDefinition, ToolResult } from './types';
-import type { PlannedToolCall } from './plan';
+import { mergePlannedEventResults, type PlannedToolCall } from './plan';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
 import { executeScoped } from './server-scope';
@@ -454,7 +454,6 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
   // registry stays open, so a drill-down or a corrected retry still works.
   if (opts.plannedCalls?.length) {
     const calls: ToolCall[] = opts.plannedCalls.map((c, i) => ({ id: `planned-${i + 1}`, name: c.name, input: c.input }));
-    push({ role: 'assistant', toolCalls: calls });
     anyToolCallAttempted = true;
     const results: ToolResult[] = [];
     for (const call of calls) {
@@ -462,7 +461,15 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       results.push(await runOneCall(call));
     }
     turnDisplay.push(...results.flatMap((r) => r.display ?? []));
-    push({ role: 'tool', toolResults: results });
+    // A same-window fan-out reaches the model as ONE merged result
+    // (refs #436): handed the per-monitor results separately, it summed the
+    // totals itself and quoted one monitor's counts as the whole answer.
+    // The real calls stay in the trace and keep their signatures; only what
+    // the model is replayed changes.
+    const merged = mergePlannedEventResults(calls, results);
+    if (merged) toolOutputs.push(merged.result.output);
+    push({ role: 'assistant', toolCalls: merged ? [merged.call] : calls });
+    push({ role: 'tool', toolResults: merged ? [merged.result] : results });
   }
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {

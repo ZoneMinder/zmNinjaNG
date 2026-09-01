@@ -101,9 +101,11 @@ export function extractShowDirective(text: string): { text: string; show?: ShowD
     // No whitespace tolerated around '=': a lax match swallowed the NEXT
     // list's name as this list's value on "events= monitors=".
     const part = new RegExp(`\\b${name}=([^\\s]*)`, 'i').exec(match[1]);
+    // Models wrap the list in brackets ("events=[1,2]", observed live,
+    // refs #436); the ids are the same either way.
     return (part?.[1] ?? '')
       .split(',')
-      .map((id) => id.trim())
+      .map((id) => id.trim().replace(/^\[|\]$/g, ''))
       .filter((id) => id.length > 0);
   };
   return {
