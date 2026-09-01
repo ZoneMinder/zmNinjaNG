@@ -265,7 +265,11 @@ export async function interpretWhen(
     });
     result = { error: `Could not interpret "${phrase}" as a time window right now. Retry, or rephrase the when argument.` };
   }
-  CACHE.set(cacheKey, result);
+  // Only a real interpretation earns a day of reuse (refs #430): a cached
+  // error made its own "Retry" advice a lie, since every retry of the phrase
+  // served the failure back until the calendar day rolled over. Observed
+  // live with "yesterday" after one transient failure during the pre-warm.
+  if (!('error' in result)) CACHE.set(cacheKey, result);
   return result;
 }
 

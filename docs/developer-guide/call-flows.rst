@@ -2166,9 +2166,11 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    monitor list is not copied into every prompt because ``list_monitors``
    resolves names when needed; what does run up front is
    ``scanMonitorMentions`` (``monitor-stage.ts``), a deterministic pass that
-   matches monitor names the question states verbatim against the cached
-   per-profile roster (``getMonitorRoster``), on the same normalized key
-   ``resolveMonitorRef`` uses for model-supplied names.
+   matches monitor names against the cached per-profile roster
+   (``getMonitorRoster``) two ways: the whole name as a substring on the same
+   normalized key ``resolveMonitorRef`` uses for model-supplied names, or
+   every token of the name present among the question's words, so "front of
+   my door" still finds "FrontDoor" with words intervening (refs #430).
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx>`__
    · → :doc:`16-platform-surfaces`
 
@@ -2191,7 +2193,10 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    names, so a monitor that does not exist is undecodable).
    ``parseTriageMonitor`` derives the outcome in code - a named place that
    ``covered`` denies is ``NO_MATCH``, a place that is only time words is
-   ``NONE`` - and ``buildMonitorSystemLine`` turns it into one system line:
+   ``NONE``, and a contradiction (``covered`` false while ``monitor`` names a
+   real roster entry, observed live, refs #430) is ``NONE`` rather than a
+   false no-coverage claim - and ``buildMonitorSystemLine``
+   turns it into one system line:
    a resolved monitor pins ``monitorId``, a ``NO_MATCH`` place gets a guard
    telling the model to say no monitor covers it and never attribute other
    monitors' events to it. Asked "how many people came to my front door
