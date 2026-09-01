@@ -180,7 +180,8 @@ describe('WINDOW_SCHEMA', () => {
     const rolling = branches.find((b) => b.required.includes('lastCount'));
     expect(rolling?.required).toEqual(expect.arrayContaining(['lastCount', 'lastUnit']));
     const weekendBranch = branches.find((b) => b.required.includes('weekend'));
-    expect(Object.keys(weekendBranch?.properties ?? {})).toEqual(['weekend']);
+    // 'meaning' is the universal self-explanation (refs #438), not a day field.
+    expect(Object.keys(weekendBranch?.properties ?? {})).toEqual(['meaning', 'weekend']);
   });
 
   it('constrains weekend to a string enum the model is exact on', () => {
@@ -242,7 +243,7 @@ describe('selectBranches', () => {
   it('offers only the both-ends span for a bare month or season', () => {
     for (const phrase of ['april', 'in april', 'this summer']) {
       const sets = requiredSets(selectBranches(phrase));
-      expect(sets).toEqual([['fromDate', 'toDate']]);
+      expect(sets).toEqual([['fromDate', 'meaning', 'toDate']]);
     }
   });
 
@@ -291,5 +292,26 @@ describe('weekday-range branch', () => {
 
   it('teaches the field in the prompt', () => {
     expect(buildInterpreterPrompt(new Date('2026-07-16T14:30:00Z'), 'UTC')).toContain('fromWeekday');
+  });
+});
+
+/** Refs #438: the interrogation redesign. Every branch decodes a required
+ *  "meaning" restatement FIRST (measured: "all this week" decoded none:true
+ *  without it and a real window with it), and the calendar-week branch
+ *  exists so week phrases never need model date arithmetic. */
+describe('interrogation redesign', () => {
+  it('requires meaning first in every branch', () => {
+    for (const b of WINDOW_SCHEMA.anyOf as Array<{ properties: Record<string, unknown>; required: string[] }>) {
+      expect(Object.keys(b.properties)[0]).toBe('meaning');
+      expect(b.required[0]).toBe('meaning');
+    }
+  });
+
+  it('has a calendar-week branch and teaches both in the prompt', () => {
+    const branches = WINDOW_SCHEMA.anyOf as Array<{ required: string[] }>;
+    expect(branches.some((b) => b.required.includes('week'))).toBe(true);
+    const prompt = buildInterpreterPrompt(new Date('2026-07-16T14:30:00Z'), 'UTC');
+    expect(prompt).toContain('"meaning"');
+    expect(prompt).toContain('"week"');
   });
 });

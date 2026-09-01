@@ -283,3 +283,27 @@ describe('weekday ranges', () => {
     );
   });
 });
+
+/** Refs #438: calendar weeks were missing vocabulary, so "this week" forced
+ *  the model into date arithmetic. Monday-anchored, resolved in code;
+ *  NOW is Thursday 2026-07-16. */
+describe('calendar weeks', () => {
+  it('resolves this week from Monday through now', () => {
+    expect(at({ week: 'this' })).toEqual({
+      startDateTime: '2026-07-13 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+  });
+
+  it('resolves last week as the previous Monday through Sunday', () => {
+    expect(at({ week: 'last' })).toEqual({
+      startDateTime: '2026-07-06 00:00:00',
+      endDateTime: '2026-07-13 00:00:00',
+    });
+  });
+
+  it('rejects unknown week values and mixing with other shapes', () => {
+    expect(at({ week: 'next' })).toHaveProperty('error');
+    expect(at({ week: 'this', daysAgo: 1 })).toHaveProperty('error');
+  });
+});

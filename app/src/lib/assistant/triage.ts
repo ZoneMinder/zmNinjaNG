@@ -19,7 +19,6 @@
 import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry } from './types';
 import { sanitizeModelText } from './sanitize';
 import { isAbortError } from '../is-abort-error';
-import { scanTimeExpressions } from './timeframe-stage';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
 
@@ -29,20 +28,14 @@ export type QuerySubject = 'events' | 'monitors' | 'server' | 'groups' | 'other'
 
 const QUERY_SUBJECTS: readonly QuerySubject[] = ['events', 'monitors', 'server', 'groups', 'other'];
 
-/** What one triage round decided (refs #427, #432): the request kind, and,
- *  when the caller handed it the roster (and label vocabulary), the parsed
- *  slots. Every slot is validated here and absent rather than guessed:
- *  `monitors` only holds real roster names (a SET, because "front of my
- *  house" means several cameras), `noMatch` is set only for a place no
- *  camera covers, `objects` only holds recorded labels. An unconstrained
- *  backend can reply anything, so values outside the enums are dropped. */
+/** What one triage round decided (refs #432, #438): the request kind and
+ *  the ROUTING slots, each validated here and absent rather than guessed.
+ *  Camera coverage is deliberately not part of this round any more: judged
+ *  inside this consolidated prompt it failed live and every rewording
+ *  rotated the failures; the dedicated coverage call (monitor-stage.ts)
+ *  measures 8/8 on the same cases. One question per judgment. */
 export interface TriageVerdict {
   kind: RequestKind;
-  /** Cameras the question is about, roster-validated. [] = no place named.
-   *  Absent = no roster, unparseable, or a contradictory verdict. */
-  monitors?: string[];
-  /** The question names a place no listed camera covers. */
-  noMatch?: boolean;
   subject?: QuerySubject;
   /** Recorded labels the question asks about ("folks" -> person). */
   objects?: string[];
@@ -103,7 +96,8 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
   '  cameras, monitors, events, detections, recordings, activity, or server health, or to be taken to a',
   '  screen in the app. Questions and commands alike, in any language: "summarize <any period>",',
   '  "what happened <any period>", "how many <thing> came <any period>", "did anyone come by",',
-  '  "show me <camera>".',
+  '  "show me <camera>". A message that mixes a greeting or small talk with such a question is',
+  '  still ZONEMINDER: any part asking about their place decides.',
   // Refs #337, observed live: "compare warehouse and cabin" classified CHAT, and
   // the tool-less turn answered it with a greeting. The names of the user's
   // own servers are the one piece of context that decides such a message, and
@@ -118,32 +112,17 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
   'CHAT - anything NOT about this system: greetings, thanks, small talk, questions about you, general',
   '  knowledge, or summarizing something that is not this system\'s activity.',
   '',
-  // The parse block (refs #427, #430, #432). This round is the one model
-  // call that can map the user's words onto their own camera names and this
-  // install's label vocabulary, in any language; the schemas constrain every
-  // field to real values so nothing can be hallucinated (buildTriageSchema),
-  // and every derivation happens in code (parseTriageSlots). Appended only
-  // when the caller has a roster, so the roster-less prompt stays
-  // byte-identical to what the eval harness scores.
+  // The routing parse block (refs #432, #438), appended only when the
+  // caller has a roster (a configured install), so the roster-less prompt
+  // stays byte-identical to what the eval harness scores. Subject, objects,
+  // and the verbatim time phrases are all enums or copies; the place and
+  // coverage judgment lives in its own focused call (monitor-stage.ts),
+  // where the same model measures 8/8 on the cases this consolidated
+  // prompt failed.
   ...(monitors.length > 0
     ? [
-        `This system's cameras are: ${monitors.join(', ')}.`,
         ...(labels.length > 0 ? [`Detected object labels on this installation: ${labels.join(', ')}.`] : []),
         'Also fill these fields about the message, judged by meaning in any language:',
-        // Copy-then-judge (refs #265's copy-interpret pattern, applied here
-        // after direct classification force-picked the nearest camera):
-        // "place" makes the model write down what the message actually named,
-        // and "covered" asks the yes/no question on its own before any name
-        // can be decoded. Asked to pick from the list directly, the model
-        // substituted the nearest camera for a place the list lacks.
-        '"place": the exact place or camera words it names ("" when it names none; time words such as today',
-        'or yesterday are not places).',
-        '"covered": true when a listed camera means that place, or when the place is a whole area that',
-        "contains a listed camera's own area (the whole house contains its cameras); false when \"place\" is",
-        '"" or when no listed camera means or sits inside it. A place that is only one PART of the property',
-        '(one door, one corner, one room) is covered only by a camera that means that exact place: nearby',
-        'or merely similar is still false, never the closest name.',
-        '"monitors": every listed camera that means the place or watches part of it ([] when "covered" is false).',
         '"subject": what the message asks about. events - what happened, who or what came by, was seen,',
         "detected, or counted. monitors - the camera list or a camera's state. server - health or whether",
         'the system is up. groups - monitor groups. other - anything else.',
@@ -153,11 +132,12 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
         ...(labels.length > 0
           ? [
               '"objects": every listed label the message asks about, judged by meaning ("folks" or "Leute" mean',
-              'person, "vehicles" means car and truck); [] when it asks about no particular thing.',
+              'person, "vehicles" means car and truck); [] when it asks about no particular thing - a summary,',
+              'recap, "how busy", or "what happened" question names none.',
             ]
           : []),
         '',
-        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "place", "covered", "monitors", "subject", "when"${labels.length > 0 ? ', and "objects"' : ''}.`,
+        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "subject", "when"${labels.length > 0 ? ', and "objects"' : ''}.`,
       ]
     : ['Reply with one word: ZONEMINDER, ACTION, or CHAT.']),
 ];
@@ -191,23 +171,13 @@ export function buildTriageSchema(monitors: readonly string[], labels: readonly 
     type: 'object',
     properties: {
       kind: { type: 'string', enum: ['ZONEMINDER', 'ACTION', 'CHAT'] },
-      // Decoded BEFORE `covered` and `monitors` on purpose (property order is
-      // generation order under constrained decoding): copying the message's
-      // own place words first puts the mismatch in front of the model.
-      place: { type: 'string' },
-      // The abstention as its own yes/no question. Asked to choose from the
-      // name enum directly, the model substituted the nearest camera for a
-      // place the list lacks, under three prompt wordings and both enum
-      // orders (12/16); the boolean is what made it abstain.
-      covered: { type: 'boolean' },
-      monitors: { type: 'array', items: { type: 'string', enum: [...monitors] } },
       subject: { type: 'string', enum: [...QUERY_SUBJECTS] },
       ...(labels.length > 0 ? { objects: { type: 'array', items: { type: 'string', enum: [...labels] } } } : {}),
       // Free strings by necessity (no enum can list every time phrase); the
       // timeframe stage's provenance filter distrusts them (refs #434).
       when: { type: 'array', items: { type: 'string' } },
     },
-    required: ['kind', 'place', 'covered', 'monitors', 'subject', ...(labels.length > 0 ? ['objects'] : []), 'when'],
+    required: ['kind', 'subject', ...(labels.length > 0 ? ['objects'] : []), 'when'],
     additionalProperties: false,
   };
 }
@@ -253,43 +223,13 @@ export function parseTriageSlots(
   labels: readonly string[] = [],
 ): Omit<TriageVerdict, 'kind'> {
   if (monitors.length === 0) return {};
-  let raw: { place?: unknown; covered?: unknown; monitors?: unknown; subject?: unknown; objects?: unknown; when?: unknown };
+  let raw: { subject?: unknown; objects?: unknown; when?: unknown };
   try {
     raw = JSON.parse(reply) as typeof raw;
   } catch {
     return {};
   }
   const slots: Omit<TriageVerdict, 'kind'> = {};
-
-  const named = Array.isArray(raw.monitors)
-    ? raw.monitors.filter((m): m is string => typeof m === 'string' && monitors.includes(m))
-    : undefined;
-  if (raw.covered === true && named && named.length > 0) {
-    // Selecting the ENTIRE roster pins nothing an unpinned query would not
-    // already cover, and it is the signature of a false cover: asked about a
-    // "front door" no camera means, the model answered covered:true with
-    // every camera, under two rule wordings (measured 2/2 at temp 0,
-    // refs #434). The slot stays unset and the turn runs unpinned, with no
-    // line asserting a place.
-    if (named.length < monitors.length) slots.monitors = named;
-  } else if (raw.covered === false) {
-    if (named && named.length > 0) {
-      // A contradiction (coverage denied while real roster names are filled
-      // in) is uncertainty, observed live: {"place":"front of my door",
-      // "covered":false,"monitor":"FrontDoor"} (refs #430). Neither a pin
-      // nor a no-coverage claim is safe, so both slots stay unset.
-    } else {
-      const place = typeof raw.place === 'string' ? raw.place : '';
-      // "summarize today" copied "today" into place (2/2 at temp 0), and the
-      // prompt's "time words are not places" line did not stop it. Decidable
-      // in code: strip every time expression the timeframe scan owns, and a
-      // place with nothing else left named no place at all.
-      const rest = scanTimeExpressions(place).reduce((text, phrase) => text.replace(phrase, ' '), place);
-      if (/[\p{L}\p{N}]/u.test(rest)) slots.noMatch = true;
-      else slots.monitors = [];
-    }
-  }
-
   if (typeof raw.subject === 'string' && (QUERY_SUBJECTS as readonly string[]).includes(raw.subject)) {
     slots.subject = raw.subject as QuerySubject;
   }
@@ -297,8 +237,7 @@ export function parseTriageSlots(
     const objects = raw.objects.filter((o): o is string => typeof o === 'string' && labels.includes(o));
     // Selecting the ENTIRE vocabulary is the objectType-creep signature
     // (observed live on "how busy...", refs #436), and as a filter it
-    // silently EXCLUDES events with no detection at all. Mirror of the
-    // whole-roster monitors rule: derive no filter instead.
+    // silently EXCLUDES events with no detection at all: derive no filter.
     slots.objects = labels.length > 1 && objects.length === labels.length ? [] : objects;
   }
   if (Array.isArray(raw.when)) {

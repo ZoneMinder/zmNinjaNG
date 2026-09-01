@@ -52,6 +52,10 @@ export interface WindowFields {
    *  (refs #434). */
   fromWeekday?: string;
   toWeekday?: string;
+  /** A calendar week, Monday-anchored, resolved in code (refs #438): "this"
+   *  is Monday 00:00 through now, "last" the previous Monday through
+   *  Sunday. Distinct from a rolling lastUnit:"week", which ends now. */
+  week?: string;
   /** Most recent past day with this day-of-month number (1-31): "the 21st".
    *  Code finds the date, exactly as `weekday` finds the most recent weekday,
    *  because a small model resolves a bare ordinal to the wrong ISO date. */
@@ -142,15 +146,29 @@ export function resolveWindow(
   now: Date,
   timezone: string,
 ): ResolvedEventRange | { error: string } | undefined {
-  const { lastCount, lastUnit, daysAgo, weekday, fromWeekday, toWeekday, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
+  const { lastCount, lastUnit, daysAgo, weekday, fromWeekday, toWeekday, week, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
   const dayPickers = [daysAgo !== undefined, weekday !== undefined, dayOfMonth !== undefined, date !== undefined].filter(Boolean).length;
   const rolling = lastCount !== undefined || lastUnit !== undefined;
   const ranged = fromDate !== undefined || toDate !== undefined;
   const weekendShape = weekend !== undefined;
   const weekdayRange = fromWeekday !== undefined || toWeekday !== undefined;
+  const weekShape = week !== undefined;
 
-  if ([rolling, dayPickers > 0, ranged, weekendShape, weekdayRange].filter(Boolean).length > 1) {
-    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekday span (fromWeekday+toWeekday), a weekend, or a span (fromDate/toDate).' };
+  if ([rolling, dayPickers > 0, ranged, weekendShape, weekdayRange, weekShape].filter(Boolean).length > 1) {
+    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekday span (fromWeekday+toWeekday), a calendar week, a weekend, or a span (fromDate/toDate).' };
+  }
+
+  if (weekShape) {
+    if (week !== 'this' && week !== 'last') {
+      return { error: `week must be "this" or "last". Received "${String(week)}".` };
+    }
+    const zonedToday = startOfDay(toZonedTime(now, timezone));
+    const daysSinceMonday = (toZonedTime(now, timezone).getDay() + 6) % 7;
+    const monday = subDays(zonedToday, daysSinceMonday + (week === 'last' ? 7 : 0));
+    const start = fromZonedTime(monday, timezone);
+    const endRaw = fromZonedTime(subDays(monday, -7), timezone);
+    const end = endRaw.getTime() > now.getTime() ? now : endRaw;
+    return { startDateTime: formatForZm(start, timezone), endDateTime: formatForZm(end, timezone) };
   }
   if (dayPickers > 1) {
     return { error: 'Send only one of daysAgo, weekday, dayOfMonth, or date.' };

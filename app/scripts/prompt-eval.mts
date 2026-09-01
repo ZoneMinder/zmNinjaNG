@@ -560,28 +560,14 @@ async function scoreTriage(runs: number) {
   return { pass, total, failures };
 }
 
-/** Parse cases (refs #427, #432): the triage round, handed the roster and
- *  label vocabulary, must fill every slot - cameras as a SET (an umbrella
- *  place means several), subject, and objects mapped by meaning in any
- *  language - and abstain (noMatch) for a place no camera covers, without
- *  disturbing the kind verdict. Scored through the production parser
- *  (parseTriageSlots), so what is measured is what ships. */
+/** Routing-parse cases (refs #432, #438): kind, subject, objects (synonym +
+ *  non-English), and the when-union. Camera coverage is scored separately
+ *  below, through its own dedicated call, mirroring production. */
 const PARSE_LABELS = ['car', 'person', 'truck'];
 const R_PLAIN = ['Garage Outdoor', 'Driveway'];
-const R_DOOR = ['Garage Outdoor', 'Doorbell'];
-const R_HOUSE = ['FrontDoor', 'Front Yard', 'Garage Outdoor'];
 interface ParseCase {
   q: string;
-  roster: string[];
   kind: string;
-  /** Exact expected monitors set, or undefined to skip the check. */
-  monitors?: string[];
-  /** Accept any non-empty subset of these instead of an exact set. */
-  monitorsWithin?: string[];
-  /** Pass when nothing is pinned: monitors unset/empty or noMatch - any
-   *  outcome except a positive pin of wrong cameras. */
-  unpinned?: boolean;
-  noMatch?: boolean;
   subject?: string;
   objects?: string[];
   /** Each must appear (normalized) inside the UNION of the deterministic
@@ -589,19 +575,45 @@ interface ParseCase {
   when?: string[];
 }
 const PARSE_CASES: ParseCase[] = [
-  // The live failures this architecture exists for:
-  { q: 'How may folks came to the front of my house between mon and tue?', roster: R_HOUSE, kind: 'ZONEMINDER', monitorsWithin: ['FrontDoor', 'Front Yard'], subject: 'events', objects: ['person'], when: ['between mon and tue'] },
-  { q: 'how many people came to my front door yesterday', roster: R_PLAIN, kind: 'ZONEMINDER', unpinned: true, subject: 'events', objects: ['person'], when: ['yesterday'] },
-  { q: 'how many people came to my front door yesterday', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events', objects: ['person'] },
-  { q: 'any cars in the driveway today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: ['Driveway'], subject: 'events', objects: ['car'] },
-  { q: 'was war gestern an der Haust\u00fcr los', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events' },
-  { q: 'summarize today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: [], subject: 'events', objects: [], when: ['today'] },
-  { q: 'who came at lunch 5 days ago', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['lunch', '5 days ago'] },
-  { q: 'was war letzte Woche los', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'events', when: ['letzte woche'] },
-  { q: 'is the server ok', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'server' },
-  { q: 'what cameras do I have', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'monitors' },
-  { q: 'hello', roster: R_PLAIN, kind: 'CHAT' },
-  { q: 'arm the backyard camera', roster: R_PLAIN, kind: 'ACTION' },
+  { q: 'How may folks came to the front of my house between mon and tue?', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['between mon and tue'] },
+  { q: 'how many people came to my front door yesterday', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['yesterday'] },
+  { q: 'any cars in the driveway today', kind: 'ZONEMINDER', subject: 'events', objects: ['car'], when: ['today'] },
+  { q: 'was war gestern an der Haust\u00fcr los', kind: 'ZONEMINDER', subject: 'events' },
+  { q: 'summarize today', kind: 'ZONEMINDER', subject: 'events', objects: [], when: ['today'] },
+  { q: 'who came at lunch 5 days ago', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['lunch', '5 days ago'] },
+  { q: 'how busy was the front of my abode over the week?', kind: 'ZONEMINDER', subject: 'events', objects: [], when: ['over the week'] },
+  { q: 'oh the world is so cool. how is my house doing at the back all of this week?', kind: 'ZONEMINDER', subject: 'events', when: ['all of this week'] },
+  { q: 'is the server ok', kind: 'ZONEMINDER', subject: 'server' },
+  { q: 'what cameras do I have', kind: 'ZONEMINDER', subject: 'monitors' },
+  { q: 'hello', kind: 'CHAT' },
+  { q: 'arm the backyard camera', kind: 'ACTION' },
+];
+
+/** Coverage cases (refs #438), scored through the production coverage call
+ *  and its code derivation - the live failures of the consolidated prompt. */
+const R_HOUSE = ['FrontDoor', 'Backyard(JPEG)', 'Basement', 'Front Yard', 'Garage Indoor', 'Garage Outdoor'];
+const R_DOOR = ['Garage Outdoor', 'Doorbell'];
+interface CoverageCase {
+  q: string;
+  roster: string[];
+  /** Exact expected monitor set. */
+  monitors?: string[];
+  /** Accept any non-empty subset of these. */
+  monitorsWithin?: string[];
+  noMatch?: boolean;
+  /** Pass when nothing is pinned (unset, [], or noMatch). */
+  unpinned?: boolean;
+}
+const COVERAGE_CASES: CoverageCase[] = [
+  { q: 'how was the rear of my house all this week?', roster: R_HOUSE, monitors: ['Backyard(JPEG)'] },
+  { q: 'oh the world is so cool. how is my house doing at the back all of this week?', roster: R_HOUSE, monitorsWithin: ['Backyard(JPEG)'] },
+  { q: 'how many people came to my front door yesterday', roster: R_PLAIN, unpinned: true },
+  { q: 'how many people came to my front door yesterday', roster: R_DOOR, monitors: ['Doorbell'] },
+  { q: 'any cars in the driveway today', roster: R_PLAIN, monitors: ['Driveway'] },
+  { q: 'was war gestern an der Haust\u00fcr los', roster: R_DOOR, monitors: ['Doorbell'] },
+  { q: 'how busy was the front of my abode over the week?', roster: R_HOUSE, monitorsWithin: ['FrontDoor', 'Front Yard'] },
+  { q: 'summarize today', roster: R_PLAIN, unpinned: true },
+  { q: 'who came at lunch 5 days ago', roster: R_PLAIN, unpinned: true },
 ];
 
 function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean {
@@ -610,10 +622,13 @@ function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean 
 
 async function scoreParse(runs: number) {
   const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots } = await import('../src/lib/assistant/triage');
+  const { buildCoveragePrompt, buildCoverageSchema, deriveMonitorSlots } = await import('../src/lib/assistant/monitor-stage');
   const { scanTimeExpressions } = await import('../src/lib/assistant/timeframe-stage');
   const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
   let pass = 0;
   let total = 0;
+  let coverPass = 0;
+  let coverTotal = 0;
   const failures: string[] = [];
   for (const c of PARSE_CASES) {
     for (let i = 0; i < runs; i++) {
@@ -621,18 +636,48 @@ async function scoreParse(runs: number) {
       try {
         const r = await chat({
           model: MODEL,
-          messages: [{ role: 'system', content: buildTriagePromptForEval(c.roster, PARSE_LABELS) }, { role: 'user', content: c.q }],
+          messages: [{ role: 'system', content: buildTriagePromptForEval(R_PLAIN, PARSE_LABELS) }, { role: 'user', content: c.q }],
           stream: false,
-          max_tokens: 120,
+          max_tokens: 200,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
           ...REASONING,
-          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: buildTriageSchema(c.roster, PARSE_LABELS), strict: true } },
+          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: buildTriageSchema(R_PLAIN, PARSE_LABELS), strict: true } },
         });
         const text = r.choices?.[0]?.message?.content ?? '';
         const kind = JSON.parse(text)?.kind;
-        const slots = parseTriageSlots(text, c.roster, PARSE_LABELS);
+        const slots = parseTriageSlots(text, R_PLAIN, PARSE_LABELS);
         const bad: string[] = [];
         if (kind !== c.kind) bad.push(`kind ${kind}`);
+        if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
+        if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
+        if (c.when !== undefined) {
+          const union = [...scanTimeExpressions(c.q), ...(slots.when ?? [])].map(normalizeWhenPhrase);
+          const missing = c.when.filter((w) => !union.some((u) => u.includes(normalizeWhenPhrase(w))));
+          if (missing.length > 0) bad.push(`when missing ${JSON.stringify(missing)}`);
+        }
+        if (bad.length === 0) pass++;
+        else failures.push(`[routing] "${c.q}" -> ${bad.join('; ')} (raw ${text})`);
+      } catch (e) {
+        failures.push(`[routing] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  for (const c of COVERAGE_CASES) {
+    for (let i = 0; i < runs; i++) {
+      coverTotal++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: buildCoveragePrompt(c.roster) }, { role: 'user', content: c.q }],
+          stream: false,
+          max_tokens: 200,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'cover', schema: buildCoverageSchema(c.roster), strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const slots = deriveMonitorSlots(JSON.parse(text), c.roster);
+        const bad: string[] = [];
         if (c.monitors !== undefined && !setEq(slots.monitors, c.monitors)) bad.push(`monitors ${JSON.stringify(slots.monitors)}`);
         if (c.monitorsWithin !== undefined) {
           const within = (slots.monitors?.length ?? 0) > 0 && (slots.monitors ?? []).every((m) => c.monitorsWithin!.includes(m));
@@ -640,21 +685,14 @@ async function scoreParse(runs: number) {
         }
         if (c.noMatch !== undefined && slots.noMatch !== c.noMatch) bad.push(`noMatch ${String(slots.noMatch)}`);
         if (c.unpinned && (slots.monitors?.length ?? 0) > 0) bad.push(`pinned ${JSON.stringify(slots.monitors)}`);
-        if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
-        if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
-        if (c.when !== undefined) {
-          const union = [...scanTimeExpressions(c.q), ...(slots.when ?? [])].map(normalizeWhenPhrase);
-          const missing = c.when.filter((w) => !union.some((u) => u.includes(normalizeWhenPhrase(w))));
-          if (missing.length > 0) bad.push(`when missing ${JSON.stringify(missing)} (union ${JSON.stringify(union)})`);
-        }
-        if (bad.length === 0) pass++;
-        else failures.push(`[parse] "${c.q}" [${c.roster.join(', ')}] -> ${bad.join('; ')} (raw ${text})`);
+        if (bad.length === 0) coverPass++;
+        else failures.push(`[coverage] "${c.q}" [${c.roster.join(', ')}] -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {
-        failures.push(`[parse] "${c.q}" error: ${(e as Error).message}`);
+        failures.push(`[coverage] "${c.q}" error: ${(e as Error).message}`);
       }
     }
   }
-  return { pass, total, failures };
+  return { pass, total, coverPass, coverTotal, failures };
 }
 
 const variant = process.argv[2] ?? 'baseline';
@@ -663,7 +701,8 @@ const started = Date.now();
 if (variant === 'parse') {
   const w = await scoreParse(runs);
   console.log(`\n=== parse via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
-  console.log(`parse: ${w.pass}/${w.total}`);
+  console.log(`routing: ${w.pass}/${w.total}`);
+  console.log(`coverage: ${w.coverPass}/${w.coverTotal}`);
   for (const f of w.failures) console.log(`  ${f}`);
   process.exit(0);
 }

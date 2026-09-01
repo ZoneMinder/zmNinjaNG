@@ -175,12 +175,13 @@ describe('classifyRequest inside a server group', () => {
 });
 
 /**
- * The parse dimension (refs #427, #430, #432). When the caller hands the
- * roster (and the label vocabulary), the same triage round parses the whole
- * question into slots: which cameras a place means (a SET, because "front of
- * my house" means both front cameras), what the question is about, and which
- * recorded labels it asks after ("folks" means person, in any language).
- * Everything is an enum or a copied string; every derivation happens in code.
+ * The parse dimension (refs #432, #438). With a roster and the label
+ * vocabulary, the triage round parses ROUTING slots: subject, objects
+ * ("folks" means person, in any language), and the verbatim time phrases.
+ * Camera coverage is deliberately NOT here any more: judged inside this
+ * consolidated prompt it failed live twice and every wording rotated the
+ * failures; a dedicated coverage call (monitor-stage.ts) measures 8/8 on
+ * the same cases. Everything here is an enum or a copied string.
  */
 describe('classifyRequest with a roster and vocabulary', () => {
   const roster = ['FrontDoor', 'Front Yard', 'Garage Outdoor'];
@@ -188,29 +189,29 @@ describe('classifyRequest with a roster and vocabulary', () => {
   const ask = (provider: AssistantProvider, question: string) =>
     classifyRequest(provider, question, new AbortController().signal, undefined, undefined, [], roster, labels);
 
-  it('constrains monitors, subject, and objects to the real values', async () => {
+  it('constrains subject and objects to the real values and copies when', async () => {
     const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"front of my house","covered":true,"monitors":["FrontDoor","Front Yard"],"subject":"events","objects":["person"]}',
+      '{"kind":"ZONEMINDER","subject":"events","objects":["person"],"when":["between mon and tue"]}',
     );
     const verdict = await ask(provider, 'How may folks came to the front of my house between mon and tue?');
 
     const [system, , , schema] = vi.mocked(provider.complete).mock.calls[0];
-    expect(system).toContain('FrontDoor, Front Yard, Garage Outdoor');
     expect(system).toContain('car, person, truck');
+    expect(system).not.toContain('"covered"');
     expect(schema).toMatchObject({
       properties: {
-        monitors: { type: 'array', items: { enum: roster } },
         subject: { enum: ['events', 'monitors', 'server', 'groups', 'other'] },
         objects: { type: 'array', items: { enum: labels } },
-        covered: { type: 'boolean' },
+        when: { type: 'array', items: { type: 'string' } },
       },
-      required: ['kind', 'place', 'covered', 'monitors', 'subject', 'objects', 'when'],
+      required: ['kind', 'subject', 'objects', 'when'],
     });
+    expect((schema as { properties: object }).properties).not.toHaveProperty('monitors');
     expect(verdict).toEqual({
       kind: 'zoneminder',
-      monitors: ['FrontDoor', 'Front Yard'],
       subject: 'events',
       objects: ['person'],
+      when: ['between mon and tue'],
     });
   });
 
@@ -219,79 +220,36 @@ describe('classifyRequest with a roster and vocabulary', () => {
     const verdict = await classifyRequest(provider, 'hello', new AbortController().signal);
 
     const [system, , , schema] = vi.mocked(provider.complete).mock.calls[0];
-    expect(system).not.toContain("This system's cameras are");
+    expect(system).not.toContain('Detected object labels');
     expect(schema).toMatchObject({ required: ['kind'] });
-    expect((schema as { properties: object }).properties).not.toHaveProperty('monitors');
     expect(verdict).toEqual({ kind: 'chat' });
-  });
-
-  // noMatch is derived in code from place + covered, never decoded from a
-  // name enum: asked to choose a name directly, the model substituted the
-  // nearest camera for a place the list lacks (measured 12/16).
-  it('derives noMatch when a named place is covered by no camera', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"basement stairs","covered":false,"monitors":[],"subject":"events","objects":[]}',
-    );
-    const verdict = await ask(provider, 'who was on the basement stairs');
-    expect(verdict).toEqual({ kind: 'zoneminder', noMatch: true, subject: 'events', objects: [] });
-  });
-
-  it('derives an empty monitor set when the question names no place', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"","covered":false,"monitors":[],"subject":"events","objects":[]}',
-    );
-    const verdict = await ask(provider, 'summarize today');
-    expect(verdict).toEqual({ kind: 'zoneminder', monitors: [], subject: 'events', objects: [] });
-  });
-
-  // Refs #430: coverage denied while real names are filled in is uncertainty;
-  // neither a pin nor a no-coverage claim is safe, so both slots stay unset.
-  it('resolves a covered:false verdict that still names real monitors to unset', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"front of my door","covered":false,"monitors":["FrontDoor"],"subject":"events","objects":["person"]}',
-    );
-    const verdict = await ask(provider, 'how many people came to the front of my door yesterday?');
-    expect(verdict).toEqual({ kind: 'zoneminder', subject: 'events', objects: ['person'] });
-  });
-
-  // The whole roster is not a pin: it equals an unpinned query, and it is
-  // how a false cover manifests (refs #434).
-  it('leaves monitors unset when the model selects every camera', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"front door","covered":true,"monitors":["FrontDoor","Garage Outdoor"],"subject":"events","objects":["person"],"when":["yesterday"]}',
-    );
-    const verdict = await classifyRequest(
-      provider,
-      'how many people came to my front door yesterday',
-      new AbortController().signal,
-      undefined,
-      undefined,
-      [],
-      ['FrontDoor', 'Garage Outdoor'],
-      ['person'],
-    );
-    expect(verdict.monitors).toBeUndefined();
-    expect(verdict.noMatch).toBeUndefined();
   });
 
   // An unconstrained backend can reply anything; values outside the enums
   // are dropped, never trusted.
-  it('drops monitors, subjects, and objects outside the enums', async () => {
+  it('drops subjects and objects outside the enums', async () => {
     const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"backyard","covered":true,"monitors":["Backyard"],"subject":"weather","objects":["unicorn"]}',
+      '{"kind":"ZONEMINDER","subject":"weather","objects":["unicorn"],"when":[]}',
     );
     const verdict = await ask(provider, 'anything in the backyard');
-    expect(verdict).toEqual({ kind: 'zoneminder', objects: [] });
+    expect(verdict).toEqual({ kind: 'zoneminder', objects: [], when: [] });
   });
 
-  // A place that is only time words is no place: "summarize today" once
-  // copied "today" into place and turned into a false no-coverage claim.
-  it('does not derive noMatch from a place that is only time words', async () => {
+  // Refs #436: selecting the whole vocabulary is the creep signature.
+  it('derives no filter when the model selects every recorded label', async () => {
     const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"today","covered":false,"monitors":[],"subject":"events","objects":[]}',
+      '{"kind":"ZONEMINDER","subject":"events","objects":["person","car","truck"],"when":["over the week"]}',
     );
-    const verdict = await ask(provider, 'summarize today');
-    expect(verdict).toEqual({ kind: 'zoneminder', monitors: [], subject: 'events', objects: [] });
+    const verdict = await ask(provider, 'how busy was the front of my abode over the week?');
+    expect(verdict.objects).toEqual([]);
+  });
+
+  it('keeps a proper subset as the filter', async () => {
+    const provider = providerSaying(
+      '{"kind":"ZONEMINDER","subject":"events","objects":["car","truck"],"when":["today"]}',
+    );
+    const verdict = await ask(provider, 'any vehicles today');
+    expect(verdict.objects).toEqual(['car', 'truck']);
   });
 });
 
@@ -300,7 +258,7 @@ describe('classifyRequest with a roster and vocabulary', () => {
 describe('classifyRequest when-phrase slot', () => {
   it('asks for and returns verbatim time phrases with the roster', async () => {
     const provider = providerSaying(
-      '{"kind":"ZONEMINDER","place":"","covered":false,"monitors":[],"subject":"events","objects":[],"when":["between mon and tue"]}',
+      '{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["between mon and tue"]}',
     );
     const verdict = await classifyRequest(
       provider,
@@ -316,14 +274,14 @@ describe('classifyRequest when-phrase slot', () => {
     expect(system).toContain('"when"');
     expect(schema).toMatchObject({
       properties: { when: { type: 'array', items: { type: 'string' } } },
-      required: ['kind', 'place', 'covered', 'monitors', 'subject', 'objects', 'when'],
+      required: ['kind', 'subject', 'objects', 'when'],
     });
     expect(verdict.when).toEqual(['between mon and tue']);
   });
 
   it('drops junk when values and leaves the slot unset without a roster', async () => {
     const junk = providerSaying(
-      '{"kind":"ZONEMINDER","place":"","covered":false,"monitors":[],"subject":"events","objects":[],"when":["", 42]}',
+      '{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["", 42]}',
     );
     const verdict = await classifyRequest(
       junk,

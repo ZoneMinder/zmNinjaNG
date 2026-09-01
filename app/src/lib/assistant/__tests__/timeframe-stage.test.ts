@@ -407,3 +407,22 @@ describe('extractTimeframes with parse-stated phrases', () => {
     expect(result.phrases).toEqual(['today']);
   });
 });
+
+/** Refs #438: containment absorbs a contained phrase only when its container
+ *  actually resolved. "all this week" once swallowed the scan-vouched "this
+ *  week" and then failed to interpret, leaving the turn with nothing. */
+describe('resolution-aware containment', () => {
+  beforeEach(() => resetWindowInterpreterCacheForTests());
+
+  it('keeps the contained scan phrases when the compound fails to resolve', async () => {
+    const p = makeProvider(
+      () => '',
+      (phrase) => (phrase === 'at lunch 5 days ago' ? 'garbage' : '{"daysAgo":5}'),
+    );
+    const result = await extractTimeframes('who came at lunch 5 days ago', p, NOW, TZ, signal(), [
+      'at lunch 5 days ago',
+    ]);
+    expect(result.phrases).toEqual(['lunch', '5 days ago']);
+    expect(result.abstained).toBe(false);
+  });
+});
