@@ -9,6 +9,7 @@
  * talk its way past (see tools.ts for why the actions were removed).
  */
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolCall, ToolContext, ToolDefinition, ToolResult } from './types';
+import type { PlannedToolCall } from './plan';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
 import { executeScoped } from './server-scope';
@@ -205,6 +206,11 @@ export interface RunOpts {
   /** How many previous exchanges the model is shown. Defaults to
    *  `ASSISTANT.maxHistoryTurns`; Settings can raise or lower it. */
   historyTurns?: number;
+  /** Tool calls the parse stage already determined in code (refs #432,
+   *  plan.ts). Executed through the same `runOneCall` machinery BEFORE the
+   *  first model round, so the model opens on the data and only writes the
+   *  answer; absent or empty, the turn is today's free loop unchanged. */
+  plannedCalls?: PlannedToolCall[];
 }
 
 /**
@@ -439,6 +445,25 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
     const result = await runOneCall(call);
     return { ...result, name, input };
   };
+
+  // Planned calls first (refs #432): the parse stage determined these in
+  // code, so they run through the SAME machinery as model-initiated calls
+  // (validation, dedup signatures, trace, result cards, API capture) and
+  // land in history as an ordinary tool round. The model's first sight of
+  // the turn is then question plus data, and it only writes the answer; the
+  // registry stays open, so a drill-down or a corrected retry still works.
+  if (opts.plannedCalls?.length) {
+    const calls: ToolCall[] = opts.plannedCalls.map((c, i) => ({ id: `planned-${i + 1}`, name: c.name, input: c.input }));
+    push({ role: 'assistant', toolCalls: calls });
+    anyToolCallAttempted = true;
+    const results: ToolResult[] = [];
+    for (const call of calls) {
+      if (signal.aborted) return produced;
+      results.push(await runOneCall(call));
+    }
+    turnDisplay.push(...results.flatMap((r) => r.display ?? []));
+    push({ role: 'tool', toolResults: results });
+  }
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {
     if (signal.aborted) return produced;

@@ -83,19 +83,22 @@ after any prompt or provider change and put both scores in the PR.
 - A name enum cannot express abstention: asked which monitor a place means,
   qwen3:8b substituted the nearest listed name for a place the list lacks
   (12/16) under three prompt wordings and both enum orders. What worked
-  (refs #427, `prompt-eval.mts triage-monitor`, temp 0, 2026-09): copy the
-  place words first, then answer `covered` as its own boolean, then the name
-  enum, with NO_MATCH derived in code from place+covered (21/24; the model
-  still copies time words into `place`, stripped in code via
-  `scanTimeExpressions`, and still calls a backyard covered by a garage
-  monitor - a nearby-outdoor-area substitution no wording fixed). The model
-  also emits the CONTRADICTION `covered: false` with a real name in
-  `monitor` (observed live on a paraphrase, refs #430); the parser resolves
-  that to NONE, since asserting no-coverage about a monitor the model
-  itself named is the worst outcome. llama3.2
-  scores 10/16 on the same stage: it answers `covered: true` for near
-  places, so a wrong monitor can be pinned rather than abstained; qwen3:8b
-  remains the recommended Ollama model.
+  (refs #427, temp 0, 2026-09): copy the place words first, then answer
+  `covered` as its own boolean, then the names, with the no-coverage verdict
+  derived in code from place+covered (21/24; time words the model copies
+  into `place` are stripped in code via `scanTimeExpressions`). The model
+  also emits the CONTRADICTION `covered: false` with a real name filled in
+  (observed live on a paraphrase, refs #430); the parser leaves both slots
+  unset then, since asserting no-coverage about a monitor the model itself
+  named is the worst outcome.
+- The full parse (refs #432, `prompt-eval.mts parse`, temp 0, 2026-09):
+  slots as array enums (monitors as a SET, subject, objects) with an
+  umbrella-coverage rule (a house contains what its monitors watch) scores 30/30
+  on qwen3:8b, including "front of my house" -> both front monitors,
+  "folks" -> person, and German -> the door monitor - the cases the single
+  slot and the English category list failed. llama3.2 scores 8/20, mostly
+  kind misroutes (ACTION for count questions); qwen3:8b remains the
+  recommended Ollama model.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).

@@ -256,6 +256,11 @@ export interface ToolContext {
    *  rejects an objectType outside this list rather than querying a label the
    *  detector never emits. */
   objectLabels?: string[];
+  /** Labels the parse stage grounded from the question's own words
+   *  (refs #432): an objectType covered by these skips the English-side
+   *  `objectTypeUngrounded` drop, which cannot see that "folks" means
+   *  person. */
+  plannedObjectTypes?: string[];
   queryClient: QueryClient;
   host: AssistantHost;
   /**

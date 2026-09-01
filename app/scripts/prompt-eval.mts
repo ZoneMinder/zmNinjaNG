@@ -560,49 +560,81 @@ async function scoreTriage(runs: number) {
   return { pass, total, failures };
 }
 
-/** Camera-verdict cases (refs #427): the triage round, handed a monitor
- *  roster, must map a place word onto the camera that covers it (in any
- *  language), say NO_MATCH for a place no camera covers, and say NONE for a
- *  question that names no place, without disturbing the kind verdict. The
- *  live failure this scores: "front door" answered from "Garage Outdoor". */
-const TRIAGE_MONITOR_CASES: Array<{ q: string; roster: string[]; kind: string; monitor: string }> = [
-  { q: 'how many people came to my front door yesterday', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NO_MATCH' },
-  { q: 'how many people came to my front door yesterday', roster: ['Garage Outdoor', 'Doorbell'], kind: 'ZONEMINDER', monitor: 'Doorbell' },
-  { q: 'any cars in the driveway today', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'Driveway' },
-  { q: 'was war gestern an der Haustür los', roster: ['Garage Outdoor', 'Doorbell'], kind: 'ZONEMINDER', monitor: 'Doorbell' },
-  { q: 'summarize today', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NONE' },
-  { q: 'is the server ok', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NONE' },
-  { q: 'hello', roster: ['Garage Outdoor', 'Driveway'], kind: 'CHAT', monitor: 'NONE' },
-  { q: 'arm the backyard camera', roster: ['Garage Outdoor', 'Driveway'], kind: 'ACTION', monitor: 'NO_MATCH' },
+/** Parse cases (refs #427, #432): the triage round, handed the roster and
+ *  label vocabulary, must fill every slot - cameras as a SET (an umbrella
+ *  place means several), subject, and objects mapped by meaning in any
+ *  language - and abstain (noMatch) for a place no camera covers, without
+ *  disturbing the kind verdict. Scored through the production parser
+ *  (parseTriageSlots), so what is measured is what ships. */
+const PARSE_LABELS = ['car', 'person', 'truck'];
+const R_PLAIN = ['Garage Outdoor', 'Driveway'];
+const R_DOOR = ['Garage Outdoor', 'Doorbell'];
+const R_HOUSE = ['FrontDoor', 'Front Yard', 'Garage Outdoor'];
+interface ParseCase {
+  q: string;
+  roster: string[];
+  kind: string;
+  /** Exact expected monitors set, or undefined to skip the check. */
+  monitors?: string[];
+  /** Accept any non-empty subset of these instead of an exact set. */
+  monitorsWithin?: string[];
+  noMatch?: boolean;
+  subject?: string;
+  objects?: string[];
+}
+const PARSE_CASES: ParseCase[] = [
+  // The live failures this architecture exists for:
+  { q: 'How may folks came to the front of my house between mon and tue?', roster: R_HOUSE, kind: 'ZONEMINDER', monitorsWithin: ['FrontDoor', 'Front Yard'], subject: 'events', objects: ['person'] },
+  { q: 'how many people came to my front door yesterday', roster: R_PLAIN, kind: 'ZONEMINDER', noMatch: true, subject: 'events', objects: ['person'] },
+  { q: 'how many people came to my front door yesterday', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events', objects: ['person'] },
+  { q: 'any cars in the driveway today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: ['Driveway'], subject: 'events', objects: ['car'] },
+  { q: 'was war gestern an der Haust\u00fcr los', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events' },
+  { q: 'summarize today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: [], subject: 'events', objects: [] },
+  { q: 'is the server ok', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'server' },
+  { q: 'what cameras do I have', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'monitors' },
+  { q: 'hello', roster: R_PLAIN, kind: 'CHAT' },
+  { q: 'arm the backyard camera', roster: R_PLAIN, kind: 'ACTION' },
 ];
 
-async function scoreTriageMonitor(runs: number) {
-  const { buildTriagePromptForEval, buildTriageSchema, parseTriageMonitor } = await import('../src/lib/assistant/triage');
+function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean {
+  return a !== undefined && a.length === b.length && b.every((x) => a.includes(x));
+}
+
+async function scoreParse(runs: number) {
+  const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots } = await import('../src/lib/assistant/triage');
   let pass = 0;
   let total = 0;
   const failures: string[] = [];
-  for (const c of TRIAGE_MONITOR_CASES) {
+  for (const c of PARSE_CASES) {
     for (let i = 0; i < runs; i++) {
       total++;
       try {
         const r = await chat({
           model: MODEL,
-          messages: [{ role: 'system', content: buildTriagePromptForEval(c.roster) }, { role: 'user', content: c.q }],
+          messages: [{ role: 'system', content: buildTriagePromptForEval(c.roster, PARSE_LABELS) }, { role: 'user', content: c.q }],
           stream: false,
-          max_tokens: 60,
+          max_tokens: 120,
           ...(TEMP === undefined ? {} : { temperature: TEMP }),
           ...REASONING,
-          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: buildTriageSchema(c.roster), strict: true } },
+          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: buildTriageSchema(c.roster, PARSE_LABELS), strict: true } },
         });
         const text = r.choices?.[0]?.message?.content ?? '';
-        const parsed = JSON.parse(text);
-        // Scored on what production derives (parseTriageMonitor), not the raw
-        // monitor field: NO_MATCH is computed in code from place + covered.
-        const monitor = parseTriageMonitor(text, c.roster) ?? 'NONE';
-        if (parsed?.kind === c.kind && monitor === c.monitor) pass++;
-        else failures.push(`[triage-monitor] "${c.q}" [${c.roster.join(', ')}] -> ${parsed?.kind}/${monitor} (raw ${text}), expected ${c.kind}/${c.monitor}`);
+        const kind = JSON.parse(text)?.kind;
+        const slots = parseTriageSlots(text, c.roster, PARSE_LABELS);
+        const bad: string[] = [];
+        if (kind !== c.kind) bad.push(`kind ${kind}`);
+        if (c.monitors !== undefined && !setEq(slots.monitors, c.monitors)) bad.push(`monitors ${JSON.stringify(slots.monitors)}`);
+        if (c.monitorsWithin !== undefined) {
+          const within = (slots.monitors?.length ?? 0) > 0 && (slots.monitors ?? []).every((m) => c.monitorsWithin!.includes(m));
+          if (!within) bad.push(`monitors ${JSON.stringify(slots.monitors)} not within ${JSON.stringify(c.monitorsWithin)}`);
+        }
+        if (c.noMatch !== undefined && slots.noMatch !== c.noMatch) bad.push(`noMatch ${String(slots.noMatch)}`);
+        if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
+        if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
+        if (bad.length === 0) pass++;
+        else failures.push(`[parse] "${c.q}" [${c.roster.join(', ')}] -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {
-        failures.push(`[triage-monitor] "${c.q}" error: ${(e as Error).message}`);
+        failures.push(`[parse] "${c.q}" error: ${(e as Error).message}`);
       }
     }
   }
@@ -612,10 +644,10 @@ async function scoreTriageMonitor(runs: number) {
 const variant = process.argv[2] ?? 'baseline';
 const runs = Number(process.argv[3] ?? 2);
 const started = Date.now();
-if (variant === 'triage-monitor') {
-  const w = await scoreTriageMonitor(runs);
-  console.log(`\n=== triage-monitor via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
-  console.log(`triage-monitor: ${w.pass}/${w.total}`);
+if (variant === 'parse') {
+  const w = await scoreParse(runs);
+  console.log(`\n=== parse via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`parse: ${w.pass}/${w.total}`);
   for (const f of w.failures) console.log(`  ${f}`);
   process.exit(0);
 }

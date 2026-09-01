@@ -2185,29 +2185,38 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    old English keyword overrule (``requiresLiveData``) is deleted rather
    than maintained as a vocabulary.
 
-   The same round resolves the monitor a question refers to (refs #427), but
-   only when the deterministic scan above found no monitor name: the roster
-   goes into the prompt and ``buildTriageSchema`` extends the verdict with
-   ``place`` (the question's own place words, copied), ``covered`` (whether
-   any listed monitor means that place), and ``monitor`` (an enum of the real
-   names, so a monitor that does not exist is undecodable).
-   ``parseTriageMonitor`` derives the outcome in code - a named place that
-   ``covered`` denies is ``NO_MATCH``, a place that is only time words is
-   ``NONE``, and a contradiction (``covered`` false while ``monitor`` names a
-   real roster entry, observed live, refs #430) is ``NONE`` rather than a
-   false no-coverage claim - and ``buildMonitorSystemLine``
-   turns it into one system line:
-   a resolved monitor pins ``monitorId``, a ``NO_MATCH`` place gets a guard
-   telling the model to say no monitor covers it and never attribute other
-   monitors' events to it. Asked "how many people came to my front door
-   yesterday" with no door monitor, the assistant used to answer "3 people
-   came to your front door" from a garage monitor's events.
+   The same round is the PARSE (refs #427, #432): with a roster, the prompt
+   carries the monitor names and the install's label vocabulary, and
+   ``buildTriageSchema`` extends the verdict with ``place`` (the question's
+   own place words, copied), ``covered`` (a boolean, because a name enum
+   cannot express abstention), ``monitors`` (an ARRAY over the real names,
+   because "front of my house" means several monitors), ``subject``
+   (events/monitors/server/groups/other), and ``objects`` (an array over the
+   recorded labels, so "folks" or "Leute" land on ``person`` in any
+   language). ``parseTriageSlots`` derives everything in code: a place
+   ``covered`` denies with nothing named is ``noMatch``, a place that is only
+   time words is none, a contradiction (``covered`` false while real names
+   are filled in, observed live, refs #430) leaves the slots unset rather
+   than asserting a false no-coverage claim, and values outside the enums
+   are dropped. ``buildMonitorSystemLine`` turns the outcome into one
+   system line (resolved monitors pin their ``monitorId``\ s; ``noMatch``
+   gets the never-attribute guard), and ``planToolCalls`` (``plan.ts``)
+   composes the tool calls the slots determine - one ``list_events`` per
+   window x monitor with the parsed ``objectType`` - handing them to the
+   loop as ``plannedCalls``. A null plan is today's free loop, unchanged.
+   Asked "how many people came to my front door yesterday" with no door
+   monitor, the assistant used to answer "3 people came to your front door"
+   from a garage monitor's events.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
    · → :doc:`15-assistant`
 
 #. **The tool-use loop.** ``runAssistantTurn`` (``lib/assistant/agent.ts``)
    slices the history at the last context boundary, trims it to the message,
-   character, and turn budgets (``truncateHistory``), and calls
+   character, and turn budgets (``truncateHistory``), executes any
+   ``plannedCalls`` from the parse first - through the same ``runOneCall``
+   machinery as model-initiated calls, so validation, trace, and result
+   cards are identical, and the model's first round opens on the data - and
+   then calls
    ``provider.chat(history, tools, system, signal)`` in a loop capped at
    ``ASSISTANT.maxToolIterations`` (6); hitting the cap ends the turn with the
    ``__i18n:assistant.iteration_cap_reached`` sentinel instead of a real
