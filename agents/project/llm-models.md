@@ -80,6 +80,18 @@ after any prompt or provider change and put both scores in the PR.
 - Prompt classification teaches dimensions (intent by subject), never
   instance lists; instance-based triage misclassified every combination
   outside its examples, four times.
+- A name enum cannot express abstention: asked which monitor a place means,
+  qwen3:8b substituted the nearest listed name for a place the list lacks
+  (12/16) under three prompt wordings and both enum orders. What worked
+  (refs #427, `prompt-eval.mts triage-monitor`, temp 0, 2026-09): copy the
+  place words first, then answer `covered` as its own boolean, then the name
+  enum, with NO_MATCH derived in code from place+covered (21/24; the model
+  still copies time words into `place`, stripped in code via
+  `scanTimeExpressions`, and still calls a backyard covered by a garage
+  monitor - a nearby-outdoor-area substitution no wording fixed). llama3.2
+  scores 10/16 on the same stage: it answers `covered: true` for near
+  places, so a wrong monitor can be pinned rather than abstained; qwen3:8b
+  remains the recommended Ollama model.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).

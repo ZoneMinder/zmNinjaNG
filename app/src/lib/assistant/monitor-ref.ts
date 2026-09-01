@@ -21,8 +21,9 @@ export type MonitorRefResolution = { id: string } | { error: string };
 /** Letters and digits only (any script), lowercased: makes "Front Door",
  *  "front door" and "FrontDoor" the same key, which covers how models mangle
  *  names. Unicode-aware, or two monitors with non-Latin names both normalize
- *  to '' and collide as false "duplicates". */
-function normalizeName(value: string): string {
+ *  to '' and collide as false "duplicates". Shared with the pre-turn mention
+ *  scan (monitor-stage.ts) so a name matches the same way on both paths. */
+export function normalizeMonitorName(value: string): string {
   return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 }
 
@@ -42,8 +43,8 @@ export function resolveMonitorRef(ref: string, monitors: MonitorData[]): Monitor
   const byId = monitors.find((m) => m.Monitor.Id === trimmed);
   if (byId) return { id: byId.Monitor.Id };
 
-  const target = normalizeName(trimmed);
-  const byName = monitors.filter((m) => normalizeName(m.Monitor.Name) === target);
+  const target = normalizeMonitorName(trimmed);
+  const byName = monitors.filter((m) => normalizeMonitorName(m.Monitor.Name) === target);
   if (byName.length === 1) return { id: byName[0].Monitor.Id };
   if (byName.length > 1) {
     // Two monitors sharing a name: picking one would be a coin flip, and this

@@ -45,6 +45,7 @@ import { TOOLS, specializeToolSchemas, withServerArg } from '../../lib/assistant
 import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
+import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
@@ -539,6 +540,16 @@ export function AskPanel() {
       // guessing at a taxonomy. Cached per profile; never throws.
       const objectLabels = await getObjectLabels(profileId);
 
+      // The camera the question refers to, resolved BEFORE any model round
+      // (refs #427): a deterministic scan for monitor names the question
+      // states verbatim; anything it cannot decide (a place word like "front
+      // door") goes to the triage round below, constrained to this roster.
+      // Skipped inside a group: monitor names collide across servers, and the
+      // aggregate id has no session (getMonitorRoster returns [] then anyway).
+      // Cached per profile; never throws.
+      const monitorRoster = isAllMode || isAssistantTestMode() ? [] : await getMonitorRoster(profileId);
+      const monitorScanHits = scanMonitorMentions(text, monitorRoster);
+
       // Every server this view combines, or an empty list outside a group
       // (refs #337). It drives three things that must agree: the roster in the
       // prompt, the `server` argument's enum, and which sessions the tool
@@ -618,13 +629,26 @@ export function AskPanel() {
       // runs it. That made the old English keyword overrule (requiresLiveData)
       // deletable: it was a hardcoded vocabulary in front of exactly the
       // language interpretation the model does better.
-      const kind: RequestKind = isAssistantTestMode()
-        ? 'zoneminder'
+      const verdict = isAssistantTestMode()
+        ? { kind: 'zoneminder' as const }
         : // serverNames too: a question that names a server ("compare warehouse and
           // cabin") is about this system, and without the roster the classifier
           // read those as unrelated words and routed the turn to chat (refs #337).
-          await classifyRequest(provider, text, controller.signal, collectTrace, (s) => host.onStatus?.(s), serverNames);
-      log.assistant('Request classified', LogLevel.DEBUG, { kind });
+          // The monitor roster rides the same round (refs #427), but only when
+          // the deterministic scan above found nothing: a name the scan already
+          // matched needs no model, and the roster-less prompt stays exactly
+          // what the eval harness scores.
+          await classifyRequest(
+            provider,
+            text,
+            controller.signal,
+            collectTrace,
+            (s) => host.onStatus?.(s),
+            serverNames,
+            monitorScanHits.length === 0 ? monitorRoster.map((m) => m.name) : [],
+          );
+      const kind: RequestKind = verdict.kind;
+      log.assistant('Request classified', LogLevel.DEBUG, { kind, monitor: verdict.monitor });
 
       // Every timeframe the question names is extracted and resolved BEFORE the
       // tool round (refs #270, pipeline-v2): the native tool loops cannot nest
@@ -651,6 +675,16 @@ export function AskPanel() {
         ctx.allowedWhenPhrases = phrases;
         ctx.resolvedTimeframes = resolved;
         turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
+
+        // The camera verdict becomes one system line, exactly like the
+        // timeframe line (refs #427): a resolved monitor pins monitorId, a
+        // NO_MATCH place gets the do-not-attribute guard, no place adds
+        // nothing. The scan outvotes the model; a roster-less turn (group
+        // mode, fetch failure) resolves to none and the line stays empty.
+        const monitorLine = buildMonitorSystemLine(
+          resolveMonitorMention(monitorScanHits, verdict.monitor, monitorRoster),
+        );
+        if (monitorLine) turnSystem = `${turnSystem}\n${monitorLine}`;
       }
 
       // Already only this turn's new messages (see runAssistantTurn): the
