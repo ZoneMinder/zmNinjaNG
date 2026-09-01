@@ -181,6 +181,12 @@ after any prompt or provider change and put both scores in the PR.
   never fork the prompt text into an eval. A hand-copied prompt drifted
   once and measured phantom failures. Two prompt rewrites shipped
   unmeasured, scored worse, and were reverted (refs #259).
+- The same rule holds for PARSERS: the time eval once raw-JSON.parsed the
+  interpreter's replies instead of running production `parseFields`, so the
+  `week` and weekday-range fields scored 100% while every live call parsed
+  them to {} and errored ("all this week", refs #442). An eval must run the
+  reply through the exact production parse/derive functions, exported for
+  it, or it measures the model instead of the pipeline.
 - Plain `npx tsx` scripts cannot import app modules that read
   `import.meta.env`; use vitest with `// @vitest-environment node` and
   stub `Platform.shouldUseProxy` false, or `lib/http.ts` rewrites absolute

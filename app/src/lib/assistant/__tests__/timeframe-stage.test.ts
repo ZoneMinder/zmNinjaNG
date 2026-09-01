@@ -426,3 +426,22 @@ describe('resolution-aware containment', () => {
     expect(result.abstained).toBe(false);
   });
 });
+
+/** Refs #442: a container that "resolved" to NO window (none / {}) must not
+ *  absorb a scan-vouched contained phrase - that is how "all this week"
+ *  killed "this week" and left the turn with an unresolvable phrase. */
+describe('windowless containers do not absorb', () => {
+  beforeEach(() => resetWindowInterpreterCacheForTests());
+
+  it('keeps the contained phrase when the compound resolves to no window', async () => {
+    const p = makeProvider(
+      () => '',
+      (phrase) => (phrase === 'all this week' ? '{"none":true}' : '{"meaning":"w","week":"this"}'),
+    );
+    const result = await extractTimeframes('hows the front looking all this week?', p, NOW, TZ, signal(), [
+      'all this week',
+    ]);
+    expect(result.phrases).toContain('this week');
+    expect(result.abstained).toBe(false);
+  });
+});

@@ -370,7 +370,7 @@ const INTERPRET_CASES: Array<{ phrase: string; ok: (f: Record<string, unknown>) 
 ];
 
 async function scoreInterpreter(runs: number) {
-  const { WINDOW_SCHEMA, buildInterpreterPrompt } = await import('../src/lib/assistant/window-interpreter');
+  const { WINDOW_SCHEMA, buildInterpreterPrompt, parseFields } = await import('../src/lib/assistant/window-interpreter');
   // The REAL production prompt: a hand-copied version here drifted behind a
   // schema change and measured a bug the app did not have.
   const system = buildInterpreterPrompt(new Date(), 'America/New_York');
@@ -419,7 +419,7 @@ const TIME_NOW = new Date('2026-07-19T18:00:00Z');
 const TIME_TZ = 'America/New_York';
 
 async function scoreTime(runs: number) {
-  const { WINDOW_SCHEMA, buildInterpreterPrompt } = await import('../src/lib/assistant/window-interpreter');
+  const { WINDOW_SCHEMA, buildInterpreterPrompt, parseFields } = await import('../src/lib/assistant/window-interpreter');
   const { resolveWindow } = await import('../src/lib/assistant/event-range');
   const { buildTimeframePrompt, TIMEFRAME_SCHEMA } = await import('../src/lib/assistant/timeframe-stage');
   const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
@@ -449,7 +449,9 @@ async function scoreTime(runs: number) {
           response_format: { type: 'json_schema', json_schema: { name: 'window', schema: WINDOW_SCHEMA, strict: true } },
         });
         const text = r.choices?.[0]?.message?.content ?? '';
-        const fields = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
+        // Production parser, never a raw JSON.parse: a field parseFields did
+        // not know scored 100% here while every live call failed (refs #442).
+        const fields = (parseFields(text) ?? {}) as import('../src/lib/assistant/event-range').WindowFields & Record<string, unknown>;
         const range = resolveWindow(fields, TIME_NOW, TIME_TZ);
         const good = c.ok(fields, range);
         bump(c.cls, good);
