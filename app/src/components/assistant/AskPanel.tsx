@@ -520,42 +520,61 @@ export function AskPanel() {
         sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
-      // getSession(profileId), not getCurrentSession(): an aggregate id
-      // names no server, so there is no session for it and
-      // getCurrentSession() throws (swallowed below, silently
-      // dropping the version from the system prompt every turn). profileId
-      // here is the resolved pinned/current profile, matching every other
-      // read in this block (refs #337).
-      let zmVersion = '';
-      if (profileId) {
-        try {
-          zmVersion = (await getVersion(getSession(profileId).client)).version;
-        } catch (e) {
-          log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
-        }
-      }
+      // The timeframe extraction can start before anything else: it needs
+      // only the question and the provider, and its result is not read until
+      // after triage. Overlapped ONLY on Ollama (refs #427 follow-up): a
+      // server takes concurrent requests, while the on-device runtimes do
+      // not (AICore rate-limits a burst as ErrorCode.BUSY, and Apple FM
+      // serializes), so every other backend keeps the sequential order
+      // below. The no-op catch is deliberate: a turn that never awaits this
+      // (triage said chat, or an abort) must not surface an unhandled
+      // rejection; the awaiting path below still sees the real error.
+      const timezone = currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const earlyTimeframes =
+        providerConfig.backend === 'ollama' && !isAssistantTestMode()
+          ? extractTimeframes(text, provider, new Date(), timezone, controller.signal)
+          : null;
+      earlyTimeframes?.catch(() => {});
 
-      // The install's own label vocabulary, so the model can map "vehicles"
-      // onto the labels this detector actually writes instead of the app
-      // guessing at a taxonomy. Cached per profile; never throws.
-      const objectLabels = await getObjectLabels(profileId);
-
-      // The camera the question refers to, resolved BEFORE any model round
-      // (refs #427): a deterministic scan for monitor names the question
-      // states verbatim; anything it cannot decide (a place word like "front
-      // door") goes to the triage round below, constrained to this roster.
-      // Skipped inside a group: monitor names collide across servers, and the
-      // aggregate id has no session (getMonitorRoster returns [] then anyway).
-      // Cached per profile; never throws.
-      const monitorRoster = isAllMode || isAssistantTestMode() ? [] : await getMonitorRoster(profileId);
+      // Four independent context reads, fetched together: none depends on
+      // another, all are cached or cheap, and sequential awaits cost a full
+      // round trip each on a cold cache.
+      const [zmVersion, objectLabels, monitorRoster, servers] = await Promise.all([
+        // getSession(profileId), not getCurrentSession(): an aggregate id
+        // names no server, so there is no session for it and
+        // getCurrentSession() throws (swallowed below, silently
+        // dropping the version from the system prompt every turn). profileId
+        // here is the resolved pinned/current profile, matching every other
+        // read in this block (refs #337).
+        (async () => {
+          if (!profileId) return '';
+          try {
+            return (await getVersion(getSession(profileId).client)).version;
+          } catch (e) {
+            log.assistant('Failed to fetch ZM version for the assistant system prompt', LogLevel.WARN, { error: e });
+            return '';
+          }
+        })(),
+        // The install's own label vocabulary, so the model can map "vehicles"
+        // onto the labels this detector actually writes instead of the app
+        // guessing at a taxonomy. Cached per profile; never throws.
+        getObjectLabels(profileId),
+        // The camera the question refers to is resolved BEFORE any model round
+        // (refs #427): a deterministic scan for monitor names the question
+        // states verbatim; anything it cannot decide (a place word like "front
+        // door") goes to the triage round below, constrained to this roster.
+        // Skipped inside a group: monitor names collide across servers, and the
+        // aggregate id has no session (getMonitorRoster returns [] then anyway).
+        // Cached per profile; never throws.
+        isAllMode || isAssistantTestMode() ? [] : getMonitorRoster(profileId),
+        // Every server this view combines, or an empty list outside a group
+        // (refs #337). It drives three things that must agree: the roster in the
+        // prompt, the `server` argument's enum, and which sessions the tool
+        // wrapper may reach. Pinned-profile behavior is unchanged when the group
+        // holds one server, since `buildScopedServers` returns nothing then.
+        isAllMode ? buildScopedServers(scope?.profiles ?? []) : [],
+      ]);
       const monitorScanHits = scanMonitorMentions(text, monitorRoster);
-
-      // Every server this view combines, or an empty list outside a group
-      // (refs #337). It drives three things that must agree: the roster in the
-      // prompt, the `server` argument's enum, and which sessions the tool
-      // wrapper may reach. Pinned-profile behavior is unchanged when the group
-      // holds one server, since `buildScopedServers` returns nothing then.
-      const servers = isAllMode ? await buildScopedServers(scope?.profiles ?? []) : [];
       const serverNames = servers.map((s) => s.name);
 
       const system = buildSystemPrompt({
@@ -661,13 +680,10 @@ export function AskPanel() {
       // meant for the answer.
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
-        const { phrases, resolved, abstained } = await extractTimeframes(
-          text,
-          provider,
-          new Date(),
-          currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-          controller.signal,
-        );
+        // The overlapped Ollama call from above when there is one, the
+        // sequential call otherwise; same result either way.
+        const { phrases, resolved, abstained } = await (earlyTimeframes ??
+          extractTimeframes(text, provider, new Date(), timezone, controller.signal));
         if (abstained) {
           append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });
           return;
