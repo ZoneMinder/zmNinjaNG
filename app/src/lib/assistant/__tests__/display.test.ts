@@ -71,3 +71,12 @@ describe('filterDisplayByShow', () => {
     expect(kept.map((c) => `${c.kind}:${c.id}`)).toEqual(['event:3']);
   });
 });
+
+// Refs #436, observed live: the model wrote "SHOW: events=[1,2] monitors=[4]"
+// and the bracketed ids matched nothing, silently degrading to all cards.
+describe('extractShowDirective bracket tolerance', () => {
+  it('reads ids wrapped in brackets like bare ids', () => {
+    const { show } = extractShowDirective('answer\nSHOW: events=[342702,342701] monitors=[1,4]');
+    expect(show).toEqual({ events: ['342702', '342701'], monitors: ['1', '4'] });
+  });
+});

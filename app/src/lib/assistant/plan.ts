@@ -14,6 +14,7 @@
 import type { RequestKind, QuerySubject } from './triage';
 import type { MonitorRosterEntry } from './monitor-stage';
 import { ASSISTANT } from '../zmninja-ng-constants';
+import { buildResultSummary, type ResultWindow } from './result-summary';
 
 export interface PlannedToolCall {
   name: string;
@@ -57,4 +58,101 @@ export function planToolCalls(q: QueryPlanInput): PlannedToolCall[] | null {
   // the cap the free loop's own judgment beats a mechanical fan-out.
   if (calls.length > ASSISTANT.maxPlannedToolCalls) return null;
   return calls;
+}
+
+/** The subset of a list_events result body the merge reads and rebuilds. */
+interface EventResultBody {
+  window?: { from?: string; to?: string } | string;
+  matchCount?: number;
+  countsByMonitor?: Record<string, number>;
+  objectCounts?: Record<string, number>;
+  countsByHour?: Record<string, number>;
+  events?: Array<{ id?: unknown }>;
+  moreMatchesExist?: boolean;
+}
+
+/** Adds `extra`'s numeric entries into `into`. */
+function addCounts(into: Record<string, number>, extra: Record<string, number> | undefined): void {
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    into[key] = (into[key] ?? 0) + Number(value);
+  }
+}
+
+/**
+ * One merged result for a plan that fanned the SAME window and filter over
+ * several monitors, or null when the calls are not that shape (refs #436).
+ *
+ * Observed live: handed two per-monitor results, the model summed the totals
+ * itself and quoted ONE monitor's objectCounts and busiest hour (5 where the
+ * combined truth was 8). Cross-result arithmetic is exactly what the
+ * per-result summary sentence exists to spare it, so the merge happens here,
+ * in code: summed matchCount, merged per-monitor / per-object / per-hour
+ * counts, the busiest hour recomputed, rows re-sorted newest-first by id
+ * (ZoneMinder ids are monotonic) and re-capped, and one summary sentence the
+ * model can only quote. objectCounts and busiestHour are omitted whenever any
+ * source result lacks them: a partial sum would be stated as a total.
+ *
+ * The synthetic call carries the shared window and filter WITHOUT a
+ * monitorId, which is exactly what it now describes; the real per-monitor
+ * calls stay in the trace, and their signatures stay registered.
+ */
+export function mergePlannedEventResults(
+  calls: ReadonlyArray<{ id?: string; name: string; input: Record<string, unknown> }>,
+  results: ReadonlyArray<{ callId?: string; output: string; isError?: boolean; display?: unknown[] }>,
+): { call: { id: string; name: string; input: Record<string, unknown> }; result: { callId: string; output: string; isError: false; display?: never[] } } | null {
+  if (calls.length < 2 || calls.length !== results.length) return null;
+  if (!calls.every((c) => c.name === 'list_events')) return null;
+  if (results.some((r) => r.isError)) return null;
+  const sharedKey = (input: Record<string, unknown>) => JSON.stringify({ when: input.when, objectType: input.objectType });
+  if (!calls.every((c) => sharedKey(c.input) === sharedKey(calls[0].input))) return null;
+
+  const bodies: EventResultBody[] = [];
+  for (const r of results) {
+    try {
+      bodies.push(JSON.parse(r.output) as EventResultBody);
+    } catch {
+      return null;
+    }
+  }
+
+  const matchCount = bodies.reduce((sum, b) => sum + (Number(b.matchCount) || 0), 0);
+  const countsByMonitor: Record<string, number> = {};
+  for (const b of bodies) addCounts(countsByMonitor, b.countsByMonitor);
+
+  const haveObjects = bodies.every((b) => b.objectCounts !== undefined);
+  const objectCounts: Record<string, number> = {};
+  if (haveObjects) for (const b of bodies) addCounts(objectCounts, b.objectCounts);
+
+  const haveHours = bodies.every((b) => b.countsByHour !== undefined);
+  const countsByHour: Record<string, number> = {};
+  if (haveHours) for (const b of bodies) addCounts(countsByHour, b.countsByHour);
+  const busiest = Object.entries(countsByHour).sort(([, a], [, b]) => b - a)[0];
+
+  const allRows = bodies.flatMap((b) => (Array.isArray(b.events) ? b.events : []));
+  const rows = [...allRows].sort((a, b) => Number(b.id) - Number(a.id)).slice(0, ASSISTANT.maxListEventsLimit);
+  const capped = rows.length < allRows.length || bodies.some((b) => b.moreMatchesExist === true);
+
+  const window = bodies[0].window;
+  const body: Record<string, unknown> = {
+    summary: buildResultSummary({
+      window: window as ResultWindow,
+      matchCount,
+      countsByMonitor,
+      objectCounts: haveObjects ? objectCounts : {},
+      partial: capped,
+    }),
+    window,
+    matchCount,
+    countsByMonitor,
+    ...(haveObjects ? { objectCounts } : {}),
+    ...(haveHours && busiest ? { busiestHour: { label: busiest[0], count: busiest[1] }, countsByHour } : {}),
+    events: rows,
+    ...(capped ? { shownEvents: rows.length, moreMatchesExist: true } : {}),
+  };
+
+  const { monitorId: _dropped, ...sharedInput } = calls[0].input;
+  return {
+    call: { id: 'planned-1', name: 'list_events', input: sharedInput },
+    result: { callId: 'planned-1', output: JSON.stringify(body), isError: false },
+  };
 }

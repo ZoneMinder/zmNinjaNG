@@ -79,3 +79,88 @@ describe('planToolCalls', () => {
     ).toBeNull();
   });
 });
+
+import { mergePlannedEventResults } from '../plan';
+
+/**
+ * Refs #436, observed live: two per-monitor results reached the model
+ * separately; the answer summed totals itself and quoted only one monitor's
+ * objectCounts and busiest hour (5 where the combined truth was 8). Same
+ * window, same filter, different monitorId merges into ONE result the model
+ * can only quote.
+ */
+describe('mergePlannedEventResults', () => {
+  const call = (id: string, monitorId: string) => ({
+    id,
+    name: 'list_events',
+    input: { when: 'over the week', monitorId, objectType: ['person'] },
+  });
+  const output = (monitor: string, ids: number[], hours: Record<string, number>, objects: Record<string, number>) =>
+    JSON.stringify({
+      summary: 'per-call summary',
+      window: { from: 'Aug 25, 12:38:12 PM', to: 'Sep 1, 12:38:12 PM' },
+      matchCount: ids.length,
+      countsByMonitor: { [monitor]: ids.length },
+      objectCounts: objects,
+      countsByHour: hours,
+      events: ids.map((id) => ({ id: String(id), monitor, start: 'x', durationSec: 30, objects: ['person'] })),
+    });
+  const ok = (out: string) => ({ callId: 'c', output: out, isError: false as const });
+
+  it('merges counts, hours, and rows into one result with a code-built summary', () => {
+    const merged = mergePlannedEventResults(
+      [call('planned-1', '1'), call('planned-2', '4')],
+      [
+        ok(output('FrontDoor', [5, 3, 1], { 'Aug 25, 1:00:00 PM': 3 }, { person: 5 })),
+        ok(output('Front Yard', [6, 4, 2], { 'Aug 25, 1:00:00 PM': 5, 'Aug 31, 6:00:00 PM': 1 }, { person: 8, truck: 3 })),
+      ],
+    );
+    expect(merged).not.toBeNull();
+    const body = JSON.parse(merged!.result.output);
+    expect(body.matchCount).toBe(6);
+    expect(body.countsByMonitor).toEqual({ FrontDoor: 3, 'Front Yard': 3 });
+    expect(body.objectCounts).toEqual({ person: 13, truck: 3 });
+    expect(body.busiestHour).toEqual({ label: 'Aug 25, 1:00:00 PM', count: 8 });
+    // Rows merged newest-first by id (ZoneMinder ids are monotonic).
+    expect(body.events.map((e: { id: string }) => e.id)).toEqual(['6', '5', '4', '3', '2', '1']);
+    expect(body.summary).toContain('6 events');
+    expect(body.summary).toContain('person 13');
+    // The synthetic call names the shared window and filter, without a
+    // single-monitor pin it did not have.
+    expect(merged!.call.input).toMatchObject({ when: 'over the week' });
+    expect(merged!.call.input.monitorId).toBeUndefined();
+  });
+
+  it('declines to merge a single call, mixed windows, or an errored result', () => {
+    const a = call('planned-1', '1');
+    const b = { ...call('planned-2', '4'), input: { when: 'yesterday', monitorId: '4', objectType: ['person'] } };
+    expect(mergePlannedEventResults([a], [ok(output('FrontDoor', [1], {}, {}))])).toBeNull();
+    expect(
+      mergePlannedEventResults([a, b], [ok(output('FrontDoor', [1], {}, {})), ok(output('Front Yard', [2], {}, {}))]),
+    ).toBeNull();
+    expect(
+      mergePlannedEventResults(
+        [a, call('planned-2', '4')],
+        [ok(output('FrontDoor', [1], {}, {})), { callId: 'c', output: 'boom', isError: true }],
+      ),
+    ).toBeNull();
+  });
+
+  it('omits objectCounts and busiestHour when any source result lacks them', () => {
+    const noCounts = JSON.stringify({
+      summary: 's',
+      window: { from: 'a', to: 'b' },
+      matchCount: 30,
+      countsByMonitor: { Backyard: 30 },
+      events: [],
+    });
+    const merged = mergePlannedEventResults(
+      [call('planned-1', '1'), call('planned-2', '4')],
+      [ok(output('FrontDoor', [5], { h: 1 }, { person: 5 })), ok(noCounts)],
+    );
+    const body = JSON.parse(merged!.result.output);
+    expect(body.matchCount).toBe(31);
+    expect(body.objectCounts).toBeUndefined();
+    expect(body.busiestHour).toBeUndefined();
+  });
+});

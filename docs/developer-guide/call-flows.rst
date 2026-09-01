@@ -2207,7 +2207,13 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    gets the never-attribute guard), and ``planToolCalls`` (``plan.ts``)
    composes the tool calls the slots determine - one ``list_events`` per
    window x monitor with the parsed ``objectType`` - handing them to the
-   loop as ``plannedCalls``. A null plan is today's free loop, unchanged.
+   loop as ``plannedCalls``; a same-window fan-out is merged back into ONE
+   result in code (``mergePlannedEventResults``: summed counts, recomputed
+   busiest hour, one summary sentence), so cross-monitor totals are never
+   the model's arithmetic (refs #436). A whole-vocabulary ``objects``
+   selection derives no filter (the creep signature; a filter of every
+   label would exclude no-detection events). A null plan is today's free
+   loop, unchanged.
    Asked "how many people came to my front door yesterday" with no door
    monitor, the assistant used to answer "3 people came to your front door"
    from a garage monitor's events.
