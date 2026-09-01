@@ -306,7 +306,11 @@ export async function interpretWhen(
 
 /** The first JSON object in `text` as WindowFields, or undefined. Defensive:
  *  an unconstrained backend may wrap the object in prose. */
-function parseFields(text: string): WindowFields | undefined {
+/** Exported for the eval harness (prompt-eval.mts time stage): replies MUST
+ *  be interpreted through this exact function, never raw-parsed - a field
+ *  this parser did not know scored 100% in an eval that bypassed it while
+ *  every production call failed (refs #442). */
+export function parseFields(text: string): WindowFields | undefined {
   const match = /\{[\s\S]*\}/.exec(text);
   if (!match) return undefined;
   try {
@@ -317,6 +321,15 @@ function parseFields(text: string): WindowFields | undefined {
     if (raw.lastUnit !== undefined) fields.lastUnit = String(raw.lastUnit);
     if (raw.daysAgo !== undefined) fields.daysAgo = Number(raw.daysAgo);
     if (raw.weekday !== undefined) fields.weekday = String(raw.weekday);
+    // Every field the schema can emit MUST round-trip here: week and the
+    // weekday range were taught to the prompt and schema (#435, #439) but
+    // not to this parser, so {"week":"this"} parsed to {} and the tool
+    // errored "does not name a time period" while the eval - which
+    // raw-parsed replies instead of running this function - scored 100%
+    // (refs #442).
+    if (raw.week !== undefined) fields.week = String(raw.week);
+    if (raw.fromWeekday !== undefined) fields.fromWeekday = String(raw.fromWeekday);
+    if (raw.toWeekday !== undefined) fields.toWeekday = String(raw.toWeekday);
     if (raw.dayOfMonth !== undefined) fields.dayOfMonth = Number(raw.dayOfMonth);
     // Pass the weekend value through as sent: the schema now emits a string enum
     // ("this"/"last"/"two-ago"), which resolveWindow maps to a weekends-ago

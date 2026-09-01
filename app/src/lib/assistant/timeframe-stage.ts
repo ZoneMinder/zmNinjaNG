@@ -25,7 +25,7 @@ import { toZonedTime } from 'date-fns-tz';
 import { interpretWhen, PART_OF_DAY_WORDS, WEEKDAY_WORDS, WEEKDAY_ABBREVS, MONTH_SEASON_NAMES, AMBIGUOUS_MONTH_WORDS } from './window-interpreter';
 import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
-import { WINDOW_UNITS, type WindowFields } from './event-range';
+import { WINDOW_UNITS, resolveWindow, type WindowFields } from './event-range';
 import type { AssistantProvider, ResolvedTimeframe } from './types';
 import { isAbortError } from '../is-abort-error';
 
@@ -276,10 +276,18 @@ export async function extractTimeframes(
   const namedTime = deduped.length > 0;
 
   const resolvedByKey = new Map<string, WindowFields>();
+  const windowfulKeys = new Set<string>();
   for (const phrase of namedTime ? deduped : ['today']) {
     const fields = await interpretWhen(phrase, provider, now, timezone, signal);
     if ('error' in fields && fields.error) continue;
-    resolvedByKey.set(normalizeWhenPhrase(phrase), fields as WindowFields);
+    const key = normalizeWhenPhrase(phrase);
+    resolvedByKey.set(key, fields as WindowFields);
+    // "Resolved" and "resolved to a WINDOW" differ: none/{} interprets
+    // cleanly but names no period, and such a container must not absorb a
+    // scan-vouched contained phrase (refs #442: "all this week" once
+    // interpreted to nothing and killed "this week" with it).
+    const window = resolveWindow(fields as WindowFields, now, timezone);
+    if (window !== undefined && !('error' in window)) windowfulKeys.add(key);
   }
 
   // Containment dedup, resolution-aware (refs #434, #438): the scan emits
@@ -292,7 +300,7 @@ export async function extractTimeframes(
     const key = normalizeWhenPhrase(phrase);
     return !deduped.some((other) => {
       const otherKey = normalizeWhenPhrase(other);
-      return otherKey !== key && otherKey.includes(key) && resolvedByKey.has(otherKey);
+      return otherKey !== key && otherKey.includes(key) && windowfulKeys.has(otherKey);
     });
   });
 

@@ -315,3 +315,26 @@ describe('interrogation redesign', () => {
     expect(prompt).toContain('"week"');
   });
 });
+
+/** Refs #442, observed live: the schema and prompt learned week and
+ *  fromWeekday/toWeekday (#435, #439) but parseFields never did, so
+ *  {"week":"this"} parsed to {} and list_events errored "does not name a
+ *  time period". Round-trip every field the schema can emit. */
+describe('parseFields round-trips every schema field', () => {
+  beforeEach(() => resetWindowInterpreterCacheForTests());
+
+  it('keeps the calendar-week field', async () => {
+    const p = providerSaying('{"meaning":"this calendar week","week":"this"}');
+    expect(await interpretWhen('all this week', p, NOW, 'UTC', new AbortController().signal)).toEqual({
+      week: 'this',
+    });
+  });
+
+  it('keeps the weekday-range fields', async () => {
+    const p = providerSaying('{"meaning":"monday through tuesday","fromWeekday":"monday","toWeekday":"tuesday"}');
+    expect(await interpretWhen('between mon and tue', p, NOW, 'UTC', new AbortController().signal)).toEqual({
+      fromWeekday: 'monday',
+      toWeekday: 'tuesday',
+    });
+  });
+});
