@@ -19,8 +19,21 @@
 import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry } from './types';
 import { sanitizeModelText } from './sanitize';
 import { isAbortError } from '../is-abort-error';
+import { MONITOR_NONE, MONITOR_NO_MATCH } from './monitor-stage';
+import { scanTimeExpressions } from './timeframe-stage';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
+
+/** What one triage round decided: the request kind, and (only when the caller
+ *  handed it a monitor roster, refs #427) which camera the message is about, a
+ *  roster name or one of the sentinels. `undefined` whenever no roster was
+ *  sent, the backend omitted the field, or the value is outside the enum: an
+ *  unconstrained backend can reply anything, and a name the roster does not
+ *  hold must never be trusted. */
+export interface TriageVerdict {
+  kind: RequestKind;
+  monitor?: string;
+}
 
 /** Model-facing (rule 5 exempt): never rendered, only matched below.
  *
@@ -61,7 +74,7 @@ export type RequestKind = 'zoneminder' | 'chat' | 'action';
  *  constrained JSON. Editing the existing list instead costs no length and
  *  measured 34/36. Add nothing here without re-running `prompt-eval.mts
  *  triage`. */
-const triagePromptLines = (servers: readonly string[]): string[] => [
+const triagePromptLines = (servers: readonly string[], monitors: readonly string[]): string[] => [
   'You classify one user message for a ZoneMinder security-camera app. Reply with EXACTLY one word.',
   '',
   'Decide by WHAT THE USER WANTS DONE and WHAT IT CONCERNS, whatever language the message is in:',
@@ -88,13 +101,40 @@ const triagePromptLines = (servers: readonly string[]): string[] => [
   'CHAT - anything NOT about this system: greetings, thanks, small talk, questions about you, general',
   '  knowledge, or summarizing something that is not this system\'s activity.',
   '',
-  'Reply with one word: ZONEMINDER, ACTION, or CHAT.',
+  // Refs #427, observed live: "how many people came to my front door" was
+  // answered from a monitor called "Garage Outdoor" and attributed to the
+  // front door. This round is the one model call that can map a place word
+  // onto the user's own camera names, in any language; the schema constrains
+  // the reply to the real names plus the two sentinels, so nothing can be
+  // hallucinated (buildTriageSchema). The block is appended only when the
+  // caller has a roster, so the roster-less prompt stays byte-identical to
+  // what the eval harness scores.
+  ...(monitors.length > 0
+    ? [
+        `This system's cameras are: ${monitors.join(', ')}.`,
+        // Copy-then-judge (refs #265's copy-interpret pattern, applied here
+        // after direct classification force-picked the nearest camera):
+        // "place" makes the model write down what the message actually named,
+        // and "covered" asks the yes/no question on its own before any name
+        // can be decoded. Asked to pick from the list directly, the model
+        // substituted the nearest camera for a place the list lacks.
+        'Also copy into "place" the exact place or camera words the message names ("" when it names none;',
+        'time words such as today or yesterday are not places).',
+        'Then "covered": true only when a listed camera\'s name means that same place, in any language; false',
+        'when "place" is "" or when no listed camera means it. A camera covers only what its own name says:',
+        'a nearby or similar place is still false, never the closest name.',
+        `Then "monitor": the listed camera that means the place, or ${MONITOR_NONE} when "covered" is false.`,
+        '',
+        'Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "place", "covered", and "monitor".',
+      ]
+    : ['Reply with one word: ZONEMINDER, ACTION, or CHAT.']),
 ];
 
-/** The classifier's prompt for a turn covering `servers`. Fewer than two names
- *  it identically to the string this file has always sent. */
-function buildTriagePrompt(servers: readonly string[]): string {
-  return triagePromptLines(servers).join('\n');
+/** The classifier's prompt for a turn covering `servers`, extended with the
+ *  camera question when `monitors` has a roster (refs #427). With neither, it
+ *  is identical to the string this file has always sent. */
+function buildTriagePrompt(servers: readonly string[], monitors: readonly string[] = []): string {
+  return triagePromptLines(servers, monitors).join('\n');
 }
 
 const TRIAGE_PROMPT = buildTriagePrompt([]);
@@ -109,6 +149,32 @@ export const TRIAGE_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+/** TRIAGE_SCHEMA, plus the camera verdict when a roster exists (refs #427):
+ *  an enum of the REAL monitor names and the two sentinels, so a constrained
+ *  backend physically cannot reply with a camera that does not exist. With no
+ *  roster it is exactly TRIAGE_SCHEMA. */
+export function buildTriageSchema(monitors: readonly string[]): Record<string, unknown> {
+  if (monitors.length === 0) return TRIAGE_SCHEMA as unknown as Record<string, unknown>;
+  return {
+    type: 'object',
+    properties: {
+      kind: { type: 'string', enum: ['ZONEMINDER', 'ACTION', 'CHAT'] },
+      // Decoded BEFORE `covered` and `monitor` on purpose (property order is
+      // generation order under constrained decoding): copying the message's
+      // own place words first puts the mismatch in front of the model.
+      place: { type: 'string' },
+      // The abstention as its own yes/no question. Asked to choose from the
+      // name enum directly, the model substituted the nearest camera for a
+      // place the list lacks, under three prompt wordings and both enum
+      // orders (12/16); the boolean is what made it abstain.
+      covered: { type: 'boolean' },
+      monitor: { type: 'string', enum: [MONITOR_NONE, ...monitors] },
+    },
+    required: ['kind', 'place', 'covered', 'monitor'],
+    additionalProperties: false,
+  };
+}
+
 /** A schema-constrained backend replies `{"kind":"CHAT"}`; that is read
  *  first. Everything else is matched loosely on purpose: a small model asked
  *  for one word still says "CHAT." or `{"answer":"CHAT"}` (the on-device
@@ -121,6 +187,13 @@ export const TRIAGE_SCHEMA = {
  *  sends. Not used elsewhere. */
 export const TRIAGE_PROMPT_FOR_EVAL = TRIAGE_PROMPT;
 
+/** The roster-extended prompt for the eval harness (prompt-eval.mts
+ *  triage-monitor stage), so the camera verdict is scored on exactly what
+ *  production sends (refs #427). Not used elsewhere. */
+export function buildTriagePromptForEval(monitors: readonly string[]): string {
+  return buildTriagePrompt([], monitors);
+}
+
 export function parseRequestKind(reply: string): RequestKind {
   try {
     const kind = (JSON.parse(reply) as { kind?: unknown }).kind;
@@ -129,6 +202,37 @@ export function parseRequestKind(reply: string): RequestKind {
     // Not the constrained shape; fall through to the loose match.
   }
   return parseKindWord(reply);
+}
+
+/** The camera verdict out of the same reply (refs #427): a roster name, NONE,
+ *  NO_MATCH, or undefined when the reply does not carry the constrained shape.
+ *  Derived from all three fields, in code: a named place that `covered` says
+ *  no camera means is NO_MATCH whatever `monitor` holds, and a monitor name
+ *  outside the roster is never trusted (an unconstrained backend can reply
+ *  anything). No loose fallback on purpose: a wrong kind degrades to a
+ *  recoverable misroute, but a wrong monitor becomes a system line asserting
+ *  the wrong camera. Exported for the eval harness (prompt-eval.mts
+ *  triage-monitor), which must score exactly what production derives. */
+export function parseTriageMonitor(reply: string, monitors: readonly string[]): string | undefined {
+  if (monitors.length === 0) return undefined;
+  try {
+    const raw = JSON.parse(reply) as { place?: unknown; covered?: unknown; monitor?: unknown };
+    if (raw.covered === true && typeof raw.monitor === 'string' && monitors.includes(raw.monitor)) {
+      return raw.monitor;
+    }
+    if (raw.covered === false) {
+      const place = typeof raw.place === 'string' ? raw.place : '';
+      // "summarize today" copied "today" into place (2/2 at temp 0), and the
+      // prompt's "time words are not places" line did not stop it. Decidable
+      // in code: strip every time expression the timeframe scan owns, and a
+      // place with nothing else left named no place at all.
+      const rest = scanTimeExpressions(place).reduce((text, phrase) => text.replace(phrase, ' '), place);
+      return /[\p{L}\p{N}]/u.test(rest) ? MONITOR_NO_MATCH : MONITOR_NONE;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseKindWord(text: string): RequestKind {
@@ -159,21 +263,27 @@ export async function classifyRequest(
    *  because a message that names one is about this system and nothing else
    *  here can tell the classifier that. */
   servers: readonly string[] = [],
-): Promise<RequestKind> {
+  /** Monitor names to resolve a place reference against (refs #427). Empty
+   *  skips the camera question entirely: prompt and schema stay exactly what
+   *  this file always sent. The caller passes names only when its own
+   *  deterministic scan found nothing (monitor-stage.ts). */
+  monitors: readonly string[] = [],
+): Promise<TriageVerdict> {
   try {
     // `complete`, not `chat`: a classifier handed the tool catalog, the
     // few-shot block and the JSON output contract answers like an assistant
     // instead of returning a verdict. The schema constrains a backend that
     // can enforce it to `{"kind":"..."}`; the parser still accepts the loose
     // one-word reply from a backend that cannot.
-    const result = await provider.complete(buildTriagePrompt(servers), question, signal, TRIAGE_SCHEMA as unknown as Record<string, unknown>, onStatus);
+    const result = await provider.complete(buildTriagePrompt(servers, monitors), question, signal, buildTriageSchema(monitors), onStatus);
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (triage)` } });
     }
-    return parseRequestKind(sanitizeModelText(result.text, 'triage'));
+    const text = sanitizeModelText(result.text, 'triage');
+    return { kind: parseRequestKind(text), monitor: parseTriageMonitor(text, monitors) };
   } catch (error) {
     if (isAbortError(error)) throw error;
-    return 'zoneminder';
+    return { kind: 'zoneminder' };
   }
 }
 

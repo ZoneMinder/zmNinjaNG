@@ -560,9 +560,65 @@ async function scoreTriage(runs: number) {
   return { pass, total, failures };
 }
 
+/** Camera-verdict cases (refs #427): the triage round, handed a monitor
+ *  roster, must map a place word onto the camera that covers it (in any
+ *  language), say NO_MATCH for a place no camera covers, and say NONE for a
+ *  question that names no place, without disturbing the kind verdict. The
+ *  live failure this scores: "front door" answered from "Garage Outdoor". */
+const TRIAGE_MONITOR_CASES: Array<{ q: string; roster: string[]; kind: string; monitor: string }> = [
+  { q: 'how many people came to my front door yesterday', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NO_MATCH' },
+  { q: 'how many people came to my front door yesterday', roster: ['Garage Outdoor', 'Doorbell'], kind: 'ZONEMINDER', monitor: 'Doorbell' },
+  { q: 'any cars in the driveway today', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'Driveway' },
+  { q: 'was war gestern an der Haustür los', roster: ['Garage Outdoor', 'Doorbell'], kind: 'ZONEMINDER', monitor: 'Doorbell' },
+  { q: 'summarize today', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NONE' },
+  { q: 'is the server ok', roster: ['Garage Outdoor', 'Driveway'], kind: 'ZONEMINDER', monitor: 'NONE' },
+  { q: 'hello', roster: ['Garage Outdoor', 'Driveway'], kind: 'CHAT', monitor: 'NONE' },
+  { q: 'arm the backyard camera', roster: ['Garage Outdoor', 'Driveway'], kind: 'ACTION', monitor: 'NO_MATCH' },
+];
+
+async function scoreTriageMonitor(runs: number) {
+  const { buildTriagePromptForEval, buildTriageSchema, parseTriageMonitor } = await import('../src/lib/assistant/triage');
+  let pass = 0;
+  let total = 0;
+  const failures: string[] = [];
+  for (const c of TRIAGE_MONITOR_CASES) {
+    for (let i = 0; i < runs; i++) {
+      total++;
+      try {
+        const r = await chat({
+          model: MODEL,
+          messages: [{ role: 'system', content: buildTriagePromptForEval(c.roster) }, { role: 'user', content: c.q }],
+          stream: false,
+          max_tokens: 60,
+          ...(TEMP === undefined ? {} : { temperature: TEMP }),
+          ...REASONING,
+          response_format: { type: 'json_schema', json_schema: { name: 'result', schema: buildTriageSchema(c.roster), strict: true } },
+        });
+        const text = r.choices?.[0]?.message?.content ?? '';
+        const parsed = JSON.parse(text);
+        // Scored on what production derives (parseTriageMonitor), not the raw
+        // monitor field: NO_MATCH is computed in code from place + covered.
+        const monitor = parseTriageMonitor(text, c.roster) ?? 'NONE';
+        if (parsed?.kind === c.kind && monitor === c.monitor) pass++;
+        else failures.push(`[triage-monitor] "${c.q}" [${c.roster.join(', ')}] -> ${parsed?.kind}/${monitor} (raw ${text}), expected ${c.kind}/${c.monitor}`);
+      } catch (e) {
+        failures.push(`[triage-monitor] "${c.q}" error: ${(e as Error).message}`);
+      }
+    }
+  }
+  return { pass, total, failures };
+}
+
 const variant = process.argv[2] ?? 'baseline';
 const runs = Number(process.argv[3] ?? 2);
 const started = Date.now();
+if (variant === 'triage-monitor') {
+  const w = await scoreTriageMonitor(runs);
+  console.log(`\n=== triage-monitor via ${MODEL}, temp ${TEMP ?? 'default'} ===`);
+  console.log(`triage-monitor: ${w.pass}/${w.total}`);
+  for (const f of w.failures) console.log(`  ${f}`);
+  process.exit(0);
+}
 if (variant === 'triage') {
   const w = await scoreTriage(runs);
   console.log(`\n=== triage via ${MODEL}, temp ${TEMP ?? 'default'} ===`);

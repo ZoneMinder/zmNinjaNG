@@ -2164,7 +2164,11 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    ``buildSystemPrompt`` (``system-prompt.ts``) folds in the profile timezone,
    locale, ZM version, and the install's own detected-object labels. The
    monitor list is not copied into every prompt because ``list_monitors``
-   resolves names when needed.
+   resolves names when needed; what does run up front is
+   ``scanMonitorMentions`` (``monitor-stage.ts``), a deterministic pass that
+   matches monitor names the question states verbatim against the cached
+   per-profile roster (``getMonitorRoster``), on the same normalized key
+   ``resolveMonitorRef`` uses for model-supplied names.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx>`__
    · → :doc:`16-platform-surfaces`
 
@@ -2178,6 +2182,21 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    refuse a data question any more: the loop fails open (next steps), so the
    old English keyword overrule (``requiresLiveData``) is deleted rather
    than maintained as a vocabulary.
+
+   The same round resolves the monitor a question refers to (refs #427), but
+   only when the deterministic scan above found no monitor name: the roster
+   goes into the prompt and ``buildTriageSchema`` extends the verdict with
+   ``place`` (the question's own place words, copied), ``covered`` (whether
+   any listed monitor means that place), and ``monitor`` (an enum of the real
+   names, so a monitor that does not exist is undecodable).
+   ``parseTriageMonitor`` derives the outcome in code - a named place that
+   ``covered`` denies is ``NO_MATCH``, a place that is only time words is
+   ``NONE`` - and ``buildMonitorSystemLine`` turns it into one system line:
+   a resolved monitor pins ``monitorId``, a ``NO_MATCH`` place gets a guard
+   telling the model to say no monitor covers it and never attribute other
+   monitors' events to it. Asked "how many people came to my front door
+   yesterday" with no door monitor, the assistant used to answer "3 people
+   came to your front door" from a garage monitor's events.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
    · → :doc:`15-assistant`
 

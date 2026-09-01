@@ -710,6 +710,9 @@ export const ASSISTANT = {
   // Vocabulary changes when someone reconfigures a detector, which is rare, so
   // this is cached for a whole session rather than per turn.
   objectLabelCacheMs: 30 * 60 * 1000,
+  // Monitor names change when someone renames a camera, which is rarer still;
+  // same session-length cache as the object vocabulary (monitor-stage.ts).
+  monitorRosterCacheMs: 30 * 60 * 1000,
   maxTokens: 1024,
   // The remote path needs its own budget for the same reason the native one
   // above does, and neither of `maxTokens`'s constraints applies here: an
