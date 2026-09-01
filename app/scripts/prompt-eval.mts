@@ -578,18 +578,26 @@ interface ParseCase {
   monitors?: string[];
   /** Accept any non-empty subset of these instead of an exact set. */
   monitorsWithin?: string[];
+  /** Pass when nothing is pinned: monitors unset/empty or noMatch - any
+   *  outcome except a positive pin of wrong cameras. */
+  unpinned?: boolean;
   noMatch?: boolean;
   subject?: string;
   objects?: string[];
+  /** Each must appear (normalized) inside the UNION of the deterministic
+   *  scan and the parse's when slot - the same union production queries. */
+  when?: string[];
 }
 const PARSE_CASES: ParseCase[] = [
   // The live failures this architecture exists for:
-  { q: 'How may folks came to the front of my house between mon and tue?', roster: R_HOUSE, kind: 'ZONEMINDER', monitorsWithin: ['FrontDoor', 'Front Yard'], subject: 'events', objects: ['person'] },
-  { q: 'how many people came to my front door yesterday', roster: R_PLAIN, kind: 'ZONEMINDER', noMatch: true, subject: 'events', objects: ['person'] },
+  { q: 'How may folks came to the front of my house between mon and tue?', roster: R_HOUSE, kind: 'ZONEMINDER', monitorsWithin: ['FrontDoor', 'Front Yard'], subject: 'events', objects: ['person'], when: ['between mon and tue'] },
+  { q: 'how many people came to my front door yesterday', roster: R_PLAIN, kind: 'ZONEMINDER', unpinned: true, subject: 'events', objects: ['person'], when: ['yesterday'] },
   { q: 'how many people came to my front door yesterday', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events', objects: ['person'] },
   { q: 'any cars in the driveway today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: ['Driveway'], subject: 'events', objects: ['car'] },
   { q: 'was war gestern an der Haust\u00fcr los', roster: R_DOOR, kind: 'ZONEMINDER', monitors: ['Doorbell'], subject: 'events' },
-  { q: 'summarize today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: [], subject: 'events', objects: [] },
+  { q: 'summarize today', roster: R_PLAIN, kind: 'ZONEMINDER', monitors: [], subject: 'events', objects: [], when: ['today'] },
+  { q: 'who came at lunch 5 days ago', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['lunch', '5 days ago'] },
+  { q: 'was war letzte Woche los', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'events', when: ['letzte woche'] },
   { q: 'is the server ok', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'server' },
   { q: 'what cameras do I have', roster: R_PLAIN, kind: 'ZONEMINDER', subject: 'monitors' },
   { q: 'hello', roster: R_PLAIN, kind: 'CHAT' },
@@ -602,6 +610,8 @@ function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean 
 
 async function scoreParse(runs: number) {
   const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots } = await import('../src/lib/assistant/triage');
+  const { scanTimeExpressions } = await import('../src/lib/assistant/timeframe-stage');
+  const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
   let pass = 0;
   let total = 0;
   const failures: string[] = [];
@@ -629,8 +639,14 @@ async function scoreParse(runs: number) {
           if (!within) bad.push(`monitors ${JSON.stringify(slots.monitors)} not within ${JSON.stringify(c.monitorsWithin)}`);
         }
         if (c.noMatch !== undefined && slots.noMatch !== c.noMatch) bad.push(`noMatch ${String(slots.noMatch)}`);
+        if (c.unpinned && (slots.monitors?.length ?? 0) > 0) bad.push(`pinned ${JSON.stringify(slots.monitors)}`);
         if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
         if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
+        if (c.when !== undefined) {
+          const union = [...scanTimeExpressions(c.q), ...(slots.when ?? [])].map(normalizeWhenPhrase);
+          const missing = c.when.filter((w) => !union.some((u) => u.includes(normalizeWhenPhrase(w))));
+          if (missing.length > 0) bad.push(`when missing ${JSON.stringify(missing)} (union ${JSON.stringify(union)})`);
+        }
         if (bad.length === 0) pass++;
         else failures.push(`[parse] "${c.q}" [${c.roster.join(', ')}] -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {

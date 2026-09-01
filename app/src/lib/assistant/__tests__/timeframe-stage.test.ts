@@ -354,3 +354,56 @@ describe('scanTimeExpressions lunch band', () => {
     expect(scanTimeExpressions('anything around lunchtime')).toEqual(['lunchtime']);
   });
 });
+
+/**
+ * Refs #434: with a roster, the parse call already copied the time phrases,
+ * so extractTimeframes takes them as `statedPhrases` and makes NO extraction
+ * model call of its own; the interpreter calls (and the scan, provenance,
+ * and abstain logic) are unchanged. `undefined` statedPhrases keeps the old
+ * extraction call: roster-less installs and group mode still extract.
+ */
+describe('extractTimeframes with parse-stated phrases', () => {
+  beforeEach(() => resetWindowInterpreterCacheForTests());
+
+  it('skips the extraction model call and unions stated phrases with the scan', async () => {
+    const p = makeProvider(
+      () => {
+        throw new Error('extraction must not be called');
+      },
+      () => '{"daysAgo":1}',
+    );
+    const result = await extractTimeframes('was war letzte Woche los, and yesterday', p, NOW, TZ, signal(), [
+      'letzte Woche',
+    ]);
+    // Scan found "yesterday"; the stated phrase adds what regex cannot see.
+    expect(result.phrases).toEqual(['yesterday', 'letzte Woche']);
+    expect(result.abstained).toBe(false);
+    // Only interpreter calls happened.
+    for (const [system] of vi.mocked(p.complete).mock.calls) {
+      expect(system).not.toContain('find the time expressions');
+    }
+  });
+
+  it('drops a stated phrase that is not a substring of the question', async () => {
+    const p = makeProvider(() => '', () => '{"daysAgo":0}');
+    const result = await extractTimeframes('what happened today', p, NOW, TZ, signal(), ['2026-07-16', 'today']);
+    expect(result.phrases).toEqual(['today']);
+  });
+
+  // Containment dedup (refs #434): the scan emits the halves ("lunch",
+  // "5 days ago"), the parse copies the compound; only the compound survives,
+  // so the planner never queries the whole day next to the lunch band.
+  it('absorbs scan phrases contained in a stated compound', async () => {
+    const p = makeProvider(() => '', () => '{"daysAgo":5,"fromTime":"11:00","toTime":"13:00"}');
+    const result = await extractTimeframes('who came at lunch 5 days ago', p, NOW, TZ, signal(), [
+      'at lunch 5 days ago',
+    ]);
+    expect(result.phrases).toEqual(['at lunch 5 days ago']);
+  });
+
+  it('still answers on the scan alone when stated phrases are empty', async () => {
+    const p = makeProvider(() => '', () => '{"daysAgo":0}');
+    const result = await extractTimeframes('what happened today', p, NOW, TZ, signal(), []);
+    expect(result.phrases).toEqual(['today']);
+  });
+});

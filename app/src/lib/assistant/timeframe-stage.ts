@@ -211,6 +211,13 @@ export async function extractTimeframes(
   now: Date,
   timezone: string,
   signal: AbortSignal,
+  /** Time phrases the parse call already copied (refs #434). Given (even
+   *  []), the extraction model call is SKIPPED and these stand in for its
+   *  output: the scan union, provenance filter, containment dedup, and
+   *  interpreter calls below are identical either way. `undefined` keeps the
+   *  old extraction call, so a roster-less install and group mode still
+   *  extract. */
+  statedPhrases?: string[],
 ): Promise<ExtractedTimeframes> {
   // Code-first extraction (refs #270): a deterministic scan OWNS every time class
   // it can recognize, so the shapes that flaked on-device (compact clock ranges
@@ -223,18 +230,22 @@ export async function extractTimeframes(
   const scanPhrases = scanTimeExpressions(question);
 
   let extracted: string[] = [];
-  try {
-    const reply = await provider.complete(buildTimeframePrompt(now, timezone), question, signal, TIMEFRAME_SCHEMA);
-    extracted = parsePhrases(reply.text);
-  } catch (error) {
-    if (isAbortError(error)) throw error;
-    log.assistant('Timeframe extraction failed', LogLevel.WARN, {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    // With the scan in hand the turn is not blind when the model call fails: only
-    // fall straight to the default period when the scan also found nothing (the
-    // pre-scan fail-open path). Otherwise proceed on the scan phrases alone.
-    if (scanPhrases.length === 0) return { phrases: ['today'], resolved: [], abstained: false };
+  if (statedPhrases !== undefined) {
+    extracted = statedPhrases;
+  } else {
+    try {
+      const reply = await provider.complete(buildTimeframePrompt(now, timezone), question, signal, TIMEFRAME_SCHEMA);
+      extracted = parsePhrases(reply.text);
+    } catch (error) {
+      if (isAbortError(error)) throw error;
+      log.assistant('Timeframe extraction failed', LogLevel.WARN, {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // With the scan in hand the turn is not blind when the model call fails: only
+      // fall straight to the default period when the scan also found nothing (the
+      // pre-scan fail-open path). Otherwise proceed on the scan phrases alone.
+      if (scanPhrases.length === 0) return { phrases: ['today'], resolved: [], abstained: false };
+    }
   }
 
   // The model parrots the prompt's own date line (buildTimeframePrompt names
@@ -255,13 +266,24 @@ export async function extractTimeframes(
   // a phrase whose normalized form the scan did not already cover.
   const scanKeys = new Set(scanPhrases.map(normalizeWhenPhrase));
   const seen = new Set<string>();
-  const union: string[] = [];
+  const deduped: string[] = [];
   for (const phrase of [...scanPhrases, ...modelStated]) {
     const key = normalizeWhenPhrase(phrase);
     if (seen.has(key)) continue;
     seen.add(key);
-    union.push(phrase);
+    deduped.push(phrase);
   }
+  // Containment dedup (refs #434): the scan emits the halves of a compound
+  // ("lunch", "5 days ago") while the model copies it whole ("at lunch 5
+  // days ago"); querying both the whole day and the band would double the
+  // fan-out, so a phrase contained in a longer one is absorbed by it.
+  const union = deduped.filter((phrase) => {
+    const key = normalizeWhenPhrase(phrase);
+    return !deduped.some((other) => {
+      const otherKey = normalizeWhenPhrase(other);
+      return otherKey !== key && otherKey.includes(key);
+    });
+  });
   const namedTime = union.length > 0;
 
   const resolved: ResolvedTimeframe[] = [];

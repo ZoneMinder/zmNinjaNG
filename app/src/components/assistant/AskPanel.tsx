@@ -521,21 +521,7 @@ export function AskPanel() {
         sharedMockProvider.contextWindow = window.__assistantMockContextWindow;
       }
 
-      // The timeframe extraction can start before anything else: it needs
-      // only the question and the provider, and its result is not read until
-      // after triage. Overlapped ONLY on Ollama (refs #427 follow-up): a
-      // server takes concurrent requests, while the on-device runtimes do
-      // not (AICore rate-limits a burst as ErrorCode.BUSY, and Apple FM
-      // serializes), so every other backend keeps the sequential order
-      // below. The no-op catch is deliberate: a turn that never awaits this
-      // (triage said chat, or an abort) must not surface an unhandled
-      // rejection; the awaiting path below still sees the real error.
       const timezone = currentProfile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-      const earlyTimeframes =
-        providerConfig.backend === 'ollama' && !isAssistantTestMode()
-          ? extractTimeframes(text, provider, new Date(), timezone, controller.signal)
-          : null;
-      earlyTimeframes?.catch(() => {});
 
       // Four independent context reads, fetched together: none depends on
       // another, all are cached or cheap, and sequential awaits cost a full
@@ -690,10 +676,19 @@ export function AskPanel() {
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
       let plannedCalls: PlannedToolCall[] | undefined;
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
-        // The overlapped Ollama call from above when there is one, the
-        // sequential call otherwise; same result either way.
-        const { phrases, resolved, abstained } = await (earlyTimeframes ??
-          extractTimeframes(text, provider, new Date(), timezone, controller.signal));
+        // With a roster the parse already copied the time phrases, so this
+        // makes no extraction model call of its own (refs #434): scan union,
+        // provenance, containment dedup, and the cached interpreter calls
+        // run on the parsed phrases. A roster-less turn (verdict.when
+        // undefined) keeps the old extraction call.
+        const { phrases, resolved, abstained } = await extractTimeframes(
+          text,
+          provider,
+          new Date(),
+          timezone,
+          controller.signal,
+          verdict.when,
+        );
         if (abstained) {
           append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });
           return;

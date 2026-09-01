@@ -2191,9 +2191,13 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    own place words, copied), ``covered`` (a boolean, because a name enum
    cannot express abstention), ``monitors`` (an ARRAY over the real names,
    because "front of my house" means several monitors), ``subject``
-   (events/monitors/server/groups/other), and ``objects`` (an array over the
+   (events/monitors/server/groups/other), ``objects`` (an array over the
    recorded labels, so "folks" or "Leute" land on ``person`` in any
-   language). ``parseTriageSlots`` derives everything in code: a place
+   language), and ``when`` (the time phrases, copied verbatim - the separate
+   extraction model call and its Ollama overlap are gone on this lane, refs
+   #434; ``extractTimeframes`` unions the parsed phrases with its scan,
+   drops any phrase contained in a longer one, and interprets as before,
+   keeping its own extraction call only for roster-less turns). ``parseTriageSlots`` derives everything in code: a place
    ``covered`` denies with nothing named is ``noMatch``, a place that is only
    time words is none, a contradiction (``covered`` false while real names
    are filled in, observed live, refs #430) leaves the slots unset rather
