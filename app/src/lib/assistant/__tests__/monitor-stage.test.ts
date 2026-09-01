@@ -31,6 +31,31 @@ describe('scanMonitorMentions', () => {
     expect(scanMonitorMentions('how many people came by yesterday', roster)).toEqual([]);
   });
 
+  // Refs #430, observed live: "front of my door" is not a contiguous
+  // substring of any name, so the substring pass missed FrontDoor and the
+  // turn fell to the model, which contradicted itself. Every token of a
+  // name appearing in the question is just as deterministic a signal.
+  it('matches a name whose tokens all appear in the question, words intervening', () => {
+    expect(scanMonitorMentions('how many people came to the front of my door yesterday?', roster)).toEqual([
+      { id: '3', name: 'Front Door' },
+    ]);
+  });
+
+  it('splits camelCase names into tokens', () => {
+    const camel = [{ id: '7', name: 'FrontDoor' }];
+    expect(scanMonitorMentions('anything at the front of the door?', camel)).toEqual([{ id: '7', name: 'FrontDoor' }]);
+  });
+
+  // "Front Yard" shares the "front" token; only a full token set matches.
+  it('does not match a name when only some of its tokens appear', () => {
+    const yards = [{ id: '8', name: 'Front Yard' }];
+    expect(scanMonitorMentions('who came to the front of my door', yards)).toEqual([]);
+  });
+
+  it('does not token-match on partial words', () => {
+    expect(scanMonitorMentions('the doorbell rang out front', roster)).toEqual([]);
+  });
+
   // A monitor whose name normalizes to '' (all punctuation) must never match
   // every question by matching the empty string.
   it('ignores a monitor whose normalized name is empty', () => {

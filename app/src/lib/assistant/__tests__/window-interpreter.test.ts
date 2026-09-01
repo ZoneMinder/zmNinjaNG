@@ -59,6 +59,36 @@ describe('interpretWhen', () => {
     expect(result).toMatchObject({ error: expect.stringContaining('right now') });
   });
 
+  // Refs #430, observed live: one transient provider failure during the
+  // pre-warm (overlapped since #429) was written into the per-day cache, so
+  // the tool round's "yesterday" served the cached error and its own "Retry"
+  // advice could never work. A transient failure is not a property of the
+  // phrase; only real interpretations are worth a day of reuse.
+  it('does not cache a provider failure: the next call asks the model again', async () => {
+    const complete = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('server busy'))
+      .mockResolvedValue({ text: '{"daysAgo": 1}' });
+    const p = { complete } as unknown as AssistantProvider;
+
+    const first = await interpretWhen('yesterday', p, NOW, 'UTC', new AbortController().signal);
+    expect(first).toHaveProperty('error');
+    const second = await interpretWhen('yesterday', p, NOW, 'UTC', new AbortController().signal);
+    expect(second).toEqual({ daysAgo: 1 });
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache an unparseable reply either', async () => {
+    const complete = vi
+      .fn()
+      .mockResolvedValueOnce({ text: 'no json here' })
+      .mockResolvedValue({ text: '{"daysAgo": 1}' });
+    const p = { complete } as unknown as AssistantProvider;
+
+    expect(await interpretWhen('yesterday', p, NOW, 'UTC', new AbortController().signal)).toHaveProperty('error');
+    expect(await interpretWhen('yesterday', p, NOW, 'UTC', new AbortController().signal)).toEqual({ daysAgo: 1 });
+  });
+
   it('caches per phrase and calendar day, so repeats cost nothing', async () => {
     const p = providerSaying('{"daysAgo": 0}');
     await interpretWhen('today', p, NOW, 'UTC', new AbortController().signal);

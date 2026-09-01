@@ -78,19 +78,37 @@ export async function getMonitorRoster(profileId: string): Promise<MonitorRoster
   }
 }
 
+/** A name or question as lowercase word tokens: camelCase seams split
+ *  ("FrontDoor" -> front, door) and anything non-alphanumeric separates.
+ *  Token EQUALITY is the match unit, so "doorbell" never matches "door". */
+function wordTokens(value: string): string[] {
+  return value
+    .replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2')
+    .split(/[^\p{L}\p{N}]+/u)
+    .map((token) => token.toLowerCase())
+    .filter((token) => token.length > 0);
+}
+
 /**
  * Every monitor whose name appears in the question, in roster order.
  *
- * Matches on the same normalized key `resolveMonitorRef` uses for
- * model-supplied names, so "FRONTDOOR" and "front-door" both find "Front
- * Door". A name that normalizes to '' never matches: the empty string is a
- * substring of everything.
+ * Two deterministic passes, either one a hit (refs #430):
+ * - The whole name as a contiguous substring, on the same normalized key
+ *   `resolveMonitorRef` uses for model-supplied names, so "FRONTDOOR" and
+ *   "front-door" both find "Front Door". A name that normalizes to '' never
+ *   matches: the empty string is a substring of everything.
+ * - Every token of the name present among the question's tokens, so "front
+ *   of my door" still finds "FrontDoor" with words intervening. All tokens,
+ *   not some: "front of my door" must not match "Front Yard".
  */
 export function scanMonitorMentions(question: string, roster: MonitorRosterEntry[]): MonitorRosterEntry[] {
   const haystack = normalizeMonitorName(question);
+  const questionTokens = new Set(wordTokens(question));
   return roster.filter((entry) => {
     const needle = normalizeMonitorName(entry.name);
-    return needle.length > 0 && haystack.includes(needle);
+    if (needle.length > 0 && haystack.includes(needle)) return true;
+    const tokens = wordTokens(entry.name);
+    return tokens.length > 0 && tokens.every((token) => questionTokens.has(token));
   });
 }
 

@@ -247,6 +247,25 @@ describe('classifyRequest with a monitor roster', () => {
     expect(verdict).toEqual({ kind: 'zoneminder', monitor: 'NONE' });
   });
 
+  // Refs #430, observed live: {"place":"front of my door","covered":false,
+  // "monitor":"FrontDoor"}: the model denied coverage while naming the
+  // right monitor. A contradictory verdict is uncertainty, and asserting
+  // "no camera covers that place" about a camera the model itself named is
+  // the worst outcome; NONE (no injected line) is the safe read.
+  it('resolves a covered:false verdict that still names a real monitor to NONE', async () => {
+    const provider = providerSaying('{"kind":"ZONEMINDER","place":"front of my door","covered":false,"monitor":"FrontDoor"}');
+    const verdict = await classifyRequest(
+      provider,
+      'how many people came to the front of my door yesterday?',
+      new AbortController().signal,
+      undefined,
+      undefined,
+      [],
+      ['FrontDoor', 'Garage Outdoor'],
+    );
+    expect(verdict).toEqual({ kind: 'zoneminder', monitor: 'NONE' });
+  });
+
   // An unconstrained backend can reply anything; a monitor value outside the
   // enum must arrive as undefined, never as a trusted name.
   it('drops a monitor value that is not in the roster', async () => {

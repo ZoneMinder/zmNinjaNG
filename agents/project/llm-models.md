@@ -88,7 +88,11 @@ after any prompt or provider change and put both scores in the PR.
   enum, with NO_MATCH derived in code from place+covered (21/24; the model
   still copies time words into `place`, stripped in code via
   `scanTimeExpressions`, and still calls a backyard covered by a garage
-  monitor - a nearby-outdoor-area substitution no wording fixed). llama3.2
+  monitor - a nearby-outdoor-area substitution no wording fixed). The model
+  also emits the CONTRADICTION `covered: false` with a real name in
+  `monitor` (observed live on a paraphrase, refs #430); the parser resolves
+  that to NONE, since asserting no-coverage about a monitor the model
+  itself named is the worst outcome. llama3.2
   scores 10/16 on the same stage: it answers `covered: true` for near
   places, so a wrong monitor can be pinned rather than abstained; qwen3:8b
   remains the recommended Ollama model.

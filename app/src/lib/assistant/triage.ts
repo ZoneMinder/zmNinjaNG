@@ -221,6 +221,12 @@ export function parseTriageMonitor(reply: string, monitors: readonly string[]): 
       return raw.monitor;
     }
     if (raw.covered === false) {
+      // A contradiction (coverage denied while a real roster name is filled
+      // in) is uncertainty, observed live: {"place":"front of my door",
+      // "covered":false,"monitor":"FrontDoor"} (refs #430). Asserting "no
+      // camera covers that place" about a monitor the model itself named is
+      // the worst outcome, so the verdict degrades to NONE: no line at all.
+      if (typeof raw.monitor === 'string' && monitors.includes(raw.monitor)) return MONITOR_NONE;
       const place = typeof raw.place === 'string' ? raw.place : '';
       // "summarize today" copied "today" into place (2/2 at temp 0), and the
       // prompt's "time words are not places" line did not stop it. Decidable
