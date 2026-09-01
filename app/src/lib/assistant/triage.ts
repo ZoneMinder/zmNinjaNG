@@ -22,7 +22,7 @@ import { log, LogLevel } from '../logger';
 import { isAbortError } from '../is-abort-error';
 import { buildContextualQuestion, type ParseContext } from './parse-context';
 
-export { buildContextualQuestion, latestExchange, type ParseContext } from './parse-context';
+export { buildContextualQuestion, prevTurnFromThread, type ParseContext, type PrevTurn } from './parse-context';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
 
@@ -40,6 +40,10 @@ const QUERY_SUBJECTS: readonly QuerySubject[] = ['events', 'monitors', 'server',
  *  measures 8/8 on the same cases. One question per judgment. */
 export interface TriageVerdict {
   kind: RequestKind;
+  /** The latest message continues the earlier exchange (refs #446): ONE
+   *  explicit judgment, decoded before every other field, and the only
+   *  thing that lets any context reach the coverage and time calls. */
+  continues?: boolean;
   subject?: QuerySubject;
   /** Recorded labels the question asks about ("folks" -> person). */
   objects?: string[];
@@ -129,8 +133,10 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
   ...(monitors.length > 0
     ? [
         ...(labels.length > 0 ? [`Detected object labels on this installation: ${labels.join(', ')}.`] : []),
-        'The message may arrive with an earlier exchange shown for context: classify the LATEST message',
-        'read in its light - a bare "yes", "do it", or a short follow-up continues that exchange\'s topic.',
+        '"continues" comes first: true ONLY when the LATEST message cannot be understood without the',
+        'earlier context (a bare "yes", "do it", "what about ..."). A message that is a complete question',
+        'by itself - naming its own place, time, or subject - is false, even on the same topic; and it is',
+        'always false when no earlier question is shown.',
         'Also fill these fields about the message, judged by meaning in any language:',
         '"subject": what the message asks about. events - what happened, who or what came by, was seen,',
         "detected, or counted. monitors - the camera list or a camera's state. server - health or whether",
@@ -176,11 +182,13 @@ export function buildTriageSchema(monitors: readonly string[], labels: readonly 
   return {
     type: 'object',
     properties: {
+      // Decoded first (refs #446): relatedness is one explicit judgment.
+      continues: { type: 'boolean' },
       kind: { type: 'string', enum: ['ZONEMINDER', 'ACTION', 'CHAT'] },
       subject: { type: 'string', enum: [...QUERY_SUBJECTS] },
       ...(labels.length > 0 ? { objects: { type: 'array', items: { type: 'string', enum: [...labels] } } } : {}),
     },
-    required: ['kind', 'subject', ...(labels.length > 0 ? ['objects'] : [])],
+    required: ['continues', 'kind', 'subject', ...(labels.length > 0 ? ['objects'] : [])],
     additionalProperties: false,
   };
 }
@@ -226,13 +234,14 @@ export function parseTriageSlots(
   labels: readonly string[] = [],
 ): Omit<TriageVerdict, 'kind'> {
   if (monitors.length === 0) return {};
-  let raw: { subject?: unknown; objects?: unknown };
+  let raw: { continues?: unknown; subject?: unknown; objects?: unknown };
   try {
     raw = JSON.parse(reply) as typeof raw;
   } catch {
     return {};
   }
   const slots: Omit<TriageVerdict, 'kind'> = {};
+  if (typeof raw.continues === 'boolean') slots.continues = raw.continues;
   if (typeof raw.subject === 'string' && (QUERY_SUBJECTS as readonly string[]).includes(raw.subject)) {
     slots.subject = raw.subject as QuerySubject;
   }

@@ -33,19 +33,24 @@ export interface MonitorRosterEntry {
   name: string;
 }
 
-/** What the question's place reference resolved to: a SET of real monitors
- *  ("front of my house" means several cameras, refs #432), a place no
+/** One resolved place group: its label (the question's own words) and the
+ *  monitors that watch it. "front vs back" is two groups (refs #446). */
+export interface MonitorGroup {
+  label: string;
+  monitors: MonitorRosterEntry[];
+}
+
+/** What the question's place references resolved to: place GROUPS (one for
+ *  most questions, several for a place comparison, refs #446), a place no
  *  monitor covers, or no place named at all. */
 export type MonitorMentionResolution =
-  | { kind: 'resolved'; monitors: MonitorRosterEntry[] }
+  | { kind: 'resolved'; groups: MonitorGroup[] }
   | { kind: 'no_match' }
   | { kind: 'none' };
 
-/** The camera slots one triage parse produced (a structural slice of
- *  triage.ts's TriageVerdict, restated here so the module graph stays
- *  acyclic: triage cannot be imported without importing what it imports). */
+/** The camera slots one coverage call produced. */
 export interface ParsedMonitorSlots {
-  monitors?: readonly string[];
+  groups?: Array<{ label: string; monitors: readonly string[] }>;
   noMatch?: boolean;
 }
 
@@ -130,11 +135,18 @@ export function resolveMonitorMention(
   slots: ParsedMonitorSlots,
   roster: MonitorRosterEntry[],
 ): MonitorMentionResolution {
-  if (scanHits.length > 0) return { kind: 'resolved', monitors: scanHits };
-  const named = (slots.monitors ?? [])
-    .map((name) => roster.find((entry) => entry.name === name))
-    .filter((entry): entry is MonitorRosterEntry => entry !== undefined);
-  if (named.length > 0) return { kind: 'resolved', monitors: named };
+  if (scanHits.length > 0) {
+    // Verbatim names are one group each: the user named those cameras.
+    return { kind: 'resolved', groups: scanHits.map((entry) => ({ label: entry.name, monitors: [entry] })) };
+  }
+  const groups: MonitorGroup[] = [];
+  for (const group of slots.groups ?? []) {
+    const named = group.monitors
+      .map((name) => roster.find((entry) => entry.name === name))
+      .filter((entry): entry is MonitorRosterEntry => entry !== undefined);
+    if (named.length > 0) groups.push({ label: group.label, monitors: named });
+  }
+  if (groups.length > 0) return { kind: 'resolved', groups };
   if (slots.noMatch) return { kind: 'no_match' };
   return { kind: 'none' };
 }
@@ -144,11 +156,12 @@ export function resolveMonitorMention(
  *  Model-facing (rule 5 exempt). */
 export function buildMonitorSystemLine(resolution: MonitorMentionResolution): string {
   if (resolution.kind === 'resolved') {
-    const listed = resolution.monitors.map((m) => `"${m.name}" (monitorId "${m.id}")`).join(', ');
-    const these = resolution.monitors.length === 1 ? 'this monitor' : 'these monitors';
+    const listed = resolution.groups
+      .map((group) => `${group.label} = ${group.monitors.map((m) => `"${m.name}" (monitorId "${m.id}")`).join(', ')}`)
+      .join('; ');
     return (
       `Monitors for this question, already resolved: ${listed}. ` +
-      `The place the question asks about is ${these}; pass the monitorId to event tools and attribute events to ${these} by name.`
+      'Attribute events to these monitors by name, under the place each belongs to.'
     );
   }
   if (resolution.kind === 'no_match') {
@@ -168,11 +181,12 @@ export function buildMonitorSystemLine(resolution: MonitorMentionResolution): st
  *  judgment. */
 export function buildCoveragePrompt(names: readonly string[]): string {
   return [
-    'You match a place in one message to the security cameras of a home. Reply with ONLY one JSON object.',
+    'You match the places in one message to the security cameras of a home. Reply with ONLY one JSON object.',
     `Cameras: ${names.join(', ')}.`,
-    'The message may include an earlier exchange for context: the place can come from it ("what about the garage?" after a garage answer).',
-    '"place": the exact place or camera words the message contains ("" when none; time words such as today or yesterday are not places).',
-    '"covered": true when a listed camera means that place, in any language, or the place is an area containing a camera\'s own area; false when "place" is "" or no listed camera truly watches it: a camera elsewhere on the property is false, never the closest one.',
+    'The message may include an earlier exchange for context: a place can come from it ("what about the garage?" after a garage answer).',
+    '"groups": one object per DISTINCT place the message asks about, in ANY language ("Haust\u00fcr" and "jardin" name places too); [] only when it truly names none (time words such as today or yesterday are not places). A message comparing two places ("the front vs the back") is two groups. Each group:',
+    '"place": that place\'s exact words from the message, copied.',
+    '"covered": true when a listed camera means that place, in any language, or the place is an area containing a camera\'s own area; false when no listed camera truly watches it: a camera elsewhere on the property is false, never the closest one.',
     '"monitors": every listed camera that watches the place or sits inside it ([] when "covered" is false).',
   ].join('\n');
 }
@@ -183,37 +197,57 @@ export function buildCoverageSchema(names: readonly string[]): Record<string, un
   return {
     type: 'object',
     properties: {
-      place: { type: 'string' },
-      covered: { type: 'boolean' },
-      monitors: { type: 'array', items: { type: 'string', enum: [...names] } },
+      groups: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            place: { type: 'string' },
+            covered: { type: 'boolean' },
+            monitors: { type: 'array', items: { type: 'string', enum: [...names] } },
+          },
+          required: ['place', 'covered', 'monitors'],
+          additionalProperties: false,
+        },
+      },
     },
-    required: ['place', 'covered', 'monitors'],
+    required: ['groups'],
     additionalProperties: false,
   };
 }
 
-/** The camera slots out of one coverage reply, every guard in code: names
- *  filtered to the roster; a contradiction (covered false with real names)
- *  and a whole-roster selection both leave the slots unset (refs #430,
- *  #432); a place that is only time words is no place. Bookkeeping over the
- *  constrained reply, not language rules. */
-export function deriveMonitorSlots(
-  raw: { place?: unknown; covered?: unknown; monitors?: unknown },
+/** The place groups out of one coverage reply, every guard in code and per
+ *  group (refs #430, #432, #446): names filtered to the roster; a
+ *  contradiction (covered false with real names) and a whole-roster
+ *  selection both drop that group; a place that is only time words is no
+ *  place. noMatch only when nothing resolved and some group named an
+ *  uncovered real place. */
+export function deriveMonitorGroups(
+  raw: { groups?: unknown },
   names: readonly string[],
 ): ParsedMonitorSlots {
-  const named = Array.isArray(raw.monitors)
-    ? raw.monitors.filter((m): m is string => typeof m === 'string' && names.includes(m))
-    : undefined;
-  if (raw.covered === true && named && named.length > 0) {
-    return named.length < names.length ? { monitors: named } : {};
+  if (!Array.isArray(raw.groups)) return {};
+  const groups: Array<{ label: string; monitors: string[] }> = [];
+  let sawUncoveredPlace = false;
+  for (const item of raw.groups) {
+    if (item === null || typeof item !== 'object') continue;
+    const g = item as { place?: unknown; covered?: unknown; monitors?: unknown };
+    const named = Array.isArray(g.monitors)
+      ? g.monitors.filter((m): m is string => typeof m === 'string' && names.includes(m))
+      : [];
+    if (g.covered === true && named.length > 0 && named.length < names.length) {
+      const label = typeof g.place === 'string' && g.place.trim().length > 0 ? g.place.trim() : `place ${groups.length + 1}`;
+      groups.push({ label, monitors: named });
+      continue;
+    }
+    if (g.covered === false && named.length === 0) {
+      const place = typeof g.place === 'string' ? g.place : '';
+      const rest = scanTimeExpressions(place).reduce((text, phrase) => text.replace(phrase, ' '), place);
+      if (/[\p{L}\p{N}]/u.test(rest)) sawUncoveredPlace = true;
+    }
   }
-  if (raw.covered === false) {
-    if (named && named.length > 0) return {};
-    const place = typeof raw.place === 'string' ? raw.place : '';
-    const rest = scanTimeExpressions(place).reduce((text, phrase) => text.replace(phrase, ' '), place);
-    return /[\p{L}\p{N}]/u.test(rest) ? { noMatch: true } : { monitors: [] };
-  }
-  return {};
+  if (groups.length > 0) return { groups };
+  return sawUncoveredPlace ? { noMatch: true } : { groups: [] };
 }
 
 /**
@@ -237,7 +271,7 @@ export async function resolveCoverage(
     if (result.exchange) {
       onTrace?.({ kind: 'exchange', exchange: { ...result.exchange, backend: `${result.exchange.backend} (coverage)` } });
     }
-    return deriveMonitorSlots(JSON.parse(sanitizeModelText(result.text, 'coverage')) as Record<string, unknown>, names);
+    return deriveMonitorGroups(JSON.parse(sanitizeModelText(result.text, 'coverage')) as Record<string, unknown>, names);
   } catch (error) {
     if (isAbortError(error)) throw error;
     log.assistant('Coverage call failed; running unpinned', LogLevel.WARN, {
@@ -245,4 +279,17 @@ export async function resolveCoverage(
     });
     return {};
   }
+}
+
+/**
+ * What the time call may inherit (refs #446): the follow-up context, except
+ * when coverage resolved a PLACE COMPARISON (two or more groups). Measured
+ * 2/2: handed the previous turn's period, the windows call splits a spatial
+ * comparison across time ("front today" vs "back last week"); a multi-group
+ * question compares places, so its period must come from the message alone.
+ * Deterministic bookkeeping over the model's own coverage output.
+ */
+export function contextForTimeCall<T>(followUp: T | undefined, resolution: MonitorMentionResolution): T | undefined {
+  if (resolution.kind === 'resolved' && resolution.groups.length >= 2) return undefined;
+  return followUp;
 }

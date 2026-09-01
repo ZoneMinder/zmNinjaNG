@@ -143,8 +143,9 @@ export interface ResolvedQuestionWindow {
 export interface TimeQuestionCase {
   /** The question fed to `resolveTimeframesFromQuestion`. */
   question: string;
-  /** Previous exchange, for follow-up and comparison cases (refs #444). */
-  context?: { user: string; assistant: string };
+  /** Previous turn's structured facts, for follow-up and comparison cases
+   *  (refs #444, #446). */
+  context?: { question: string; offer?: string; monitors?: string[]; periods?: string[] };
   /** Class label; defaults to 'question'. */
   cls?: string;
   /** Predicate over the RESOLVED windows. A question naming no time arrives
@@ -179,7 +180,7 @@ export const TIME_QUESTION_CASES: TimeQuestionCase[] = [
   { question: 'how was the rear of my house all this week?', ok: (ws) => oneOn(ws, '2026-07-13') },
   { question: 'who came at lunch 5 days ago', ok: (ws) => oneOn(ws, '2026-07-14') && bandedW(ws[0]) },
   // The copy pipeline's structural blind spot: a context comparison.
-  { question: 'compare to same day, last week', context: { user: 'hows today?', assistant: 'Today there were 5 events.' }, ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-19') && someOn(ws, '2026-07-12') },
+  { question: 'compare to same day, last week', context: { question: 'hows today?', periods: ['today'] }, ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-19') && someOn(ws, '2026-07-12') },
   // No time named: the default today window.
   { question: 'what cameras do I have', cls: 'no-time-default', ok: (ws) => oneOn(ws, '2026-07-19') },
   { question: 'is the server ok', cls: 'no-time-default', ok: (ws) => oneOn(ws, '2026-07-19') },

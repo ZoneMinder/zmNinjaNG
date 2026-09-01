@@ -1536,6 +1536,7 @@
     "gemini_background_blocked": "Gemini Nano 仅在 zmNinja 位于前台时运行。请重新打开应用后再试。",
     "gemini_quota_exceeded": "Gemini Nano 已达到今日设备端用量上限。请稍后再试，或改用 Ollama 服务器。",
     "gemini_rate_limited": "Gemini Nano 当前繁忙。请稍候再试。",
-    "ask_ninjii": "询问忍者"
+    "ask_ninjii": "询问忍者",
+    "continued_from_previous": "接续您上一个问题"
   }
 }

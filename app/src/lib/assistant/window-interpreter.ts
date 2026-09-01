@@ -287,7 +287,8 @@ export function buildQuestionWindowsPrompt(now: Date, timezone: string): string 
     // night) while the windows call needs them against rolling collapse.
     '"same day last week" or "a week ago today" -> {"daysAgo":7}: ONE single day, never a rolling span.',
     '"this/last <week, month, year>" means that CALENDAR unit, never a rolling span: "all this week" -> {"week":"this"}; "last month" -> the previous month as fromDate/toDate. Only a counted "past/last N <units>" is rolling. Your fields must express exactly what your own "meaning" sentence says.',
-    'A comparison means one window PER compared period: "compare to same day, last week" asked after a question about today is TWO windows - {"daysAgo":0} and {"daysAgo":7} - never one span covering both.',
+    'Windows are PERIODS only, never places. A question comparing two PLACES over one period ("how does the front compare to the back last week?") gets exactly ONE window: {"week":"last"}. Only a comparison of TWO PERIODS gets two windows: "compare to same day, last week" asked after a question about today is {"daysAgo":0} and {"daysAgo":7}, never one span covering both.',
+    'A bare "last week" with no day words is the whole calendar week, {"week":"last"} - never a single day and never a weekday.',
     'The question may include an earlier exchange for context: a comparison or follow-up can mean a period from that exchange plus a new one - emit BOTH as windows.',
     '"windows" is [] when the question names no time at all.',
     'Every window object starts with its own "meaning" sentence, then the fields. Each "meaning" names exactly ONE period ("today", "the same day one week back") - never the comparison or the question.',
