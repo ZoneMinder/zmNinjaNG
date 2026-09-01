@@ -1536,6 +1536,7 @@
     "gemini_background_blocked": "Gemini Nano only runs while zmNinja is on screen. Reopen the app and try again.",
     "gemini_quota_exceeded": "Gemini Nano has reached today's on-device usage limit. Try again later, or use an Ollama server.",
     "gemini_rate_limited": "Gemini Nano is busy right now. Wait a moment and try again.",
-    "ask_ninjii": "Ask Ninjii"
+    "ask_ninjii": "Ask Ninjii",
+    "continued_from_previous": "Continuing from your previous question"
   }
 }

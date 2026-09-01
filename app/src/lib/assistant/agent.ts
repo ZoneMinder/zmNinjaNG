@@ -9,7 +9,7 @@
  * talk its way past (see tools.ts for why the actions were removed).
  */
 import type { AssistantMessage, AssistantProvider, AssistantHost, DisplayEntity, TokenUsage, TraceEntry, ToolCall, ToolContext, ToolDefinition, ToolResult } from './types';
-import { mergePlannedEventResults, type PlannedToolCall } from './plan';
+import { mergePlannedEventResultsByGroup, type PlannedToolCall } from './plan';
 import { getToolByName, isWithheldToolName, TOOLS } from './tools';
 import { validateToolInput, objectQuestionMismatch, toolCallSignature, stripOmittedArgs, repairCountEventsInterval } from './tool-helpers';
 import { executeScoped } from './server-scope';
@@ -461,15 +461,19 @@ export async function runAssistantTurn(opts: RunOpts): Promise<AssistantMessage[
       results.push(await runOneCall(call));
     }
     turnDisplay.push(...results.flatMap((r) => r.display ?? []));
-    // A same-window fan-out reaches the model as ONE merged result
-    // (refs #436): handed the per-monitor results separately, it summed the
-    // totals itself and quoted one monitor's counts as the whole answer.
-    // The real calls stay in the trace and keep their signatures; only what
-    // the model is replayed changes.
-    const merged = mergePlannedEventResults(calls, results);
-    if (merged) toolOutputs.push(merged.result.output);
-    push({ role: 'assistant', toolCalls: merged ? [merged.call] : calls });
-    push({ role: 'tool', toolResults: merged ? [merged.result] : results });
+    // A same-window fan-out reaches the model merged PER PLACE GROUP
+    // (refs #436, #446): handed per-monitor results separately it summed
+    // totals itself and quoted one monitor's counts as the whole answer,
+    // and a place comparison must never merge across its own sides. The
+    // real calls stay in the trace and keep their signatures; only what the
+    // model is replayed changes.
+    const grouped = mergePlannedEventResultsByGroup(
+      calls.map((call, i) => ({ ...call, group: opts.plannedCalls?.[i]?.group })),
+      results,
+    );
+    if (grouped) for (const r of grouped.results) toolOutputs.push(r.output);
+    push({ role: 'assistant', toolCalls: grouped ? grouped.calls : calls });
+    push({ role: 'tool', toolResults: grouped ? grouped.results : results });
   }
 
   for (let i = 0; i < ASSISTANT.maxToolIterations; i++) {

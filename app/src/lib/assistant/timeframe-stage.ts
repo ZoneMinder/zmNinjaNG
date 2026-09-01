@@ -154,7 +154,15 @@ export async function resolveTimeframesFromQuestion(
   timezone: string,
   signal: AbortSignal,
   context?: ParseContext,
+  /** True for a PLACE comparison (coverage resolved several groups, refs
+   *  #446): the model emits one window per compared thing under every rule
+   *  wording measured (three, 2/2 each), so when the deterministic scan
+   *  sees the period, it decides alone and the windows call is skipped. */
+  preferScan = false,
 ): Promise<ExtractedTimeframes> {
+  if (preferScan && scanTimeExpressions(question).length > 0) {
+    return scanFallbackTimeframes(question, provider, now, timezone, signal);
+  }
   let windows: unknown[] = [];
   try {
     const reply = await provider.complete(
@@ -185,9 +193,15 @@ export async function resolveTimeframesFromQuestion(
     if (window === undefined || 'error' in window) continue;
     const meaning = typeof (item as { meaning?: unknown }).meaning === 'string' ? (item as { meaning: string }).meaning.trim() : '';
     const phrase = meaning.length > 0 ? meaning : `window ${index + 1}`;
+    // Deduped on the MEANING label and on the resolved range (refs #446): a
+    // model that emits one window per compared place produces identical
+    // periods under different labels, and duplicate windows would double
+    // the planned fan-out.
     const key = normalizeWhenPhrase(phrase);
-    if (seen.has(key)) continue;
+    const rangeKey = `${window.startDateTime}..${window.endDateTime}`;
+    if (seen.has(key) || seen.has(rangeKey)) continue;
     seen.add(key);
+    seen.add(rangeKey);
     resolved.push({ phrase, fields });
     seedInterpreterCache(phrase, fields, now, timezone);
   }

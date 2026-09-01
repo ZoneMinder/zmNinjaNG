@@ -12,20 +12,24 @@
  * nothing because it is the existing path.
  */
 import type { RequestKind, QuerySubject } from './triage';
-import type { MonitorRosterEntry } from './monitor-stage';
+import type { MonitorGroup } from './monitor-stage';
 import { ASSISTANT } from '../zmninja-ng-constants';
 import { buildResultSummary, type ResultWindow } from './result-summary';
 
 export interface PlannedToolCall {
   name: string;
   input: Record<string, unknown>;
+  /** The place group this call belongs to (refs #446): rides OUTSIDE the
+   *  input (tool schemas reject unknown args) and scopes the merge, so a
+   *  place comparison is never coalesced across its own sides. */
+  group?: string;
 }
 
 export interface QueryPlanInput {
   kind: RequestKind;
   subject?: QuerySubject;
-  /** Resolved monitor set; [] plans one unpinned query. */
-  monitors: MonitorRosterEntry[];
+  /** Resolved place groups (refs #446); [] plans one unpinned query. */
+  groups: MonitorGroup[];
   /** Recorded labels the question asks about; [] plans no object filter. */
   objects: string[];
   /** The timeframe stage's resolved phrases, one query window each. */
@@ -40,18 +44,24 @@ export function planToolCalls(q: QueryPlanInput): PlannedToolCall[] | null {
   if (q.subject !== 'events') return null;
   if (q.phrases.length === 0) return null;
 
-  const monitorSlots: Array<MonitorRosterEntry | undefined> = q.monitors.length > 0 ? q.monitors : [undefined];
+  const groupSlots: Array<{ label?: string; monitors: Array<{ id: string } | undefined> }> =
+    q.groups.length > 0
+      ? q.groups.map((g) => ({ label: g.label, monitors: g.monitors }))
+      : [{ monitors: [undefined] }];
   const calls: PlannedToolCall[] = [];
   for (const phrase of q.phrases) {
-    for (const monitor of monitorSlots) {
-      calls.push({
-        name: 'list_events',
-        input: {
-          when: phrase,
-          ...(monitor ? { monitorId: monitor.id } : {}),
-          ...(q.objects.length > 0 ? { objectType: q.objects.length === 1 ? q.objects[0] : q.objects } : {}),
-        },
-      });
+    for (const group of groupSlots) {
+      for (const monitor of group.monitors) {
+        calls.push({
+          name: 'list_events',
+          input: {
+            when: phrase,
+            ...(monitor ? { monitorId: monitor.id } : {}),
+            ...(q.objects.length > 0 ? { objectType: q.objects.length === 1 ? q.objects[0] : q.objects } : {}),
+          },
+          ...(group.label ? { group: group.label } : {}),
+        });
+      }
     }
   }
   // phrases x monitors can explode ("compare every camera may to june"); past
@@ -155,4 +165,62 @@ export function mergePlannedEventResults(
     call: { id: 'planned-1', name: 'list_events', input: sharedInput },
     result: { callId: 'planned-1', output: JSON.stringify(body), isError: false },
   };
+}
+
+/**
+ * The per-group merge (refs #446): partitions same-window planned calls by
+ * their place group and merges each partition, labeling every merged result
+ * with its group so a place comparison keeps its sides. Null when nothing
+ * merges beyond what mergePlannedEventResults would do alone.
+ */
+export function mergePlannedEventResultsByGroup(
+  calls: ReadonlyArray<{ id?: string; name: string; input: Record<string, unknown>; group?: string }>,
+  results: ReadonlyArray<{ callId?: string; output: string; isError?: boolean }>,
+): { calls: Array<{ id: string; name: string; input: Record<string, unknown> }>; results: Array<{ callId: string; output: string; isError: false }> } | null {
+  if (calls.length !== results.length || calls.length === 0) return null;
+  const keys = calls.map((c) => `${c.group ?? ''}::${JSON.stringify({ when: c.input.when, objectType: c.input.objectType })}`);
+  const order: string[] = [];
+  const byKey = new Map<string, number[]>();
+  keys.forEach((key, i) => {
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(i);
+  });
+  if (order.length === calls.length) return null; // nothing to merge
+
+  const outCalls: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+  const outResults: Array<{ callId: string; output: string; isError: false }> = [];
+  for (const key of order) {
+    const indexes = byKey.get(key)!;
+    const partCalls = indexes.map((i) => calls[i]);
+    const partResults = indexes.map((i) => results[i]);
+    const id = `planned-${outCalls.length + 1}`;
+    const group = partCalls[0].group;
+    if (partCalls.length === 1) {
+      const r = partResults[0];
+      if (r.isError) return null; // keep originals: an error must reach the model as itself
+      outCalls.push({ id, name: partCalls[0].name, input: partCalls[0].input });
+      outResults.push({ callId: id, output: labelOutput(r.output, group), isError: false });
+      continue;
+    }
+    const merged = mergePlannedEventResults(partCalls, partResults);
+    if (!merged) return null;
+    outCalls.push({ ...merged.call, id });
+    outResults.push({ callId: id, output: labelOutput(merged.result.output, group), isError: false });
+  }
+  return { calls: outCalls, results: outResults };
+}
+
+/** Stamps the group label into a result body as `place`, so the answer
+ *  model attributes each side of a comparison honestly. */
+function labelOutput(output: string, group: string | undefined): string {
+  if (!group) return output;
+  try {
+    const body = JSON.parse(output) as Record<string, unknown>;
+    return JSON.stringify({ place: group, ...body });
+  } catch {
+    return output;
+  }
 }

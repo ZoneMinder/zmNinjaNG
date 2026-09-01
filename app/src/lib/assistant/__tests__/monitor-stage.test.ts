@@ -1,6 +1,16 @@
-import { describe, it, expect } from 'vitest';
-import { scanMonitorMentions, resolveMonitorMention, buildMonitorSystemLine } from '../monitor-stage';
+import { describe, it, expect, vi } from 'vitest';
+import {
+  scanMonitorMentions,
+  resolveMonitorMention,
+  buildMonitorSystemLine,
+  resolveCoverage,
+  buildCoveragePrompt,
+  buildCoverageSchema,
+  deriveMonitorGroups,
+} from '../monitor-stage';
 import type { MonitorRosterEntry } from '../monitor-stage';
+import type { AssistantProvider } from '../types';
+import { contextForTimeCall } from '../monitor-stage';
 
 const roster: MonitorRosterEntry[] = [
   { id: '1', name: 'Garage Outdoor' },
@@ -63,55 +73,155 @@ describe('scanMonitorMentions', () => {
   });
 });
 
+
+/**
+ * The dedicated coverage call (refs #438, groups refs #446): one focused
+ * interrogation returning PLACE GROUPS, so "front vs back" resolves two
+ * camera sets instead of bending into a time comparison.
+ */
+describe('coverage call', () => {
+  const roster = [
+    { id: '2', name: 'Backyard(JPEG)' },
+    { id: '3', name: 'FrontDoor' },
+    { id: '4', name: 'Front Yard' },
+  ];
+
+  it('sends the focused prompt and constrained schema, deriving the groups', async () => {
+    const provider = {
+      complete: vi.fn().mockResolvedValue({
+        text: '{"groups":[{"place":"front of my house","covered":true,"monitors":["FrontDoor","Front Yard"]},{"place":"back of my house","covered":true,"monitors":["Backyard(JPEG)"]}]}',
+      }),
+    } as unknown as AssistantProvider;
+    const slots = await resolveCoverage(
+      'how does the front of my house compare to the back of my house last week?',
+      roster,
+      provider,
+      new AbortController().signal,
+    );
+
+    const [system, , , schema] = vi.mocked(provider.complete).mock.calls[0];
+    expect(system).toBe(buildCoveragePrompt(roster.map((m) => m.name)));
+    expect(system).toContain('Backyard(JPEG), FrontDoor, Front Yard');
+    expect(schema).toEqual(buildCoverageSchema(roster.map((m) => m.name)));
+    expect(slots).toEqual({
+      groups: [
+        { label: 'front of my house', monitors: ['FrontDoor', 'Front Yard'] },
+        { label: 'back of my house', monitors: ['Backyard(JPEG)'] },
+      ],
+    });
+  });
+
+  it('degrades to empty slots when the call fails', async () => {
+    const provider = { complete: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as AssistantProvider;
+    await expect(resolveCoverage('q', roster, provider, new AbortController().signal)).resolves.toEqual({});
+  });
+
+  it('wraps the question with structured context', async () => {
+    const provider = {
+      complete: vi.fn().mockResolvedValue({ text: '{"groups":[{"place":"garage","covered":true,"monitors":["FrontDoor"]}]}' }),
+    } as unknown as AssistantProvider;
+    await resolveCoverage('what about the garage?', roster, provider, new AbortController().signal, undefined, {
+      question: 'how was the rear this week?',
+      monitors: ['Backyard(JPEG)'],
+    });
+    const [, question] = vi.mocked(provider.complete).mock.calls[0];
+    expect(question).toContain('how was the rear this week?');
+    expect((question as string).trim().endsWith('what about the garage?')).toBe(true);
+  });
+});
+
+/** The derivation guards, per group, in code (refs #430, #432, #446). */
+describe('deriveMonitorGroups', () => {
+  const names = ['FrontDoor', 'Garage Outdoor'];
+
+  it('maps covered groups, derives noMatch, and drops junk', () => {
+    expect(
+      deriveMonitorGroups({ groups: [{ place: 'front door', covered: true, monitors: ['FrontDoor'] }] }, names),
+    ).toEqual({ groups: [{ label: 'front door', monitors: ['FrontDoor'] }] });
+    expect(
+      deriveMonitorGroups({ groups: [{ place: 'basement stairs', covered: false, monitors: [] }] }, names),
+    ).toEqual({ noMatch: true });
+    expect(deriveMonitorGroups({ groups: [] }, names)).toEqual({ groups: [] });
+    expect(
+      deriveMonitorGroups({ groups: [{ place: 'x', covered: true, monitors: ['Bogus'] }] }, names),
+    ).toEqual({ groups: [] });
+  });
+
+  it('keeps the contradiction and whole-roster guards per group', () => {
+    expect(
+      deriveMonitorGroups({ groups: [{ place: 'front door', covered: false, monitors: ['FrontDoor'] }] }, names),
+    ).toEqual({ groups: [] });
+    expect(
+      deriveMonitorGroups({ groups: [{ place: 'front door', covered: true, monitors: names }] }, names),
+    ).toEqual({ groups: [] });
+  });
+
+  it('a resolvable group wins over a sibling no-cover place', () => {
+    expect(
+      deriveMonitorGroups(
+        { groups: [{ place: 'front', covered: true, monitors: ['FrontDoor'] }, { place: 'moon', covered: false, monitors: [] }] },
+        names,
+      ),
+    ).toEqual({ groups: [{ label: 'front', monitors: ['FrontDoor'] }] });
+  });
+});
+
 describe('resolveMonitorMention', () => {
-  it('resolves scan hits deterministically, ignoring the model verdict', () => {
+  const roster = [
+    { id: '1', name: 'Garage Outdoor' },
+    { id: '2', name: 'Driveway' },
+    { id: '3', name: 'Front Door' },
+  ];
+
+  it('resolves scan hits as one group, ignoring the model verdict', () => {
     expect(resolveMonitorMention([roster[1]], { noMatch: true }, roster)).toEqual({
       kind: 'resolved',
-      monitors: [roster[1]],
+      groups: [{ label: 'Driveway', monitors: [roster[1]] }],
     });
   });
 
-  // Several named monitors are a SET now (refs #432): "compare front door
-  // and driveway" pins both, one planned call each.
-  it('resolves multiple scan hits as a set', () => {
-    expect(resolveMonitorMention([roster[0], roster[1]], {}, roster)).toEqual({
-      kind: 'resolved',
-      monitors: [roster[0], roster[1]],
-    });
-  });
-
-  it('maps the verdict monitor names to roster entries', () => {
+  it('maps verdict groups to roster entries', () => {
     expect(
-      resolveMonitorMention([], { monitors: ['Garage Outdoor', 'Driveway'] }, roster),
-    ).toEqual({ kind: 'resolved', monitors: [roster[0], roster[1]] });
+      resolveMonitorMention(
+        [],
+        { groups: [{ label: 'front', monitors: ['Front Door'] }, { label: 'drive', monitors: ['Driveway'] }] },
+        roster,
+      ),
+    ).toEqual({
+      kind: 'resolved',
+      groups: [
+        { label: 'front', monitors: [roster[2]] },
+        { label: 'drive', monitors: [roster[1]] },
+      ],
+    });
   });
 
   it('maps noMatch to no_match and an empty verdict to none', () => {
     expect(resolveMonitorMention([], { noMatch: true }, roster)).toEqual({ kind: 'no_match' });
-    expect(resolveMonitorMention([], { monitors: [] }, roster)).toEqual({ kind: 'none' });
+    expect(resolveMonitorMention([], { groups: [] }, roster)).toEqual({ kind: 'none' });
     expect(resolveMonitorMention([], {}, roster)).toEqual({ kind: 'none' });
-  });
-
-  it('drops verdict names that are not in the roster', () => {
-    expect(resolveMonitorMention([], { monitors: ['Backyard'] }, roster)).toEqual({
-      kind: 'none',
-    });
   });
 });
 
 describe('buildMonitorSystemLine', () => {
-  it('names one resolved monitor and its id', () => {
-    const line = buildMonitorSystemLine({ kind: 'resolved', monitors: [roster[1]] });
-    expect(line).toContain('"2"');
-    expect(line).toContain('Driveway');
-    expect(line).toContain('monitorId');
-  });
+  const roster = [
+    { id: '1', name: 'Garage Outdoor' },
+    { id: '2', name: 'Driveway' },
+    { id: '3', name: 'Front Door' },
+  ];
 
-  it('names every monitor of a resolved set', () => {
-    const line = buildMonitorSystemLine({ kind: 'resolved', monitors: [roster[1], roster[2]] });
-    expect(line).toContain('Driveway');
-    expect(line).toContain('Front Door');
+  it('names every group with its monitors and ids', () => {
+    const line = buildMonitorSystemLine({
+      kind: 'resolved',
+      groups: [
+        { label: 'front of my house', monitors: [roster[2]] },
+        { label: 'back of my house', monitors: [roster[0]] },
+      ],
+    });
+    expect(line).toContain('front of my house');
+    expect(line).toContain('back of my house');
     expect(line).toContain('"3"');
+    expect(line).toContain('Front Door');
   });
 
   it('tells the model no camera covers the named place on no_match', () => {
@@ -125,87 +235,21 @@ describe('buildMonitorSystemLine', () => {
   });
 });
 
-import { resolveCoverage, buildCoveragePrompt, buildCoverageSchema, deriveMonitorSlots } from '../monitor-stage';
-import type { AssistantProvider } from '../types';
-import { vi } from 'vitest';
+/** Refs #446: a place comparison (two groups) keeps the previous turn's
+ *  period away from the time call - measured 2/2, the windows call
+ *  otherwise splits the spatial comparison across time. */
+describe('contextForTimeCall', () => {
+  const ctx = { question: 'hows the day?', periods: ['today'] };
+  const entry = { id: '1', name: 'FrontDoor' };
 
-/**
- * The dedicated coverage call (refs #438). Judged inside the consolidated
- * parse prompt, place coverage failed live twice ("rear of my house" ->
- * NO_MATCH with a Backyard camera present) and every rewording rotated the
- * failures; the same model on this focused prompt measures 8/8 across every
- * failure case. One question per judgment.
- */
-describe('coverage call', () => {
-  const roster = [
-    { id: '2', name: 'Backyard(JPEG)' },
-    { id: '3', name: 'FrontDoor' },
-  ];
-
-  it('sends the focused prompt and constrained schema, deriving the slots', async () => {
-    const provider = {
-      complete: vi.fn().mockResolvedValue({ text: '{"place":"rear of my house","covered":true,"monitors":["Backyard(JPEG)"]}' }),
-    } as unknown as AssistantProvider;
-    const slots = await resolveCoverage('how was the rear of my house all this week?', roster, provider, new AbortController().signal);
-
-    const [system, question, , schema] = vi.mocked(provider.complete).mock.calls[0];
-    expect(system).toBe(buildCoveragePrompt(roster.map((m) => m.name)));
-    expect(system).toContain('Backyard(JPEG), FrontDoor');
-    expect(question).toBe('how was the rear of my house all this week?');
-    expect(schema).toEqual(buildCoverageSchema(roster.map((m) => m.name)));
-    expect(slots).toEqual({ monitors: ['Backyard(JPEG)'] });
+  it('withholds context from a multi-group place comparison', () => {
+    expect(
+      contextForTimeCall(ctx, { kind: 'resolved', groups: [{ label: 'a', monitors: [entry] }, { label: 'b', monitors: [entry] }] }),
+    ).toBeUndefined();
   });
 
-  it('degrades to empty slots when the call fails', async () => {
-    const provider = { complete: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as AssistantProvider;
-    await expect(resolveCoverage('q', roster, provider, new AbortController().signal)).resolves.toEqual({});
-  });
-});
-
-/** The derivation guards live on, in code: they are bookkeeping over the
- *  constrained reply, not language rules (refs #430, #432, #438). */
-describe('deriveMonitorSlots', () => {
-  const names = ['FrontDoor', 'Garage Outdoor'];
-
-  it('maps covered names, derives noMatch, and drops junk', () => {
-    expect(deriveMonitorSlots({ place: 'front door', covered: true, monitors: ['FrontDoor'] }, names)).toEqual({
-      monitors: ['FrontDoor'],
-    });
-    expect(deriveMonitorSlots({ place: 'basement stairs', covered: false, monitors: [] }, names)).toEqual({
-      noMatch: true,
-    });
-    expect(deriveMonitorSlots({ place: '', covered: false, monitors: [] }, names)).toEqual({ monitors: [] });
-    expect(deriveMonitorSlots({ place: 'x', covered: true, monitors: ['Bogus'] }, names)).toEqual({});
-  });
-
-  it('keeps the contradiction and whole-roster guards', () => {
-    expect(deriveMonitorSlots({ place: 'front door', covered: false, monitors: ['FrontDoor'] }, names)).toEqual({});
-    expect(deriveMonitorSlots({ place: 'front door', covered: true, monitors: names }, names)).toEqual({});
-  });
-
-  it('treats a time-word place as no place', () => {
-    expect(deriveMonitorSlots({ place: 'today', covered: false, monitors: [] }, names)).toEqual({ monitors: [] });
-  });
-});
-
-/** Refs #440: a follow-up's place lives in the previous exchange. */
-describe('resolveCoverage with context', () => {
-  it('wraps the question with the previous exchange', async () => {
-    const provider = {
-      complete: vi.fn().mockResolvedValue({ text: '{"place":"garage","covered":true,"monitors":["Garage Outdoor"]}' }),
-    } as unknown as AssistantProvider;
-    const roster = [{ id: '5', name: 'Garage Outdoor' }, { id: '2', name: 'Backyard(JPEG)' }];
-    const slots = await resolveCoverage(
-      'what about the garage?',
-      roster,
-      provider,
-      new AbortController().signal,
-      undefined,
-      { user: 'how was the rear this week?', assistant: 'Backyard had 86 events.' },
-    );
-    const [, question] = vi.mocked(provider.complete).mock.calls[0];
-    expect(question).toContain('how was the rear this week?');
-    expect((question as string).trim().endsWith('what about the garage?')).toBe(true);
-    expect(slots).toEqual({ monitors: ['Garage Outdoor'] });
+  it('passes context through for single-group and unresolved turns', () => {
+    expect(contextForTimeCall(ctx, { kind: 'resolved', groups: [{ label: 'a', monitors: [entry] }] })).toBe(ctx);
+    expect(contextForTimeCall(ctx, { kind: 'none' })).toBe(ctx);
   });
 });

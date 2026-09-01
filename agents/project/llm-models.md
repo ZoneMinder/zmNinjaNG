@@ -106,6 +106,14 @@ after any prompt or provider change and put both scores in the PR.
   schema change. The fix is structural, not wording: a whole-roster
   selection leaves the slot unset, since it pins nothing an unpinned query
   lacks and is the false-cover signature.
+- Some judgments stay wrong under every wording, and the fix is a code
+  gate over the model's OWN structured output (refs #446): `continues`
+  calls a standalone place comparison a follow-up (2/2, two wordings), and
+  the windows call emits one window per compared PLACE (2/2 under three
+  wordings) - so a coverage result of two or more groups deterministically
+  withholds the previous period and hands timing to the scan floor.
+  Context is structured facts, never answer prose: the model mined "truck",
+  "Front Yard", and "today" out of answers in three live transcripts.
 - One question per judgment beats one consolidated call (refs #438,
   measured 2026-09): place coverage judged inside the full parse prompt
   failed live ("rear of my house" -> no-coverage with a Backyard monitor

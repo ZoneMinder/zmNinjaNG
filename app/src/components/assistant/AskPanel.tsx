@@ -45,10 +45,10 @@ import { TOOLS, specializeToolSchemas, withServerArg } from '../../lib/assistant
 import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { resolveTimeframesFromQuestion, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
-import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, resolveCoverage, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
+import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, resolveCoverage, buildMonitorSystemLine, contextForTimeCall } from '../../lib/assistant/monitor-stage';
 import { planToolCalls, type PlannedToolCall } from '../../lib/assistant/plan';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
-import { classifyRequest, buildNoToolPrompt, latestExchange, type RequestKind } from '../../lib/assistant/triage';
+import { classifyRequest, buildNoToolPrompt, prevTurnFromThread, type PrevTurn, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
 import { log, LogLevel } from '../../lib/logger';
 import { getSecureValue } from '../../lib/security/secureStorage';
@@ -404,6 +404,10 @@ export function AskPanel() {
     }
   })();
   const abortControllerRef = useRef<AbortController | null>(null);
+  /** The slots the previous turn resolved (refs #446), merged into the
+   *  thread-derived question/offer to form the structured context a
+   *  declared follow-up may inherit. Session-local by design. */
+  const prevTurnSlotsRef = useRef<{ profileId: string; monitors?: string[]; periods?: string[] } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevThreadLengthRef = useRef(thread.length);
 
@@ -611,6 +615,16 @@ export function AskPanel() {
           ),
       };
       const history = useAssistantStore.getState().getThread(profileId);
+      // The previous turn's STRUCTURED facts (refs #446): the thread gives
+      // the question and any closing offer; the slots the last run resolved
+      // ride the ref below. Never answer prose - the model mined "truck",
+      // "Front Yard", and "today" out of it across three live transcripts.
+      const prevTurn: PrevTurn | undefined = (() => {
+        const base = prevTurnFromThread(history);
+        if (!base) return undefined;
+        const slots = prevTurnSlotsRef.current;
+        return slots && slots.profileId === profileId ? { ...base, monitors: slots.monitors, periods: slots.periods } : base;
+      })();
 
       // Classify BEFORE the tool loop sees the request (refs #246). A small
       // model handed nine tools uses one whether or not the question calls for
@@ -654,13 +668,18 @@ export function AskPanel() {
             serverNames,
             monitorRoster.map((m) => m.name),
             monitorRoster.length > 0 ? objectLabels : [],
-            // The previous exchange, so "yes" and "how today looking?"
-            // classify with their topic (refs #440).
-            latestExchange(history),
+            // The previous turn, so "yes" and "how today looking?" classify
+            // with their topic - and so `continues` can be judged (refs #446).
+            prevTurn,
           );
       const kind: RequestKind = verdict.kind;
+      // The relatedness gate (refs #446): only a declared follow-up lets ANY
+      // context reach the coverage and time calls. A standalone question
+      // cannot inherit stale slots, structurally.
+      const followUp = verdict.continues === true ? prevTurn : undefined;
       log.assistant('Request classified', LogLevel.DEBUG, {
         kind,
+        continues: verdict.continues,
         subject: verdict.subject,
         objects: verdict.objects,
       });
@@ -676,28 +695,9 @@ export function AskPanel() {
       // meant for the answer.
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
       let plannedCalls: PlannedToolCall[] | undefined;
+      let turnPeriods: string[] | undefined;
+      let turnMonitors: string[] | undefined;
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
-        // The whole-question windows interrogation (refs #444), the same
-        // path on every backend: each period the question means arrives as a
-        // structured window, resolved in code and cache-seeded, so the tool
-        // round never re-interprets. Falls back to the deterministic scan
-        // floor inside the stage on any failure.
-        const { phrases, resolved, abstained } = await resolveTimeframesFromQuestion(
-          text,
-          provider,
-          new Date(),
-          timezone,
-          controller.signal,
-          latestExchange(history),
-        );
-        if (abstained) {
-          append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });
-          return;
-        }
-        ctx.allowedWhenPhrases = phrases;
-        ctx.resolvedTimeframes = resolved;
-        turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
-
         // Coverage is its own focused model call (refs #438): judged inside
         // the consolidated parse it failed live and every rewording rotated
         // the failures; this call measures 8/8 on the same cases. It runs
@@ -708,10 +708,39 @@ export function AskPanel() {
         // no place adds nothing.
         const coverageSlots =
           monitorScanHits.length === 0 && monitorRoster.length > 0
-            ? await resolveCoverage(text, monitorRoster, provider, controller.signal, collectTrace, latestExchange(history))
+            ? await resolveCoverage(text, monitorRoster, provider, controller.signal, collectTrace, followUp)
             : {};
         const resolution = resolveMonitorMention(monitorScanHits, coverageSlots, monitorRoster);
+        turnMonitors = resolution.kind === 'resolved' ? resolution.groups.flatMap((g) => g.monitors.map((m) => m.name)) : [];
         const monitorLine = buildMonitorSystemLine(resolution);
+
+
+        // The whole-question windows interrogation (refs #444), the same
+        // path on every backend: each period the question means arrives as a
+        // structured window, resolved in code and cache-seeded, so the tool
+        // round never re-interprets. Falls back to the deterministic scan
+        // floor inside the stage on any failure.
+        // Coverage runs FIRST (refs #446): a place comparison (two or more
+        // groups) proves the comparison is spatial, and contextForTimeCall
+        // then withholds the previous turn's period - measured 2/2, the
+        // windows call otherwise splits "front vs back" across time.
+        const { phrases, resolved, abstained } = await resolveTimeframesFromQuestion(
+          text,
+          provider,
+          new Date(),
+          timezone,
+          controller.signal,
+          contextForTimeCall(followUp, resolution),
+          resolution.kind === 'resolved' && resolution.groups.length >= 2,
+        );
+        if (abstained) {
+          append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });
+          return;
+        }
+        ctx.allowedWhenPhrases = phrases;
+        ctx.resolvedTimeframes = resolved;
+        turnPeriods = phrases;
+        turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
         if (monitorLine) turnSystem = `${turnSystem}\n${monitorLine}`;
 
         // The parse determines the tool calls where it can (refs #432): they
@@ -724,7 +753,7 @@ export function AskPanel() {
           planToolCalls({
             kind,
             subject: verdict.subject,
-            monitors: resolution.kind === 'resolved' ? resolution.monitors : [],
+            groups: resolution.kind === 'resolved' ? resolution.groups : [],
             objects: verdict.objects ?? [],
             phrases,
           }) ?? undefined;
@@ -759,14 +788,21 @@ export function AskPanel() {
       // whole turn (every iteration's `host.onActivity` call), not just the
       // last one, since `clearActivities` below only runs once the turn ends.
       const turnActivities = useAssistantStore.getState().activities;
-      if (turnActivities.length > 0) {
-        for (let i = newMessages.length - 1; i >= 0; i--) {
-          if (newMessages[i].role === 'assistant') {
-            newMessages[i] = { ...newMessages[i], steps: turnActivities };
-            break;
-          }
+      for (let i = newMessages.length - 1; i >= 0; i--) {
+        if (newMessages[i].role === 'assistant') {
+          newMessages[i] = {
+            ...newMessages[i],
+            ...(turnActivities.length > 0 ? { steps: turnActivities } : {}),
+            // The relatedness verdict, surfaced (refs #446): a subdued
+            // status renders above a continuation answer; its absence marks
+            // a fresh topic.
+            ...(verdict.continues === true ? { continued: true } : {}),
+          };
+          break;
         }
       }
+      // What the NEXT turn may inherit, if it declares itself a follow-up.
+      prevTurnSlotsRef.current = { profileId, monitors: turnMonitors, periods: turnPeriods };
 
       newMessages.forEach((m) => append(profileId, m));
       // Clear the live activity trace now that it has been captured onto the
@@ -913,6 +949,11 @@ export function AskPanel() {
                   msg.role === 'user' ? 'ml-auto bg-primary text-primary-foreground' : 'bg-muted',
                 )}
               >
+                {msg.role === 'assistant' && msg.continued && (
+                  <p className="mb-1 text-xs italic text-muted-foreground" data-testid="assistant-continued">
+                    {t('assistant.continued_from_previous')}
+                  </p>
+                )}
                 {msg.role === 'user' ? <p>{msg.text}</p> : renderAssistantText(msg, t)}
                 {msg.role === 'assistant' && msg.trace && msg.trace.length > 0 && (
                   <ModelTranscript trace={msg.trace} t={t} />

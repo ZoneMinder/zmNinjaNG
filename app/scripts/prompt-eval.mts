@@ -571,11 +571,13 @@ const PARSE_LABELS = ['car', 'person', 'truck'];
 const R_PLAIN = ['Garage Outdoor', 'Driveway'];
 interface ParseCase {
   q: string;
-  /** Previous exchange to classify in light of (refs #440). */
-  context?: { user: string; assistant: string };
+  /** Previous turn's structured facts (refs #440, #446). */
+  context?: { question: string; offer?: string; monitors?: string[]; periods?: string[] };
   kind: string;
   subject?: string;
   objects?: string[];
+  /** Expected relatedness verdict (refs #446). */
+  continues?: boolean;
 }
 const PARSE_CASES: ParseCase[] = [
   { q: 'How may folks came to the front of my house between mon and tue?', kind: 'ZONEMINDER', subject: 'events', objects: ['person'] },
@@ -596,9 +598,15 @@ const PARSE_CASES: ParseCase[] = [
   { q: 'anything happening?', kind: 'ZONEMINDER', subject: 'events' },
   { q: 'see you tomorrow', kind: 'CHAT' },
   // Follow-ups carry the previous exchange (refs #440).
-  { q: 'yes', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week. Want a breakdown?' }, kind: 'ZONEMINDER', subject: 'events' },
-  { q: 'what about the garage?', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week.' }, kind: 'ZONEMINDER', subject: 'events' },
-  { q: 'thanks!', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events this week.' }, kind: 'CHAT' },
+  { q: 'yes', context: { question: 'how was the rear of my house this week?', monitors: ['Backyard(JPEG)'], periods: ['this week'], offer: 'Want a breakdown?' }, kind: 'ZONEMINDER', subject: 'events', continues: true },
+  { q: 'what about the garage?', context: { question: 'how was the rear of my house this week?', monitors: ['Backyard(JPEG)'], periods: ['this week'] }, kind: 'ZONEMINDER', subject: 'events', continues: true },
+  { q: 'thanks!', context: { question: 'how was the rear of my house this week?', monitors: ['Backyard(JPEG)'] }, kind: 'CHAT' },
+  // Refs #446, observed live: a complete standalone question after an
+  // unrelated exchange. `continues` misjudges this shape (true, 2/2, under
+  // two wordings) - which is why the multi-group gate in code withholds the
+  // period context regardless - so the case asserts the slots that must
+  // hold, not the verdict the model cannot deliver.
+  { q: 'how does the front of my house compare to the back of my house last week?', context: { question: 'hows the day?', monitors: [], periods: ['today'] }, kind: 'ZONEMINDER', subject: 'events', objects: [] },
 ];
 
 /** Coverage cases (refs #438), scored through the production coverage call
@@ -607,14 +615,16 @@ const R_HOUSE = ['FrontDoor', 'Backyard(JPEG)', 'Basement', 'Front Yard', 'Garag
 const R_DOOR = ['Garage Outdoor', 'Doorbell'];
 interface CoverageCase {
   q: string;
-  context?: { user: string; assistant: string };
+  context?: { question: string; offer?: string; monitors?: string[]; periods?: string[] };
   roster: string[];
-  /** Exact expected monitor set. */
+  /** Exact expected monitor set, flattened across groups. */
   monitors?: string[];
-  /** Accept any non-empty subset of these. */
+  /** Accept any non-empty subset of these, flattened. */
   monitorsWithin?: string[];
+  /** Expected group count (refs #446): a place comparison is two. */
+  groupCount?: number;
   noMatch?: boolean;
-  /** Pass when nothing is pinned (unset, [], or noMatch). */
+  /** Pass when nothing is pinned (no groups, or noMatch). */
   unpinned?: boolean;
 }
 const COVERAGE_CASES: CoverageCase[] = [
@@ -627,7 +637,11 @@ const COVERAGE_CASES: CoverageCase[] = [
   { q: 'how busy was the front of my abode over the week?', roster: R_HOUSE, monitorsWithin: ['FrontDoor', 'Front Yard'] },
   { q: 'summarize today', roster: R_PLAIN, unpinned: true },
   { q: 'who came at lunch 5 days ago', roster: R_PLAIN, unpinned: true },
-  { q: 'what about the garage?', context: { user: 'how was the rear of my house this week?', assistant: 'Backyard(JPEG) had 86 events.' }, roster: R_HOUSE, monitorsWithin: ['Garage Indoor', 'Garage Outdoor'] },
+  { q: 'what about the garage?', context: { question: 'how was the rear of my house this week?', monitors: ['Backyard(JPEG)'], periods: ['this week'] }, roster: R_HOUSE, monitorsWithin: ['Garage Indoor', 'Garage Outdoor'] },
+  // Refs #446, observed live: the place comparison must resolve BOTH sides
+  // as groups - the consolidated flow queried the front twice and never
+  // touched the Backyard.
+  { q: 'how does the front of my house compare to the back of my house last week?', roster: R_HOUSE, groupCount: 2, monitorsWithin: ['FrontDoor', 'Front Yard', 'Backyard(JPEG)'] },
 ];
 
 function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean {
@@ -636,7 +650,7 @@ function setEq(a: readonly string[] | undefined, b: readonly string[]): boolean 
 
 async function scoreParse(runs: number) {
   const { buildTriagePromptForEval, buildTriageSchema, parseTriageSlots, buildContextualQuestion } = await import('../src/lib/assistant/triage');
-  const { buildCoveragePrompt, buildCoverageSchema, deriveMonitorSlots } = await import('../src/lib/assistant/monitor-stage');
+  const { buildCoveragePrompt, buildCoverageSchema, deriveMonitorGroups } = await import('../src/lib/assistant/monitor-stage');
   const { buildContextualQuestion: wrapQ } = await import('../src/lib/assistant/triage');
   const { scanTimeExpressions } = await import('../src/lib/assistant/timeframe-stage');
   const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
@@ -665,6 +679,7 @@ async function scoreParse(runs: number) {
         if (kind !== c.kind) bad.push(`kind ${kind}`);
         if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
         if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
+        if (c.continues !== undefined && (slots.continues === true) !== c.continues) bad.push(`continues ${String(slots.continues)}`);
         if (bad.length === 0) pass++;
         else failures.push(`[routing] "${c.q}" -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {
@@ -686,15 +701,17 @@ async function scoreParse(runs: number) {
           response_format: { type: 'json_schema', json_schema: { name: 'cover', schema: buildCoverageSchema(c.roster), strict: true } },
         });
         const text = r.choices?.[0]?.message?.content ?? '';
-        const slots = deriveMonitorSlots(JSON.parse(text), c.roster);
+        const slots = deriveMonitorGroups(JSON.parse(text), c.roster);
+        const flat = (slots.groups ?? []).flatMap((g) => [...g.monitors]);
         const bad: string[] = [];
-        if (c.monitors !== undefined && !setEq(slots.monitors, c.monitors)) bad.push(`monitors ${JSON.stringify(slots.monitors)}`);
+        if (c.monitors !== undefined && !setEq(flat, c.monitors)) bad.push(`monitors ${JSON.stringify(flat)}`);
         if (c.monitorsWithin !== undefined) {
-          const within = (slots.monitors?.length ?? 0) > 0 && (slots.monitors ?? []).every((m) => c.monitorsWithin!.includes(m));
-          if (!within) bad.push(`monitors ${JSON.stringify(slots.monitors)} not within ${JSON.stringify(c.monitorsWithin)}`);
+          const within = flat.length > 0 && flat.every((m) => c.monitorsWithin!.includes(m));
+          if (!within) bad.push(`monitors ${JSON.stringify(flat)} not within ${JSON.stringify(c.monitorsWithin)}`);
         }
-        if (c.noMatch !== undefined && slots.noMatch !== c.noMatch) bad.push(`noMatch ${String(slots.noMatch)}`);
-        if (c.unpinned && (slots.monitors?.length ?? 0) > 0) bad.push(`pinned ${JSON.stringify(slots.monitors)}`);
+        if (c.groupCount !== undefined && (slots.groups?.length ?? 0) !== c.groupCount) bad.push(`groups ${slots.groups?.length ?? 0}`);
+        if (c.noMatch !== undefined && (slots.noMatch === true) !== c.noMatch) bad.push(`noMatch ${String(slots.noMatch)}`);
+        if (c.unpinned && flat.length > 0) bad.push(`pinned ${JSON.stringify(flat)}`);
         if (bad.length === 0) coverPass++;
         else failures.push(`[coverage] "${c.q}" [${c.roster.join(', ')}] -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {

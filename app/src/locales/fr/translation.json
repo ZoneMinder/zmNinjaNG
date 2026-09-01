@@ -1536,6 +1536,7 @@
     "gemini_background_blocked": "Gemini Nano ne fonctionne que si zmNinja est à l’écran. Rouvrez l’application et réessayez.",
     "gemini_quota_exceeded": "Gemini Nano a atteint la limite d’utilisation du jour sur l’appareil. Réessayez plus tard ou utilisez un serveur Ollama.",
     "gemini_rate_limited": "Gemini Nano est occupé pour le moment. Patientez un instant et réessayez.",
-    "ask_ninjii": "Demander à Ninjii"
+    "ask_ninjii": "Demander à Ninjii",
+    "continued_from_previous": "Suite de votre question précédente"
   }
 }

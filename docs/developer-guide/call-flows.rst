@@ -2186,13 +2186,20 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    than maintained as a vocabulary.
 
    The same round is the ROUTING PARSE (refs #432, #438): with a roster,
-   the prompt carries the install's label vocabulary, the previous exchange
-   rides along trimmed so a bare "yes" or "what about the garage?"
-   classifies with its topic (``latestExchange`` /
-   ``buildContextualQuestion``, refs #440), a status question about a period
-   with no other topic defaults to the system, and a CHAT verdict that
-   contradicts its own subject is flipped to the data lane in code (the
-   tool-less lane fabricates when handed a real question). The schema extends
+   the prompt carries the install's label vocabulary, a status question
+   about a period with no other topic defaults to the system, and a CHAT
+   verdict that contradicts its own subject is flipped to the data lane in
+   code (the tool-less lane fabricates when handed a real question).
+   Relatedness is ONE explicit judgment (refs #446): ``continues`` decodes
+   before every other field, and code gates ALL context on it - a standalone
+   question reaches the coverage and time calls with nothing to inherit.
+   Context itself is STRUCTURED (``prevTurnFromThread`` +
+   ``buildContextualQuestion``): the previous user question, the slots that
+   turn resolved, and the assistant's closing offer only when it asked
+   something - never answer prose, which the model mined for "truck",
+   "Front Yard", and "today" across three live transcripts. The verdict
+   surfaces in the panel as a subdued status above a continuation answer.
+   The schema extends
    the verdict with ``subject`` (events/monitors/server/groups/other),
    ``objects`` (an array over the recorded labels, so "folks" or "Leute"
    land on ``person`` in any language), and ``when`` (the time phrases,

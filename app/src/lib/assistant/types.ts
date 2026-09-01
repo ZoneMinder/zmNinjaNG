@@ -66,6 +66,9 @@ export interface AssistantMessage {
    *  answer and stays there in history instead of only living in the
    *  transient `activities` array for the in-flight turn. */
   steps?: ToolActivity[];
+  /** This answer continued the previous exchange (refs #446): the panel
+   *  renders a subdued status above it; absence marks a fresh topic. */
+  continued?: boolean;
   /** Token usage reported by the backend for the turn that produced this
    *  message, attached by `runAssistantTurn` to the FINAL assistant message
    *  only. AskPanel reads `promptTokens` off the last message to decide

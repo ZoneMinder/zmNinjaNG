@@ -204,7 +204,7 @@ describe('classifyRequest with a roster and vocabulary', () => {
         subject: { enum: ['events', 'monitors', 'server', 'groups', 'other'] },
         objects: { type: 'array', items: { enum: labels } },
       },
-      required: ['kind', 'subject', 'objects'],
+      required: ['continues', 'kind', 'subject', 'objects'],
     });
     expect((schema as { properties: object }).properties).not.toHaveProperty('monitors');
     expect((schema as { properties: object }).properties).not.toHaveProperty('when');
@@ -287,7 +287,7 @@ describe('classifyRequest objects creep guard', () => {
   });
 });
 
-import { buildContextualQuestion, latestExchange } from '../triage';
+import { buildContextualQuestion, prevTurnFromThread } from '../triage';
 
 /**
  * Refs #440, observed live: standalone "how today looking?" classified CHAT
@@ -295,10 +295,17 @@ import { buildContextualQuestion, latestExchange } from '../triage';
  * app-default status questions.
  */
 describe('contextual classification', () => {
-  it('embeds the previous exchange around the latest message', () => {
-    const q = buildContextualQuestion('yes', { user: 'how was the rear this week?', assistant: 'Backyard had 86 events.' });
-    expect(q).toContain('how was the rear this week?');
-    expect(q).toContain('Backyard had 86 events.');
+  it('embeds the previous turn as structured facts, never answer prose', () => {
+    const q = buildContextualQuestion('yes', {
+      question: 'how was the rear of my house this week?',
+      monitors: ['Backyard(JPEG)'],
+      periods: ['this calendar week'],
+      offer: 'Want a breakdown?',
+    });
+    expect(q).toContain('how was the rear of my house this week?');
+    expect(q).toContain('Backyard(JPEG)');
+    expect(q).toContain('this calendar week');
+    expect(q).toContain('Want a breakdown?');
     expect(q.trim().endsWith('yes')).toBe(true);
   });
 
@@ -306,47 +313,65 @@ describe('contextual classification', () => {
     expect(buildContextualQuestion('hello')).toBe('hello');
   });
 
-  it('trims oversized context turns', () => {
-    const q = buildContextualQuestion('yes', { user: 'x'.repeat(2000), assistant: 'y' });
+  it('trims an oversized previous question', () => {
+    const q = buildContextualQuestion('yes', { question: 'x'.repeat(2000) });
     expect(q.length).toBeLessThan(1000);
   });
 
-  it('finds the latest completed exchange in a thread', () => {
-    expect(
-      latestExchange([
-        { role: 'user', text: 'older q' },
-        { role: 'assistant', text: 'older a' },
-        { role: 'user', text: 'rear this week?' },
-        { role: 'assistant', text: '86 events.' },
-        { role: 'user', text: 'yes' },
-      ]),
-    ).toEqual({ user: 'rear this week?', assistant: '86 events.' });
-    expect(latestExchange([{ role: 'user', text: 'first ever' }])).toBeUndefined();
+  // Refs #446: the previous turn's structured facts come from the stored
+  // turn state; the offer is the assistant's closing sentence only when it
+  // asked something.
+  it('builds the previous turn from the last exchange, offer only on a question', () => {
+    const prev = prevTurnFromThread([
+      { role: 'user', text: 'how was the rear this week?' },
+      { role: 'assistant', text: 'Backyard had 86 events. Want a breakdown?' },
+      { role: 'user', text: 'yes' },
+    ]);
+    expect(prev).toMatchObject({ question: 'how was the rear this week?', offer: 'Want a breakdown?' });
+
+    const noOffer = prevTurnFromThread([
+      { role: 'user', text: 'how was the rear this week?' },
+      { role: 'assistant', text: 'Backyard had 86 events with a truck at noon.' },
+      { role: 'user', text: 'anything else' },
+    ]);
+    expect(noOffer).toEqual({ question: 'how was the rear this week?' });
+    expect(prevTurnFromThread([{ role: 'user', text: 'first ever' }])).toBeUndefined();
   });
 
-  it('passes the contextual question to the provider', async () => {
-    const provider = providerSaying('{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["today"]}');
-    await classifyRequest(
+  /** Refs #446: relatedness is ONE explicit judgment, decoded first; code
+   *  gates all context on it. Implicit inheritance stole "truck", "Front
+   *  Yard", and "today" from answer prose across three live transcripts. */
+  it('decodes continues first and returns it on the verdict', async () => {
+    const provider = providerSaying('{"continues":true,"kind":"ZONEMINDER","subject":"events","objects":[]}');
+    const verdict = await classifyRequest(
       provider,
-      'how today looking?',
+      'yes',
       new AbortController().signal,
       undefined,
       undefined,
       [],
       ['FrontDoor'],
       ['person'],
-      { user: 'rear this week?', assistant: '86 events.' },
+      { question: 'how was the rear this week?', offer: 'Want a breakdown?' },
     );
-    const [, text] = vi.mocked(provider.complete).mock.calls[0];
-    expect(text).toContain('rear this week?');
-    expect((text as string).trim().endsWith('how today looking?')).toBe(true);
+    const [, , , schema] = vi.mocked(provider.complete).mock.calls[0];
+    const sch = schema as { properties: Record<string, unknown>; required: string[] };
+    expect(Object.keys(sch.properties)[0]).toBe('continues');
+    expect(sch.required[0]).toBe('continues');
+    expect(verdict.continues).toBe(true);
+  });
+
+  it('defaults continues to false when absent or unparseable', async () => {
+    const provider = providerSaying('{"kind":"CHAT"}');
+    const verdict = await classifyRequest(provider, 'hello', new AbortController().signal);
+    expect(verdict.continues).toBeUndefined();
   });
 
   // A CHAT verdict whose own slots say the message is about the system is
   // self-contradictory; routing a real question to the tool-less lane is
   // the worse failure (it fabricates), so code flips it (refs #440).
   it('flips CHAT with a system subject to zoneminder', async () => {
-    const provider = providerSaying('{"kind":"CHAT","subject":"events","objects":[],"when":["today"]}');
+    const provider = providerSaying('{"continues":false,"kind":"CHAT","subject":"events","objects":[]}');
     const verdict = await classifyRequest(
       provider,
       'how today looking?',
@@ -361,7 +386,7 @@ describe('contextual classification', () => {
   });
 
   it('leaves CHAT with subject other alone', async () => {
-    const provider = providerSaying('{"kind":"CHAT","subject":"other","objects":[],"when":[]}');
+    const provider = providerSaying('{"continues":false,"kind":"CHAT","subject":"other","objects":[]}');
     const verdict = await classifyRequest(
       provider,
       'see you tomorrow',
@@ -381,3 +406,4 @@ describe('contextual classification', () => {
     expect(prompt).toContain('Never say you will check');
   });
 });
+

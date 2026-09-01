@@ -111,8 +111,8 @@ describe('resolveTimeframesFromQuestion', () => {
       '{"windows":[{"meaning":"today","daysAgo":0},{"meaning":"the same day one week back","daysAgo":7}]}',
     );
     const result = await resolveTimeframesFromQuestion('compare to same day, last week', p, NOW, TZ, signal(), {
-      user: 'hows today?',
-      assistant: '5 events.',
+      question: 'hows today?',
+      periods: ['today'],
     });
     expect(result).toEqual({
       phrases: ['today', 'the same day one week back'],
@@ -158,6 +158,17 @@ describe('resolveTimeframesFromQuestion', () => {
     const result = await resolveTimeframesFromQuestion('what cameras do I have', p, NOW, TZ, signal());
     expect(result.phrases).toEqual(['today']);
     expect(result.abstained).toBe(false);
+  });
+
+  /** Refs #446: one window per compared PLACE produces identical periods
+   *  under different labels; the range dedupe keeps one, so the planned
+   *  fan-out never doubles. */
+  it('collapses windows that resolve to the same range', async () => {
+    const p = providerWith(() =>
+      '{"windows":[{"meaning":"the front last week","week":"last"},{"meaning":"the back last week","week":"last"}]}',
+    );
+    const result = await resolveTimeframesFromQuestion('front vs back last week', p, NOW, TZ, signal());
+    expect(result.phrases).toEqual(['the front last week']);
   });
 
   it('abstains only when windows were emitted, none resolved, and the scan sees no time', async () => {

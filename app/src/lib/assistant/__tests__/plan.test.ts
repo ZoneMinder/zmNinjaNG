@@ -10,23 +10,43 @@ describe('planToolCalls', () => {
   // between mon and tue?" with the front cameras resolved and "folks" mapped
   // to person. The plan must pin BOTH monitors and carry the object filter,
   // with no model round choosing anything.
-  it('plans one list_events per resolved monitor, carrying when and objectType', () => {
+  it('plans one list_events per monitor of a group, carrying when, objectType, and the group label', () => {
     const calls = planToolCalls({
       kind: 'zoneminder',
       subject: 'events',
-      monitors: [frontDoor, frontYard],
+      groups: [{ label: 'the front', monitors: [frontDoor, frontYard] }],
       objects: ['person'],
       phrases: ['between mon and tue'],
     });
     expect(calls).toEqual([
-      { name: 'list_events', input: { when: 'between mon and tue', monitorId: '3', objectType: 'person' } },
-      { name: 'list_events', input: { when: 'between mon and tue', monitorId: '4', objectType: 'person' } },
+      { name: 'list_events', input: { when: 'between mon and tue', monitorId: '3', objectType: 'person' }, group: 'the front' },
+      { name: 'list_events', input: { when: 'between mon and tue', monitorId: '4', objectType: 'person' }, group: 'the front' },
+    ]);
+  });
+
+  // Refs #446, observed live: "front vs back last week" bent into a time
+  // comparison because places could not fan out. Two groups, one window.
+  it('plans a place comparison as one window across two groups', () => {
+    const calls = planToolCalls({
+      kind: 'zoneminder',
+      subject: 'events',
+      groups: [
+        { label: 'front of my house', monitors: [frontDoor, frontYard] },
+        { label: 'back of my house', monitors: [{ id: '2', name: 'Backyard(JPEG)' }] },
+      ],
+      objects: [],
+      phrases: ['last week'],
+    });
+    expect(calls).toEqual([
+      { name: 'list_events', input: { when: 'last week', monitorId: '3' }, group: 'front of my house' },
+      { name: 'list_events', input: { when: 'last week', monitorId: '4' }, group: 'front of my house' },
+      { name: 'list_events', input: { when: 'last week', monitorId: '2' }, group: 'back of my house' },
     ]);
   });
 
   it('plans one unpinned call when no monitor was resolved', () => {
     expect(
-      planToolCalls({ kind: 'zoneminder', subject: 'events', monitors: [], objects: [], phrases: ['today'] }),
+      planToolCalls({ kind: 'zoneminder', subject: 'events', groups: [], objects: [], phrases: ['today'] }),
     ).toEqual([{ name: 'list_events', input: { when: 'today' } }]);
   });
 
@@ -34,7 +54,7 @@ describe('planToolCalls', () => {
     const calls = planToolCalls({
       kind: 'zoneminder',
       subject: 'events',
-      monitors: [],
+      groups: [],
       objects: [],
       phrases: ['may', 'june'],
     });
@@ -48,7 +68,7 @@ describe('planToolCalls', () => {
     const calls = planToolCalls({
       kind: 'zoneminder',
       subject: 'events',
-      monitors: [],
+      groups: [],
       objects: ['car', 'truck'],
       phrases: ['today'],
     });
@@ -56,7 +76,7 @@ describe('planToolCalls', () => {
   });
 
   it('maps the non-event subjects to their read tools', () => {
-    const base = { kind: 'zoneminder' as const, monitors: [], objects: [], phrases: [] };
+    const base = { kind: 'zoneminder' as const, groups: [], objects: [], phrases: [] };
     expect(planToolCalls({ ...base, subject: 'server' })).toEqual([{ name: 'get_server_health', input: {} }]);
     expect(planToolCalls({ ...base, subject: 'monitors' })).toEqual([{ name: 'list_monitors', input: {} }]);
     expect(planToolCalls({ ...base, subject: 'groups' })).toEqual([{ name: 'list_groups', input: {} }]);
@@ -65,22 +85,22 @@ describe('planToolCalls', () => {
   // A null plan means "today's loop, unchanged": the fallback for anything
   // the slots do not determine.
   it('returns null when the slots determine no plan', () => {
-    const base = { monitors: [], objects: [], phrases: ['today'] };
+    const base = { groups: [], objects: [], phrases: ['today'] };
     expect(planToolCalls({ kind: 'chat', subject: 'events', ...base })).toBeNull();
     expect(planToolCalls({ kind: 'zoneminder', subject: 'other', ...base })).toBeNull();
     expect(planToolCalls({ kind: 'zoneminder', subject: undefined, ...base })).toBeNull();
-    expect(planToolCalls({ kind: 'zoneminder', subject: 'events', monitors: [], objects: [], phrases: [] })).toBeNull();
+    expect(planToolCalls({ kind: 'zoneminder', subject: 'events', groups: [], objects: [], phrases: [] })).toBeNull();
   });
 
   it('returns null rather than a call explosion', () => {
     const monitors = Array.from({ length: 4 }, (_, i) => ({ id: String(i), name: `m${i}` }));
     expect(
-      planToolCalls({ kind: 'zoneminder', subject: 'events', monitors, objects: [], phrases: ['may', 'june'] }),
+      planToolCalls({ kind: 'zoneminder', subject: 'events', groups: [{ label: 'all', monitors }], objects: [], phrases: ['may', 'june'] }),
     ).toBeNull();
   });
 });
 
-import { mergePlannedEventResults } from '../plan';
+import { mergePlannedEventResults, mergePlannedEventResultsByGroup } from '../plan';
 
 /**
  * Refs #436, observed live: two per-monitor results reached the model
@@ -90,10 +110,11 @@ import { mergePlannedEventResults } from '../plan';
  * can only quote.
  */
 describe('mergePlannedEventResults', () => {
-  const call = (id: string, monitorId: string) => ({
+  const call = (id: string, monitorId: string, group?: string) => ({
     id,
     name: 'list_events',
     input: { when: 'over the week', monitorId, objectType: ['person'] },
+    ...(group ? { group } : {}),
   });
   const output = (monitor: string, ids: number[], hours: Record<string, number>, objects: Record<string, number>) =>
     JSON.stringify({
@@ -129,6 +150,28 @@ describe('mergePlannedEventResults', () => {
     // single-monitor pin it did not have.
     expect(merged!.call.input).toMatchObject({ when: 'over the week' });
     expect(merged!.call.input.monitorId).toBeUndefined();
+  });
+
+  // Refs #446: same window, different GROUPS must merge per group, never
+  // across - a cross-group merge would erase the comparison.
+  it('merges per group, labeling each merged result with its place', () => {
+    const merged = mergePlannedEventResultsByGroup(
+      [call('planned-1', '3', 'front'), call('planned-2', '4', 'front'), call('planned-3', '2', 'back')],
+      [
+        ok(output('FrontDoor', [5], { h: 1 }, { person: 5 })),
+        ok(output('Front Yard', [6], { h: 1 }, { person: 6 })),
+        ok(output('Backyard(JPEG)', [7], { h: 1 }, { person: 7 })),
+      ],
+    );
+    expect(merged).not.toBeNull();
+    expect(merged!.calls).toHaveLength(2);
+    const front = JSON.parse(merged!.results[0].output);
+    const back = JSON.parse(merged!.results[1].output);
+    expect(front.place).toBe('front');
+    expect(front.matchCount).toBe(2);
+    expect(front.countsByMonitor).toEqual({ FrontDoor: 1, 'Front Yard': 1 });
+    expect(back.place).toBe('back');
+    expect(back.countsByMonitor).toEqual({ 'Backyard(JPEG)': 1 });
   });
 
   it('declines to merge a single call, mixed windows, or an errored result', () => {
