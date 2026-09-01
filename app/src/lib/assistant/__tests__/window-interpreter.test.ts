@@ -6,7 +6,7 @@
  * (scripts/prompt-eval.mts interpret stage), not unit tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { interpretWhen, resetWindowInterpreterCacheForTests, selectBranches, WINDOW_SCHEMA } from '../window-interpreter';
+import { interpretWhen, resetWindowInterpreterCacheForTests, selectBranches, WINDOW_SCHEMA, buildInterpreterPrompt } from '../window-interpreter';
 import type { AssistantProvider } from '../types';
 
 const NOW = new Date('2026-07-16T14:30:00Z');
@@ -263,5 +263,33 @@ describe('selectBranches', () => {
     expect(sent).not.toBe(WINDOW_SCHEMA);
     const sets = requiredSets(sent);
     expect(sets.every((req) => req.includes('fromTime') || req.includes('weekday'))).toBe(true);
+  });
+});
+
+/** Refs #434: the weekday-range branch, so "between mon and tue" never forces
+ *  the model into date arithmetic. */
+describe('weekday-range branch', () => {
+  it('exists in the schema with both fields required', () => {
+    const branches = (WINDOW_SCHEMA.anyOf as Array<{ required: string[] }>);
+    expect(branches.some((b) => b.required.includes('fromWeekday') && b.required.includes('toWeekday'))).toBe(true);
+  });
+
+  it('is the only branch offered for a two-weekday phrase, abbreviations included', () => {
+    for (const phrase of ['between mon and tue', 'from friday to sunday']) {
+      const picked = selectBranches(phrase) as { properties?: Record<string, unknown>; anyOf?: unknown[] };
+      // One branch decodes as a bare object (see wrap()).
+      expect(picked.properties).toHaveProperty('fromWeekday');
+      expect(picked.anyOf).toBeUndefined();
+    }
+  });
+
+  // One weekday word is not a range: the phrase keeps the full schema
+  // (fail-open, as before), never the range-only narrowing.
+  it('does not narrow a single-weekday phrase to the range branch', () => {
+    expect(selectBranches('last tuesday')).toBe(WINDOW_SCHEMA);
+  });
+
+  it('teaches the field in the prompt', () => {
+    expect(buildInterpreterPrompt(new Date('2026-07-16T14:30:00Z'), 'UTC')).toContain('fromWeekday');
   });
 });

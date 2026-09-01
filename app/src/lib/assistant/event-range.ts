@@ -46,6 +46,12 @@ export interface WindowFields {
   lastUnit?: string;
   daysAgo?: number;
   weekday?: string;
+  /** A span between two weekdays ("between mon and tue"), most recent such
+   *  span ending on or before today. Code resolves both dates, because the
+   *  model anchored the wrong calendar day when forced to compute them
+   *  (refs #434). */
+  fromWeekday?: string;
+  toWeekday?: string;
   /** Most recent past day with this day-of-month number (1-31): "the 21st".
    *  Code finds the date, exactly as `weekday` finds the most recent weekday,
    *  because a small model resolves a bare ordinal to the wrong ISO date. */
@@ -136,17 +142,40 @@ export function resolveWindow(
   now: Date,
   timezone: string,
 ): ResolvedEventRange | { error: string } | undefined {
-  const { lastCount, lastUnit, daysAgo, weekday, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
+  const { lastCount, lastUnit, daysAgo, weekday, fromWeekday, toWeekday, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
   const dayPickers = [daysAgo !== undefined, weekday !== undefined, dayOfMonth !== undefined, date !== undefined].filter(Boolean).length;
   const rolling = lastCount !== undefined || lastUnit !== undefined;
   const ranged = fromDate !== undefined || toDate !== undefined;
   const weekendShape = weekend !== undefined;
+  const weekdayRange = fromWeekday !== undefined || toWeekday !== undefined;
 
-  if ([rolling, dayPickers > 0, ranged, weekendShape].filter(Boolean).length > 1) {
-    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekend, or a span (fromDate/toDate).' };
+  if ([rolling, dayPickers > 0, ranged, weekendShape, weekdayRange].filter(Boolean).length > 1) {
+    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekday span (fromWeekday+toWeekday), a weekend, or a span (fromDate/toDate).' };
   }
   if (dayPickers > 1) {
     return { error: 'Send only one of daysAgo, weekday, dayOfMonth, or date.' };
+  }
+
+  if (weekdayRange) {
+    if (fromTime !== undefined || toTime !== undefined) {
+      return { error: 'fromTime/toTime narrow a single day; use daysAgo, weekday, or date alongside them.' };
+    }
+    const fromIdx = WEEKDAYS.indexOf(String(fromWeekday).toLowerCase() as (typeof WEEKDAYS)[number]);
+    const toIdx = WEEKDAYS.indexOf(String(toWeekday).toLowerCase() as (typeof WEEKDAYS)[number]);
+    if (fromIdx === -1 || toIdx === -1) {
+      return { error: `fromWeekday and toWeekday must BOTH be one of: ${WEEKDAYS.join(', ')}. Received "${String(fromWeekday)}" and "${String(toWeekday)}".` };
+    }
+    // Most recent end day (today included), then back to the start weekday at
+    // or before it; a same-day pair spans that one day.
+    const zonedNow = toZonedTime(now, timezone);
+    const endDay = startOfDay(subDays(zonedNow, (zonedNow.getDay() - toIdx + 7) % 7));
+    const startDay = subDays(endDay, (toIdx - fromIdx + 7) % 7);
+    const start = fromZonedTime(startDay, timezone);
+    // Inclusive of the end day: the window closes at the following midnight,
+    // capped at now, mirroring the weekend and toDate shapes.
+    const endRaw = fromZonedTime(subDays(endDay, -1), timezone);
+    const end = endRaw.getTime() > now.getTime() ? now : endRaw;
+    return { startDateTime: formatForZm(start, timezone), endDateTime: formatForZm(end, timezone) };
   }
 
   if (weekendShape) {

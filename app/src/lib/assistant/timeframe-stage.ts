@@ -22,7 +22,7 @@
  */
 import { format } from 'date-fns';
 import { toZonedTime } from 'date-fns-tz';
-import { interpretWhen, PART_OF_DAY_WORDS, WEEKDAY_WORDS, MONTH_SEASON_NAMES } from './window-interpreter';
+import { interpretWhen, PART_OF_DAY_WORDS, WEEKDAY_WORDS, WEEKDAY_ABBREVS, MONTH_SEASON_NAMES, AMBIGUOUS_MONTH_WORDS } from './window-interpreter';
 import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
 import { WINDOW_UNITS, type WindowFields } from './event-range';
@@ -116,16 +116,25 @@ const COUNT_TOKEN = String.raw`\d+|an?|one|two|three|four|five|six|seven|eight|n
  *  "july 15", "yesterday" inside "yesterday afternoon"), so each span is listed
  *  once, at its most specific.
  *
- *  ponytail: month/season names include the everyday words "may", "march",
- *  "fall", "spring", so a non-time use ("it may rain") over-matches to a month.
- *  Upgrade path if that bites: require a leading in/the/this/last for those four. */
+ *  The month/season names that double as everyday words ("may", "march",
+ *  "fall", "spring") match only behind a determiner (in/the/this/last/...):
+ *  "How may folks came" scanned as the month of May and the obedient planner
+ *  issued a wasted whole-of-May query (refs #434). "<month> <day>" keeps the
+ *  full list, since "may 15" is unambiguous. */
 export function scanTimeExpressions(question: string): string[] {
   const months = [...MONTH_SEASON_NAMES].join('|');
+  const plainMonths = [...MONTH_SEASON_NAMES].filter((m) => !AMBIGUOUS_MONTH_WORDS.includes(m)).join('|');
+  const guardedMonths = AMBIGUOUS_MONTH_WORDS.join('|');
+  const weekdays = [...WEEKDAY_WORDS, ...WEEKDAY_ABBREVS].join('|');
   const patterns: RegExp[] = [
     new RegExp(String.raw`\bfrom\s+(?:${CLOCK_TOKEN})\s+(?:to|until|through|till)\s+(?:${CLOCK_TOKEN})`, 'gi'),
     new RegExp(String.raw`\bbetween\s+(?:${CLOCK_TOKEN})\s+and\s+(?:${CLOCK_TOKEN})`, 'gi'),
     new RegExp(String.raw`\b\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\s*[-–]\s*\d{1,2}(?::\d{2})?(?:\s*(?:am|pm))?\b`, 'gi'),
     new RegExp(String.raw`\b(?:${months})\s+\d{1,2}(?:st|nd|rd|th)?\b`, 'gi'),
+    // "between mon and tue", "from friday to sunday": a weekday span, with
+    // the English abbreviations accepted only inside this anchored shape so
+    // "sat" alone never scans as a day (refs #434).
+    new RegExp(String.raw`\b(?:between|from)\s+(?:${weekdays})\s+(?:and|to|until|through|till)\s+(?:${weekdays})\b`, 'gi'),
     new RegExp(String.raw`\b(?:past|last|previous)\s+(?:${COUNT_TOKEN})\s+(?:${ROLLING_UNITS})s?\b`, 'gi'),
     // "2 days ago", "two days ago", "an hour ago". Without this the whole
     // family scanned empty and the turn fell through to the today default,
@@ -135,7 +144,7 @@ export function scanTimeExpressions(question: string): string[] {
     new RegExp(String.raw`\b(?:(?:this|last|yesterday)\s+)?(?:${PART_OF_DAY_WORDS.join('|')})\b`, 'gi'),
     new RegExp(String.raw`\b(?:today|tonight|yesterday)\b`, 'gi'),
     new RegExp(String.raw`\b(?:(?:last|this|next|on)\s+)?(?:${WEEKDAY_WORDS.join('|')})\b`, 'gi'),
-    new RegExp(String.raw`\b(?:${months})\b`, 'gi'),
+    new RegExp(String.raw`\b(?:${plainMonths})\b|\b(?:in|the|a|an|this|last|of|during|for)\s+(?:${guardedMonths})\b`, 'gi'),
     new RegExp(String.raw`\b(?:the\s+)?\d{1,2}(?:st|nd|rd|th)\b`, 'gi'),
   ];
 

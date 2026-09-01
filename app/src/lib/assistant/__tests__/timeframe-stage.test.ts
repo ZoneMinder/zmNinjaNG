@@ -305,3 +305,52 @@ describe('buildTimeframeSystemLine', () => {
     );
   });
 });
+
+/**
+ * Refs #434, observed live: "How may folks came..." matched the bare
+ * month-name class as the month of May, and the obedient planner then issued
+ * a wasted whole-of-May query. The four month/season names that double as
+ * everyday words match only behind a determiner; the unambiguous names stay
+ * bare, and "<month> <day>" keeps the full list.
+ */
+describe('scanTimeExpressions month-word guard', () => {
+  it('ignores may/march/fall/spring used as ordinary words', () => {
+    expect(scanTimeExpressions('How may folks came to the front of my house?')).toEqual([]);
+    expect(scanTimeExpressions('did the camera fall over')).toEqual([]);
+    expect(scanTimeExpressions('march the recording out')).toEqual([]);
+  });
+
+  it('still finds them behind a determiner, verbatim', () => {
+    expect(scanTimeExpressions('how busy was it in may')).toEqual(['in may']);
+    expect(scanTimeExpressions('summarize this march')).toEqual(['this march']);
+    expect(scanTimeExpressions('what happened last fall')).toEqual(['last fall']);
+  });
+
+  it('keeps unambiguous months bare and month+day with the full list', () => {
+    expect(scanTimeExpressions('how busy was april')).toEqual(['april']);
+    expect(scanTimeExpressions('what happened on may 15')).toEqual(['may 15']);
+  });
+});
+
+/** Refs #434: "between mon and tue" had no scan class and no interpreter
+ *  branch, so the model computed the dates itself and started on Sunday. */
+describe('scanTimeExpressions weekday ranges', () => {
+  it('finds a between-weekdays span, abbreviations included', () => {
+    expect(scanTimeExpressions('who came by between mon and tue?')).toEqual(['between mon and tue']);
+    expect(scanTimeExpressions('what happened from friday to sunday')).toEqual(['from friday to sunday']);
+  });
+
+  it('does not fire a bare abbreviation outside the range shape', () => {
+    expect(scanTimeExpressions('the cat sat on the mat')).toEqual([]);
+  });
+});
+
+describe('scanTimeExpressions lunch band', () => {
+  // Two adjacent phrases, not one: the compound "at lunch 5 days ago" is the
+  // extraction model's to copy whole, and containment dedup then absorbs
+  // these halves into it (refs #434).
+  it('finds lunch as a part of the day', () => {
+    expect(scanTimeExpressions('who came at lunch 5 days ago')).toEqual(['lunch', '5 days ago']);
+    expect(scanTimeExpressions('anything around lunchtime')).toEqual(['lunchtime']);
+  });
+});

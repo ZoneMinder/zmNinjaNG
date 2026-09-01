@@ -65,6 +65,9 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
     // model reads the split as license to stop early. FM wants required fields;
     // qwen needs this one optional; the 150/150 gate decides it.
     { type: 'object', properties: { weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['weekday'], additionalProperties: false },
+    // a span between two weekdays ("between mon and tue"); code works out the
+    // dates, so the model never anchors the wrong calendar day (refs #434).
+    { type: 'object', properties: { fromWeekday: { type: 'string', enum: [...WEEKDAYS] }, toWeekday: { type: 'string', enum: [...WEEKDAYS] } }, required: ['fromWeekday', 'toWeekday'], additionalProperties: false },
     // a bare ordinal day-of-month ("the 21st").
     { type: 'object', properties: { dayOfMonth: { type: 'number' } }, required: ['dayOfMonth'], additionalProperties: false },
     // that ordinal narrowed to a clock band.
@@ -93,9 +96,10 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
  *  same part-of-day vocabulary this interpreter does, rather than duplicating it. */
 export const PART_OF_DAY_WORDS = [
   'morning', 'afternoon', 'evening', 'night', 'noon', 'midnight',
-  'matin', 'soir', 'apres-midi', 'nuit',
-  'manana', 'tarde', 'noche',
-  'morgen', 'abend', 'nacht',
+  'lunch', 'lunchtime',
+  'matin', 'soir', 'apres-midi', 'nuit', 'midi',
+  'manana', 'tarde', 'noche', 'mediodia',
+  'morgen', 'abend', 'nacht', 'mittag',
 ];
 const PART_OF_DAY_RE = new RegExp(`\\b(${PART_OF_DAY_WORDS.join('|')})\\b`);
 /** Weekday NAMES across en/de/es/fr, accent-stripped and lowercase (the form
@@ -114,6 +118,16 @@ export const WEEKDAY_WORDS = [
   'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche',
 ];
 const WEEKDAY_RE = new RegExp(`\\b(${WEEKDAY_WORDS.join('|')})\\b`);
+/** English weekday abbreviations, accepted ONLY where a surrounding shape
+ *  anchors them (the weekday-range scan class and branch pick, refs #434):
+ *  bare, "sat" is a verb and "mon" is French for "my". */
+export const WEEKDAY_ABBREVS = [
+  'mon', 'tue', 'tues', 'wed', 'weds', 'thu', 'thur', 'thurs', 'fri', 'sat', 'sun',
+];
+const WEEKDAYISH_RE = new RegExp(`\\b(${[...WEEKDAY_WORDS, ...WEEKDAY_ABBREVS].join('|')})\\b`, 'g');
+/** The month/season names that double as everyday English words; the scan
+ *  (timeframe-stage.ts) requires a determiner in front of these (refs #434). */
+export const AMBIGUOUS_MONTH_WORDS = ['may', 'march', 'fall', 'spring'];
 /** A wall-clock marker in the phrase: "4pm"/"9 am", "16:30", or a bare numeric
  *  range "4-6". Any of these means the phrase names a clock band. */
 const CLOCK_RE = /\d\s*(am|pm)\b|\d{1,2}:\d{2}|\d+\s*-\s*\d+/;
@@ -182,6 +196,14 @@ export function selectBranches(phrase: string): Record<string, unknown> {
     return wrap(picked);
   }
 
+  // Two weekday words (abbreviations included: the range shape anchors them)
+  // mean a weekday span; offered alone so the decoder cannot anchor on the
+  // simpler single-weekday branch and drop one end (refs #434).
+  const weekdayish = norm.match(WEEKDAYISH_RE) ?? [];
+  if (weekdayish.length >= 2) {
+    return wrap(branches.filter((b) => b.required.includes('fromWeekday')));
+  }
+
   if (!/\d/.test(norm)) {
     const tokens = norm.split(/[^a-z]+/).filter(Boolean);
     const names = tokens.filter((t) => MONTH_SEASON_NAMES.has(t));
@@ -217,12 +239,13 @@ export function buildInterpreterPrompt(now: Date, timezone: string): string {
     '- lastCount + lastUnit: a rolling span ending now. "past 2 weeks" -> {"lastCount":2,"lastUnit":"week"}; "last 6 hours" -> {"lastCount":6,"lastUnit":"hour"}.',
     '- daysAgo: one calendar day. "today" -> {"daysAgo":0}. "yesterday" -> {"daysAgo":1}. "the day before yesterday" -> {"daysAgo":2}.',
     '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}; "last tuesday" -> {"weekday":"tuesday"}.',
+    '- fromWeekday + toWeekday: a span between two weekdays, full names. "between mon and tue" -> {"fromWeekday":"monday","toWeekday":"tuesday"}; "from friday to sunday" -> {"fromWeekday":"friday","toWeekday":"sunday"}. Code works out the dates, so do NOT send fromDate/toDate for these.',
     '- dayOfMonth: a bare ordinal, just the number. "the 21st" -> {"dayOfMonth":21}; "on the 3rd" -> {"dayOfMonth":3}. Code picks the most recent past such day, so do NOT work out the date yourself.',
     '- weekend: which past weekend, ONLY when the phrase literally says "weekend". "this weekend" -> {"weekend":"this"}; "last weekend" -> {"weekend":"last"}; "two weekends ago" -> {"weekend":"two-ago"}. Code works out the two dates.',
     '- date: one explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
     '- fromDate + toDate: a calendar span, both inclusive. "april" -> {"fromDate":"2026-04-01","toDate":"2026-04-30"}. "this month" -> the 1st of the current month through today. "this year" -> {"fromDate":"2026-01-01","toDate":"2026-12-31"}. "june 1 to 15" -> both dates. Either side may stand alone: "since july 1" -> {"fromDate":"2026-07-01"}.',
     '- fromTime/toTime: 24h "HH:MM" from 00:00 to 23:59, narrowing ONE day named by daysAgo/weekday/date. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
-    '- A part of the day is a day plus a clock band: morning 06:00-12:00, noon 11:00-13:00, afternoon 12:00-18:00, evening 18:00-23:59, night 20:00-23:59. ALWAYS include the day, defaulting to today (daysAgo 0) when none is named: "this morning" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "around noon" -> {"daysAgo":0,"fromTime":"11:00","toTime":"13:00"}; "last night" -> {"daysAgo":1,"fromTime":"20:00","toTime":"23:59"}; "last tuesday night" -> {"weekday":"tuesday","fromTime":"20:00","toTime":"23:59"}.',
+    '- A part of the day is a day plus a clock band: morning 06:00-12:00, noon or lunch 11:00-13:00, afternoon 12:00-18:00, evening 18:00-23:59, night 20:00-23:59. ALWAYS include the day, defaulting to today (daysAgo 0) when none is named: "this morning" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "around noon" -> {"daysAgo":0,"fromTime":"11:00","toTime":"13:00"}; "last night" -> {"daysAgo":1,"fromTime":"20:00","toTime":"23:59"}; "last tuesday night" -> {"weekday":"tuesday","fromTime":"20:00","toTime":"23:59"}.',
     '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
     'Keep BOTH halves of a compound phrase, in any language: a day word and a part of the day both survive. "yesterday evening" -> {"daysAgo":1,"fromTime":"18:00","toTime":"23:59"}; "hier apres-midi" -> {"daysAgo":1,"fromTime":"12:00","toTime":"18:00"}.',
     'The phrase may be in any language: "letzte Woche" -> {"lastCount":1,"lastUnit":"week"}; "ayer" -> {"daysAgo":1}; "ce matin" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "el fin de semana pasado" -> {"weekend":"last"}.',
