@@ -232,10 +232,12 @@ function wrap(picked: Array<Record<string, unknown>>): Record<string, unknown> {
  *  app executes. Exported so the eval harness scores EXACTLY what production
  *  sends: a hand-copied prompt in the harness drifted the moment this one
  *  changed, and measured a bug the app did not have. */
-export function buildInterpreterPrompt(now: Date, timezone: string): string {
+/** The field-teaching lines both time prompts share: the per-phrase
+ *  interpreter and the whole-question windows interrogation (refs #444)
+ *  must teach identical vocabulary or their answers drift apart. */
+function fieldTeachingLines(now: Date, timezone: string): string[] {
   const today = format(toZonedTime(now, timezone), 'EEEE, yyyy-MM-dd');
   return [
-    'You convert a human time phrase into a JSON time window. Reply with ONLY one JSON object.',
     `Today is ${today} (timezone ${timezone}).`,
     'Fields (use the fewest that express the phrase):',
     '- lastCount + lastUnit: a rolling span ending now. "past 2 weeks" -> {"lastCount":2,"lastUnit":"week"}; "last 6 hours" -> {"lastCount":6,"lastUnit":"hour"}.',
@@ -258,12 +260,82 @@ export function buildInterpreterPrompt(now: Date, timezone: string): string {
     // it and a real window with it; restating the meaning puts the phrase's
     // actual coverage in front of the decoder before any field is chosen.
     'ALWAYS fill "meaning" first: one short sentence saying exactly which days (and hours) the phrase covers. Then the fields that express it.',
+  ];
+}
+
+/** Model-facing (rule 5 exempt): the per-phrase interpreter prompt, used by
+ *  the scan fallback and any tool-time cache miss. */
+export function buildInterpreterPrompt(now: Date, timezone: string): string {
+  return [
+    'You convert a human time phrase into a JSON time window. Reply with ONLY one JSON object.',
+    ...fieldTeachingLines(now, timezone),
   ].join('\n');
+}
+
+/** Model-facing (rule 5 exempt): the whole-question interrogation (refs
+ *  #444), the primary time path on every backend. Nothing is copied - the
+ *  model expresses each period the question means as one window object -
+ *  so the copy-truncation failure class ("same day, last week" -> "last
+ *  week") cannot occur. Probed 13/13 on the live-failure matrix. */
+export function buildQuestionWindowsPrompt(now: Date, timezone: string): string {
+  return [
+    'You express every time period one QUESTION means, as a list of JSON time windows. Reply with ONLY one JSON object: {"windows":[...]}, one window object per period the question asks about.',
+    ...fieldTeachingLines(now, timezone),
+    // The probe's measured tail, in its winning order (refs #444): the
+    // anti-attractor rules live HERE and not in the shared lines, because
+    // sharing them regressed the per-phrase interpreter (ayer, last tuesday
+    // night) while the windows call needs them against rolling collapse.
+    '"same day last week" or "a week ago today" -> {"daysAgo":7}: ONE single day, never a rolling span.',
+    '"this/last <week, month, year>" means that CALENDAR unit, never a rolling span: "all this week" -> {"week":"this"}; "last month" -> the previous month as fromDate/toDate. Only a counted "past/last N <units>" is rolling. Your fields must express exactly what your own "meaning" sentence says.',
+    'A comparison means one window PER compared period: "compare to same day, last week" asked after a question about today is TWO windows - {"daysAgo":0} and {"daysAgo":7} - never one span covering both.',
+    'The question may include an earlier exchange for context: a comparison or follow-up can mean a period from that exchange plus a new one - emit BOTH as windows.',
+    '"windows" is [] when the question names no time at all.',
+    'Every window object starts with its own "meaning" sentence, then the fields. Each "meaning" names exactly ONE period ("today", "the same day one week back") - never the comparison or the question.',
+  ].join('\n');
+}
+
+/** Whether the question carries any counted-rolling marker ("past 2 weeks",
+ *  "last 6 hours", "an hour ago") or a sub-day unit word. The rolling branch
+ *  is the decoder's attractor - "what happened today" decoded lastCount 1
+ *  day 2/2 with it offered - so, exactly like selectBranches per phrase, the
+ *  windows schema offers it only when the question can actually mean one.
+ *  English unit words: an unlisted language loses counted-rolling and falls
+ *  to a calendar span, never worse than a wrong window. */
+const QUESTION_ROLLING_RE =
+  /\b(?:past|last|previous)\s+(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:minute|hour|day|week|month|year)s?\b|\b(?:minute|hour)s?\b/i;
+
+export function questionOffersRolling(question: string): boolean {
+  return QUESTION_ROLLING_RE.test(question);
+}
+
+/** The windows-array schema: each item is one of WINDOW_SCHEMA's own
+ *  branches, so a window that no branch can express is undecodable. The
+ *  rolling branch rides only when the question shows a rolling marker. */
+export function buildQuestionWindowsSchema(offerRolling = true): Record<string, unknown> {
+  const branches = (WINDOW_SCHEMA as { anyOf: Array<{ required: string[] }> }).anyOf;
+  const offered = offerRolling ? branches : branches.filter((b) => !b.required.includes('lastCount'));
+  return {
+    type: 'object',
+    properties: { windows: { type: 'array', items: { anyOf: offered } } },
+    required: ['windows'],
+    additionalProperties: false,
+  };
 }
 
 /** Session cache: the same phrase on the same calendar day means the same
  *  window, and "yesterday"/"today" repeat constantly. */
 const CACHE = new Map<string, WindowFields | { error: string }>();
+
+function windowCacheKey(phrase: string, now: Date, timezone: string): string {
+  return `${format(toZonedTime(now, timezone), 'yyyy-MM-dd')}::${timezone}::${phrase.trim().toLowerCase()}`;
+}
+
+/** Seeds the per-day cache with fields the windows interrogation already
+ *  produced (refs #444), keyed by the window's meaning label, so a tool-time
+ *  interpretWhen on that label resolves without any model call. */
+export function seedInterpreterCache(phrase: string, fields: WindowFields, now: Date, timezone: string): void {
+  CACHE.set(windowCacheKey(phrase, now, timezone), fields);
+}
 
 /** Test-only. */
 export function resetWindowInterpreterCacheForTests(): void {
@@ -279,7 +351,7 @@ export async function interpretWhen(
   timezone: string,
   signal: AbortSignal,
 ): Promise<WindowFields | { error: string }> {
-  const cacheKey = `${format(toZonedTime(now, timezone), 'yyyy-MM-dd')}::${timezone}::${phrase.trim().toLowerCase()}`;
+  const cacheKey = windowCacheKey(phrase, now, timezone);
   const cached = CACHE.get(cacheKey);
   if (cached) return cached;
 

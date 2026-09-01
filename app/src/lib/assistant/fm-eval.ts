@@ -15,11 +15,10 @@
  * in the pullable device log file.
  */
 import { interpretWhen, resetWindowInterpreterCacheForTests } from './window-interpreter';
-import { extractTimeframes } from './timeframe-stage';
+import { resolveTimeframesFromQuestion } from './timeframe-stage';
 import { resolveWindow } from './event-range';
-import { normalizeWhenPhrase } from './tool-helpers';
 import type { AssistantProvider } from './types';
-import { TIME_INTERPRET_CASES, TIME_EXTRACT_CASES } from './time-eval-cases';
+import { TIME_INTERPRET_CASES, TIME_QUESTION_CASES, type ResolvedQuestionWindow } from './time-eval-cases';
 
 /** The fixed clock every case predicate is written against: Sunday
  *  2026-07-19 14:00 America/New_York (same instant prompt-eval.mts pins). A
@@ -33,7 +32,7 @@ export const FM_EVAL_TZ = 'America/New_York';
 
 /** How many cases this eval scores. Exported so a caller running it alongside the
  *  contract eval can size one progress bar over both (see `system-model-eval.ts`). */
-export const TIME_EVAL_CASE_COUNT = TIME_INTERPRET_CASES.length + TIME_EXTRACT_CASES.length;
+export const TIME_EVAL_CASE_COUNT = TIME_INTERPRET_CASES.length + TIME_QUESTION_CASES.length;
 
 /** One class's running tally. */
 export interface FmEvalTally {
@@ -43,8 +42,8 @@ export interface FmEvalTally {
 
 /** A case that did not meet its predicate, kept compact for the log line. */
 export interface FmEvalFailure {
-  /** 'interpret' | 'extract', so a reader can tell which stage failed. */
-  stage: 'interpret' | 'extract';
+  /** 'interpret' | 'question', so a reader can tell which stage failed. */
+  stage: 'interpret' | 'question';
   /** The case's class label ('relative-day', 'rolling', 'extract'...). */
   cls: string;
   /** The phrase or question fed in. */
@@ -58,7 +57,7 @@ export interface FmEvalFailure {
 export interface FmEvalReport {
   /** Interpretation cases scored, per class and overall. */
   interpret: FmEvalTally & { byClass: Record<string, FmEvalTally> };
-  /** Extraction cases scored. */
+  /** Whole-question window cases scored (refs #444). */
   extract: FmEvalTally;
   /** Combined pass/total across both stages. */
   total: FmEvalTally;
@@ -96,7 +95,7 @@ export async function runFmTimeEval(
   resetWindowInterpreterCacheForTests();
 
   const startedAt = Date.now();
-  const total = TIME_INTERPRET_CASES.length + TIME_EXTRACT_CASES.length;
+  const total = TIME_INTERPRET_CASES.length + TIME_QUESTION_CASES.length;
   let done = 0;
   const failures: FmEvalFailure[] = [];
   const byClass: Record<string, FmEvalTally> = {};
@@ -117,32 +116,31 @@ export async function runFmTimeEval(
     onProgress?.(++done, total);
   }
 
-  for (const c of TIME_EXTRACT_CASES) {
+  for (const c of TIME_QUESTION_CASES) {
     if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-    const cls = c.cls ?? 'extract';
-    const result = await extractTimeframes(c.question, provider, now, timezone, signal);
-    const phrases = result.phrases.map((p) => normalizeWhenPhrase(p));
-    // A none-case is correct when the extractor found no stated timeframe and
-    // fell to the default 'today' (extractTimeframes never returns an empty
-    // phrase list except when it abstains). The `expect` cases require each
-    // expected phrase to appear as a normalized substring of some returned
-    // phrase, exactly as prompt-eval scores them.
-    const ok = c.none
-      ? phrases.length === 1 && phrases[0] === 'today'
-      : !result.abstained && (c.expect ?? []).every((e) => phrases.some((p) => p.includes(normalizeWhenPhrase(e))));
+    const cls = c.cls ?? 'question';
+    // The production path end to end (refs #442's lesson): the same function
+    // the app calls, windows resolved through parseFields + resolveWindow.
+    const result = await resolveTimeframesFromQuestion(c.question, provider, now, timezone, signal, c.context);
+    const windows: ResolvedQuestionWindow[] = result.resolved.map((tf) => ({
+      fields: tf.fields as Record<string, unknown>,
+      range: resolveWindow(tf.fields, now, timezone),
+    }));
+    const ok = !result.abstained && c.ok(windows);
     extract.total += 1;
     if (ok) extract.pass += 1;
     else {
       failures.push({
-        stage: 'extract',
+        stage: 'question',
         cls,
         input: c.question,
-        expected: c.none ? 'no timeframe (default today)' : (c.expect ?? []).join(', '),
-        got: result.abstained ? 'abstained' : JSON.stringify(result.phrases),
+        expected: cls,
+        got: JSON.stringify(result.resolved.map((tf) => tf.fields)),
       });
     }
     onProgress?.(++done, total);
   }
+
 
   const interpretTotals = Object.values(byClass).reduce(
     (acc, e) => ({ pass: acc.pass + e.pass, total: acc.total + e.total }),

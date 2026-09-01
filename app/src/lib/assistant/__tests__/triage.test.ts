@@ -189,30 +189,26 @@ describe('classifyRequest with a roster and vocabulary', () => {
   const ask = (provider: AssistantProvider, question: string) =>
     classifyRequest(provider, question, new AbortController().signal, undefined, undefined, [], roster, labels);
 
-  it('constrains subject and objects to the real values and copies when', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","subject":"events","objects":["person"],"when":["between mon and tue"]}',
-    );
+  it('constrains subject and objects to the real values', async () => {
+    const provider = providerSaying('{"kind":"ZONEMINDER","subject":"events","objects":["person"]}');
     const verdict = await ask(provider, 'How may folks came to the front of my house between mon and tue?');
 
     const [system, , , schema] = vi.mocked(provider.complete).mock.calls[0];
     expect(system).toContain('car, person, truck');
     expect(system).not.toContain('"covered"');
+    // Time left this call entirely (refs #444): the windows interrogation
+    // owns it on every backend.
+    expect(system).not.toContain('"when"');
     expect(schema).toMatchObject({
       properties: {
         subject: { enum: ['events', 'monitors', 'server', 'groups', 'other'] },
         objects: { type: 'array', items: { enum: labels } },
-        when: { type: 'array', items: { type: 'string' } },
       },
-      required: ['kind', 'subject', 'objects', 'when'],
+      required: ['kind', 'subject', 'objects'],
     });
     expect((schema as { properties: object }).properties).not.toHaveProperty('monitors');
-    expect(verdict).toEqual({
-      kind: 'zoneminder',
-      subject: 'events',
-      objects: ['person'],
-      when: ['between mon and tue'],
-    });
+    expect((schema as { properties: object }).properties).not.toHaveProperty('when');
+    expect(verdict).toEqual({ kind: 'zoneminder', subject: 'events', objects: ['person'] });
   });
 
   it('sends the unchanged prompt and schema when no roster is given', async () => {
@@ -228,11 +224,9 @@ describe('classifyRequest with a roster and vocabulary', () => {
   // An unconstrained backend can reply anything; values outside the enums
   // are dropped, never trusted.
   it('drops subjects and objects outside the enums', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","subject":"weather","objects":["unicorn"],"when":[]}',
-    );
+    const provider = providerSaying('{"kind":"ZONEMINDER","subject":"weather","objects":["unicorn"]}');
     const verdict = await ask(provider, 'anything in the backyard');
-    expect(verdict).toEqual({ kind: 'zoneminder', objects: [], when: [] });
+    expect(verdict).toEqual({ kind: 'zoneminder', objects: [] });
   });
 
   // Refs #436: selecting the whole vocabulary is the creep signature.
@@ -250,54 +244,6 @@ describe('classifyRequest with a roster and vocabulary', () => {
     );
     const verdict = await ask(provider, 'any vehicles today');
     expect(verdict.objects).toEqual(['car', 'truck']);
-  });
-});
-
-/** Refs #434: the parse call copies the time phrases too, so the separate
- *  extraction model call is not needed on the roster lane. */
-describe('classifyRequest when-phrase slot', () => {
-  it('asks for and returns verbatim time phrases with the roster', async () => {
-    const provider = providerSaying(
-      '{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["between mon and tue"]}',
-    );
-    const verdict = await classifyRequest(
-      provider,
-      'who came between mon and tue',
-      new AbortController().signal,
-      undefined,
-      undefined,
-      [],
-      ['FrontDoor'],
-      ['person'],
-    );
-    const [system, , , schema] = vi.mocked(provider.complete).mock.calls[0];
-    expect(system).toContain('"when"');
-    expect(schema).toMatchObject({
-      properties: { when: { type: 'array', items: { type: 'string' } } },
-      required: ['kind', 'subject', 'objects', 'when'],
-    });
-    expect(verdict.when).toEqual(['between mon and tue']);
-  });
-
-  it('drops junk when values and leaves the slot unset without a roster', async () => {
-    const junk = providerSaying(
-      '{"kind":"ZONEMINDER","subject":"events","objects":[],"when":["", 42]}',
-    );
-    const verdict = await classifyRequest(
-      junk,
-      'summarize',
-      new AbortController().signal,
-      undefined,
-      undefined,
-      [],
-      ['FrontDoor'],
-      ['person'],
-    );
-    expect(verdict.when).toEqual([]);
-
-    const bare = providerSaying('{"kind":"CHAT"}');
-    const none = await classifyRequest(bare, 'hello', new AbortController().signal);
-    expect(none.when).toBeUndefined();
   });
 });
 

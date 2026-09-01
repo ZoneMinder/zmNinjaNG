@@ -74,9 +74,17 @@ after any prompt or provider change and put both scores in the PR.
   unreachable without a real tool result (4ee2bbbf), failure paths append
   a correct-and-retry guard instead of echoing raw errors (0a720c01).
 - Small models copy phrases perfectly but fail direct field-filling: time
-  windows use copy-interpret-compute (model copies the phrase verbatim, a
-  constrained interpreter call maps it to fields, code does arithmetic);
-  measured direct fills scored 27/36 (qwen) and 15/36 (llama), refs #265.
+  windows used copy-interpret-compute (refs #265; direct fills then scored
+  27/36 qwen, 15/36 llama). SUPERSEDED for time (refs #444): copying itself
+  proved the fragile step ("same day, last week" copied as "last week"),
+  and the rebuilt interrogation - whole question in, a windows ARRAY of
+  meaning-first branch shapes out, rolling branch offered only when the
+  question shows a rolling marker, code resolving every window - scores
+  124/124 across every time class on qwen3:8b, comparisons included. The
+  copy pattern still holds where it never broke (place words). On-device
+  backends run the same path but are UNMEASURED there (array-of-anyOf
+  schemas untested on Apple FM / Gemini Nano): run the settings time eval
+  on-device before trusting those numbers.
 - Prompt classification teaches dimensions (intent by subject), never
   instance lists; instance-based triage misclassified every combination
   outside its examples, four times.
