@@ -100,6 +100,12 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   // weekday references (resolved range, so weekday/daysAgo/date branches all pass)
   { phrase: 'on sunday', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-19') },
   { phrase: 'last tuesday night', cls: 'weekday', ok: (f, r) => startsOn(r, '2026-07-14') && band(f.fromTime, '17:00', '23:00') },
+  // weekday ranges (refs #434): the fromWeekday/toWeekday branch exists so
+  // the model never computes the dates; checked on the resolved range.
+  { phrase: 'between mon and tue', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-13') },
+  { phrase: 'from friday to sunday', cls: 'weekday', ok: (_f, r) => startsOn(r, '2026-07-17') },
+  // lunch is a part-of-day band (refs #434)
+  { phrase: 'at lunch 5 days ago', cls: 'part-of-day', ok: (f, r) => startsOn(r, '2026-07-14') && band(f.fromTime, '10:00', '12:00') && band(f.toTime, '12:00', '14:00') },
   // weekend (code computes the two dates from the `weekend` field; resolved
   // range checked so either the field or a correct fromDate/toDate passes)
   { phrase: 'this weekend', cls: 'weekend', ok: (_f, r) => startsOn(r, '2026-07-18') && endsOnDate(r, '2026-07-19') },
@@ -161,6 +167,12 @@ export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
   { question: 'were there cars in the driveway yesterday afternoon', expect: ['yesterday', 'afternoon'] },
   { question: 'give me a recap of last month', expect: ['last month'] },
   { question: 'how busy was it in april', expect: ['april'] },
+  // Weekday ranges and the month-word guard (refs #434): the range phrase
+  // must surface whole, and the "may" typo must not scan as a month (the
+  // guard is unit-tested; here the range keeps the case answerable).
+  { question: 'who came by between mon and tue?', expect: ['between mon and tue'] },
+  { question: 'How may folks came to the front of my house between mon and tue?', expect: ['between mon and tue'] },
+  { question: 'who came at lunch 5 days ago', expect: ['lunch', '5 days ago'] },
   { question: 'was war letzte Woche bei mir los', expect: ['letzte woche'] },
   { question: 'what cameras do I have', none: true },
   { question: 'is the server ok', none: true },

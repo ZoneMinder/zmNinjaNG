@@ -91,6 +91,13 @@ after any prompt or provider change and put both scores in the PR.
   (observed live on a paraphrase, refs #430); the parser leaves both slots
   unset then, since asserting no-coverage about a monitor the model itself
   named is the worst outcome.
+- Adding the `when` slot to the parse flipped "front door" (no door
+  monitor) from a clean noMatch to covered:true with the WHOLE roster selected,
+  under two rule wordings (refs #434): unrelated schema fields perturb a
+  borderline judgment, so re-run the parse eval after ANY parse-prompt or
+  schema change. The fix is structural, not wording: a whole-roster
+  selection leaves the slot unset, since it pins nothing an unpinned query
+  lacks and is the false-cover signature.
 - The full parse (refs #432, `prompt-eval.mts parse`, temp 0, 2026-09):
   slots as array enums (monitors as a SET, subject, objects) with an
   umbrella-coverage rule (a house contains what its monitors watch) scores 30/30
@@ -98,7 +105,11 @@ after any prompt or provider change and put both scores in the PR.
   "folks" -> person, and German -> the door monitor - the cases the single
   slot and the English category list failed. llama3.2 scores 8/20, mostly
   kind misroutes (ACTION for count questions); qwen3:8b remains the
-  recommended Ollama model.
+  recommended Ollama model. With the `when` slot merged in (refs #434) the
+  parse scores 36/36 and the separate extraction call is gone on the roster
+  lane; the eval's extract stage still measures the roster-less fallback's
+  model-only recall, where multi-phrase misses are pre-existing and the
+  scan union covers them.
 - Apple Foundation Models invents tool arguments (validate before use) and
   calls real tools on greeting turns; the first tool call on a tool-less
   turn gets a no-tools pushback (578787dc).

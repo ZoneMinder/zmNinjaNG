@@ -238,3 +238,48 @@ describe('no window', () => {
     expect(at({})).toBeUndefined();
   });
 });
+
+/**
+ * Refs #434, observed live: "between mon and tue" had no weekday-range shape,
+ * so the model computed fromDate/toDate itself and started the window on
+ * Sunday. The range is two weekday fields the code resolves: the end is the
+ * most recent toWeekday (today included), the start the fromWeekday at or
+ * before it. NOW is Thursday 2026-07-16.
+ */
+describe('weekday ranges', () => {
+  it('resolves the most recent such span', () => {
+    // Monday Jul 13 through Tuesday Jul 14 (inclusive: closes Wed midnight).
+    expect(at({ fromWeekday: 'monday', toWeekday: 'tuesday' })).toEqual({
+      startDateTime: '2026-07-13 00:00:00',
+      endDateTime: '2026-07-15 00:00:00',
+    });
+  });
+
+  it('wraps across the weekend', () => {
+    // Friday Jul 10 through Monday Jul 13.
+    expect(at({ fromWeekday: 'friday', toWeekday: 'monday' })).toEqual({
+      startDateTime: '2026-07-10 00:00:00',
+      endDateTime: '2026-07-14 00:00:00',
+    });
+  });
+
+  it('caps the end at now when the span ends today', () => {
+    // Wednesday Jul 15 through Thursday Jul 16 (today): closes at now.
+    expect(at({ fromWeekday: 'wednesday', toWeekday: 'thursday' })).toEqual({
+      startDateTime: '2026-07-15 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+  });
+
+  it('rejects a half-open range and unknown day names', () => {
+    expect(at({ fromWeekday: 'monday' })).toHaveProperty('error');
+    expect(at({ fromWeekday: 'monday', toWeekday: 'blursday' })).toHaveProperty('error');
+  });
+
+  it('rejects mixing a weekday range with other day shapes or clock bands', () => {
+    expect(at({ fromWeekday: 'monday', toWeekday: 'tuesday', daysAgo: 1 })).toHaveProperty('error');
+    expect(at({ fromWeekday: 'monday', toWeekday: 'tuesday', fromTime: '09:00', toTime: '17:00' })).toHaveProperty(
+      'error',
+    );
+  });
+});

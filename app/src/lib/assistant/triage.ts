@@ -46,6 +46,10 @@ export interface TriageVerdict {
   subject?: QuerySubject;
   /** Recorded labels the question asks about ("folks" -> person). */
   objects?: string[];
+  /** Time phrases copied verbatim from the question (refs #434), for the
+   *  timeframe stage to union with its own scan; provenance and
+   *  interpretation stay there. Absent without a roster. */
+  when?: string[];
 }
 
 /** Model-facing (rule 5 exempt): never rendered, only matched below.
@@ -134,13 +138,18 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
         // substituted the nearest camera for a place the list lacks.
         '"place": the exact place or camera words it names ("" when it names none; time words such as today',
         'or yesterday are not places).',
-        '"covered": true when a listed camera means that place, or when the place is broader and contains',
-        'what listed cameras watch (a house contains its own cameras); false when "place" is "" or when no',
-        'listed camera relates to it. A nearby or merely similar place is still false, never the closest name.',
+        '"covered": true when a listed camera means that place, or when the place is a whole area that',
+        "contains a listed camera's own area (the whole house contains its cameras); false when \"place\" is",
+        '"" or when no listed camera means or sits inside it. A place that is only one PART of the property',
+        '(one door, one corner, one room) is covered only by a camera that means that exact place: nearby',
+        'or merely similar is still false, never the closest name.',
         '"monitors": every listed camera that means the place or watches part of it ([] when "covered" is false).',
         '"subject": what the message asks about. events - what happened, who or what came by, was seen,',
         "detected, or counted. monitors - the camera list or a camera's state. server - health or whether",
         'the system is up. groups - monitor groups. other - anything else.',
+        '"when": every time expression the message names, each copied VERBATIM in its own language',
+        '("today", "letzte Woche", "between mon and tue", "at lunch 5 days ago"); [] when it names none.',
+        'Copy whole compound phrases; never invent, translate, or normalize a time.',
         ...(labels.length > 0
           ? [
               '"objects": every listed label the message asks about, judged by meaning ("folks" or "Leute" mean',
@@ -148,7 +157,7 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
             ]
           : []),
         '',
-        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "place", "covered", "monitors", "subject"${labels.length > 0 ? ', and "objects"' : ''}.`,
+        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "place", "covered", "monitors", "subject", "when"${labels.length > 0 ? ', and "objects"' : ''}.`,
       ]
     : ['Reply with one word: ZONEMINDER, ACTION, or CHAT.']),
 ];
@@ -194,8 +203,11 @@ export function buildTriageSchema(monitors: readonly string[], labels: readonly 
       monitors: { type: 'array', items: { type: 'string', enum: [...monitors] } },
       subject: { type: 'string', enum: [...QUERY_SUBJECTS] },
       ...(labels.length > 0 ? { objects: { type: 'array', items: { type: 'string', enum: [...labels] } } } : {}),
+      // Free strings by necessity (no enum can list every time phrase); the
+      // timeframe stage's provenance filter distrusts them (refs #434).
+      when: { type: 'array', items: { type: 'string' } },
     },
-    required: ['kind', 'place', 'covered', 'monitors', 'subject', ...(labels.length > 0 ? ['objects'] : [])],
+    required: ['kind', 'place', 'covered', 'monitors', 'subject', ...(labels.length > 0 ? ['objects'] : []), 'when'],
     additionalProperties: false,
   };
 }
@@ -241,7 +253,7 @@ export function parseTriageSlots(
   labels: readonly string[] = [],
 ): Omit<TriageVerdict, 'kind'> {
   if (monitors.length === 0) return {};
-  let raw: { place?: unknown; covered?: unknown; monitors?: unknown; subject?: unknown; objects?: unknown };
+  let raw: { place?: unknown; covered?: unknown; monitors?: unknown; subject?: unknown; objects?: unknown; when?: unknown };
   try {
     raw = JSON.parse(reply) as typeof raw;
   } catch {
@@ -253,7 +265,13 @@ export function parseTriageSlots(
     ? raw.monitors.filter((m): m is string => typeof m === 'string' && monitors.includes(m))
     : undefined;
   if (raw.covered === true && named && named.length > 0) {
-    slots.monitors = named;
+    // Selecting the ENTIRE roster pins nothing an unpinned query would not
+    // already cover, and it is the signature of a false cover: asked about a
+    // "front door" no camera means, the model answered covered:true with
+    // every camera, under two rule wordings (measured 2/2 at temp 0,
+    // refs #434). The slot stays unset and the turn runs unpinned, with no
+    // line asserting a place.
+    if (named.length < monitors.length) slots.monitors = named;
   } else if (raw.covered === false) {
     if (named && named.length > 0) {
       // A contradiction (coverage denied while real roster names are filled
@@ -277,6 +295,12 @@ export function parseTriageSlots(
   }
   if (labels.length > 0 && Array.isArray(raw.objects)) {
     slots.objects = raw.objects.filter((o): o is string => typeof o === 'string' && labels.includes(o));
+  }
+  if (Array.isArray(raw.when)) {
+    slots.when = raw.when
+      .filter((w): w is string => typeof w === 'string')
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0);
   }
   return slots;
 }
