@@ -405,7 +405,14 @@ const listEventsTool: ToolDefinition = {
       // object (label, category word, or the objectType verbatim) leaves the
       // matchLabels flow below unchanged, so an unrecorded label the user really
       // asked about ("unicorn") still reaches its vocabulary reject.
-      if (objectTypeRaw !== undefined && objectTypeUngrounded(ctx.question, objectTypeRaw, ctx.objectLabels ?? [])) {
+      // Labels the parse stage grounded (ctx.plannedObjectTypes, refs #432)
+      // skip the drop: that guard is an English word scan and cannot see
+      // that "folks" means person; the constrained parse can.
+      const parseGrounded =
+        objectTypeRaw !== undefined &&
+        (ctx.plannedObjectTypes?.length ?? 0) > 0 &&
+        coerceLabelList(objectTypeRaw).every((label) => ctx.plannedObjectTypes!.includes(label));
+      if (objectTypeRaw !== undefined && !parseGrounded && objectTypeUngrounded(ctx.question, objectTypeRaw, ctx.objectLabels ?? [])) {
         const dropped = Array.isArray(objectTypeRaw) ? objectTypeRaw.join(', ') : String(objectTypeRaw);
         log.assistant('list_events objectType dropped: the question names no object', LogLevel.WARN, { dropped });
         objectTypeRaw = undefined;

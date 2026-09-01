@@ -46,6 +46,7 @@ import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
 import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
 import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
+import { planToolCalls, type PlannedToolCall } from '../../lib/assistant/plan';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
 import { classifyRequest, buildNoToolPrompt, type RequestKind } from '../../lib/assistant/triage';
 import type { AssistantBackend, AssistantMessage, AssistantTurn, ProviderConfig, ToolActivity, ToolContext, TraceEntry } from '../../lib/assistant/types';
@@ -653,10 +654,11 @@ export function AskPanel() {
         : // serverNames too: a question that names a server ("compare warehouse and
           // cabin") is about this system, and without the roster the classifier
           // read those as unrelated words and routed the turn to chat (refs #337).
-          // The monitor roster rides the same round (refs #427), but only when
-          // the deterministic scan above found nothing: a name the scan already
-          // matched needs no model, and the roster-less prompt stays exactly
-          // what the eval harness scores.
+          // The roster and label vocabulary ride the same round (refs #427,
+          // #432): this is the parse that fills every slot (cameras as a set,
+          // subject, objects), so it runs whenever a roster exists; the
+          // deterministic scan below still outvotes its camera slots. A
+          // roster-less install keeps the prompt the eval harness scores.
           await classifyRequest(
             provider,
             text,
@@ -664,10 +666,17 @@ export function AskPanel() {
             collectTrace,
             (s) => host.onStatus?.(s),
             serverNames,
-            monitorScanHits.length === 0 ? monitorRoster.map((m) => m.name) : [],
+            monitorRoster.map((m) => m.name),
+            monitorRoster.length > 0 ? objectLabels : [],
           );
       const kind: RequestKind = verdict.kind;
-      log.assistant('Request classified', LogLevel.DEBUG, { kind, monitor: verdict.monitor });
+      log.assistant('Request classified', LogLevel.DEBUG, {
+        kind,
+        monitors: verdict.monitors,
+        noMatch: verdict.noMatch,
+        subject: verdict.subject,
+        objects: verdict.objects,
+      });
 
       // Every timeframe the question names is extracted and resolved BEFORE the
       // tool round (refs #270, pipeline-v2): the native tool loops cannot nest
@@ -679,6 +688,7 @@ export function AskPanel() {
       // fixed script, and an extra call would consume the turn the scenario
       // meant for the answer.
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
+      let plannedCalls: PlannedToolCall[] | undefined;
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
         // The overlapped Ollama call from above when there is one, the
         // sequential call otherwise; same result either way.
@@ -692,15 +702,30 @@ export function AskPanel() {
         ctx.resolvedTimeframes = resolved;
         turnSystem = `${system}\n${buildTimeframeSystemLine(phrases)}`;
 
-        // The camera verdict becomes one system line, exactly like the
-        // timeframe line (refs #427): a resolved monitor pins monitorId, a
-        // NO_MATCH place gets the do-not-attribute guard, no place adds
-        // nothing. The scan outvotes the model; a roster-less turn (group
-        // mode, fetch failure) resolves to none and the line stays empty.
-        const monitorLine = buildMonitorSystemLine(
-          resolveMonitorMention(monitorScanHits, verdict.monitor, monitorRoster),
-        );
+        // The camera slots become one system line, exactly like the
+        // timeframe line (refs #427, #432): resolved monitors pin their
+        // monitorIds, a no-coverage place gets the do-not-attribute guard,
+        // no place adds nothing. The scan outvotes the model; a roster-less
+        // turn (group mode, fetch failure) resolves to none.
+        const resolution = resolveMonitorMention(monitorScanHits, verdict, monitorRoster);
+        const monitorLine = buildMonitorSystemLine(resolution);
         if (monitorLine) turnSystem = `${turnSystem}\n${monitorLine}`;
+
+        // The parse determines the tool calls where it can (refs #432): they
+        // run inside runAssistantTurn before the first model round, so the
+        // model opens on the data and only writes the answer. A null plan is
+        // today's free loop, unchanged. Labels the parse grounded also lift
+        // the English-side objectType drop for this turn's tools.
+        if (verdict.objects?.length) ctx.plannedObjectTypes = verdict.objects;
+        plannedCalls =
+          planToolCalls({
+            kind,
+            subject: verdict.subject,
+            monitors: resolution.kind === 'resolved' ? resolution.monitors : [],
+            objects: verdict.objects ?? [],
+            phrases,
+          }) ?? undefined;
+        if (plannedCalls) log.assistant('Planned tool calls from the parse', LogLevel.DEBUG, { plannedCalls });
       }
 
       // Already only this turn's new messages (see runAssistantTurn): the
@@ -712,6 +737,7 @@ export function AskPanel() {
         history,
         system: turnSystem,
         signal: controller.signal,
+        plannedCalls,
         // Specialized, then scoped: objectType pinned to this install's labels,
         // and `server` pinned to the servers this view combines so a model on a
         // guided-decoding backend cannot name a server that is not there

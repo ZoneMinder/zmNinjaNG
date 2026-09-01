@@ -1417,6 +1417,28 @@ describe('list_events when resolution (refs #246)', () => {
     expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*(car|truck)' }));
   });
 
+  // Refs #432, observed live: "how may folks came to the front of my house" -
+  // the model's objectType ["person"] was right ("folks" means person), but
+  // "folks" is outside the English word list, so objectTypeUngrounded
+  // stripped the filter and 46 unfiltered events came back. A label the
+  // parse stage grounded from the question's own words skips that guard.
+  it('keeps an objectType the parse stage grounded, though the English scan cannot see it', async () => {
+    const tool = getToolByName('list_events')!;
+    const r = await tool.execute(
+      { when: 'today', objectType: 'person' },
+      {
+        ...ctx(),
+        timezone: 'America/New_York',
+        question: 'how many folks came by today',
+        objectLabels: ['car', 'person'],
+        plannedObjectTypes: ['person'],
+      },
+    );
+
+    expect(r.isError).toBeFalsy();
+    expect(getEvents).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ notesRegexp: 'detected:.*person' }));
+  });
+
   it('hands back an uninterpretable when phrase instead of querying a guessed window', async () => {
     const tool = getToolByName('list_events')!;
     const r = await tool.execute({ when: 'sometime last spring' }, { ...ctx(), timezone: 'America/New_York' });

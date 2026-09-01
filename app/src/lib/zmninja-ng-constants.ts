@@ -713,6 +713,10 @@ export const ASSISTANT = {
   // Monitor names change when someone renames a camera, which is rarer still;
   // same session-length cache as the object vocabulary (monitor-stage.ts).
   monitorRosterCacheMs: 30 * 60 * 1000,
+  // A parsed question fans out one list_events per window x monitor
+  // (plan.ts); past this many calls the free tool loop's judgment beats a
+  // mechanical fan-out.
+  maxPlannedToolCalls: 6,
   maxTokens: 1024,
   // The remote path needs its own budget for the same reason the native one
   // above does, and neither of `maxTokens`'s constraints applies here: an

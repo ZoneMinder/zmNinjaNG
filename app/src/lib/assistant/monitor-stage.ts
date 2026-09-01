@@ -28,18 +28,21 @@ export interface MonitorRosterEntry {
   name: string;
 }
 
-/** What the question's place reference resolved to: one real monitor, a place
- *  no monitor covers, or no place named at all. */
+/** What the question's place reference resolved to: a SET of real monitors
+ *  ("front of my house" means several cameras, refs #432), a place no
+ *  monitor covers, or no place named at all. */
 export type MonitorMentionResolution =
-  | { kind: 'resolved'; id: string; name: string }
+  | { kind: 'resolved'; monitors: MonitorRosterEntry[] }
   | { kind: 'no_match' }
   | { kind: 'none' };
 
-/** The triage schema's two sentinel monitor values (see buildTriageSchema):
- *  the question names no particular camera or place, and the question names a
- *  place no monitor in the roster covers. */
-export const MONITOR_NONE = 'NONE';
-export const MONITOR_NO_MATCH = 'NO_MATCH';
+/** The camera slots one triage parse produced (a structural slice of
+ *  triage.ts's TriageVerdict, restated here so the module graph stays
+ *  acyclic: triage cannot be imported without importing what it imports). */
+export interface ParsedMonitorSlots {
+  monitors?: readonly string[];
+  noMatch?: boolean;
+}
 
 interface CachedRoster {
   roster: MonitorRosterEntry[];
@@ -113,22 +116,21 @@ export function scanMonitorMentions(question: string, roster: MonitorRosterEntry
 }
 
 /**
- * The stage's verdict: the deterministic scan wins whenever it found exactly
- * one monitor; several named monitors resolve to none (the model handles them
- * itself, one call each, and pinning one would hide the others); otherwise the
- * triage round's monitor field decides, distrusted unless it names a roster
- * entry or a sentinel (an unconstrained backend can reply anything).
+ * The stage's verdict: the deterministic scan wins whenever it found
+ * anything; otherwise the parse's roster-validated names decide, then its
+ * noMatch flag; anything else resolves to none and injects nothing.
  */
 export function resolveMonitorMention(
   scanHits: MonitorRosterEntry[],
-  triageMonitor: string | undefined,
+  slots: ParsedMonitorSlots,
   roster: MonitorRosterEntry[],
 ): MonitorMentionResolution {
-  if (scanHits.length === 1) return { kind: 'resolved', ...scanHits[0] };
-  if (scanHits.length > 1) return { kind: 'none' };
-  if (triageMonitor === MONITOR_NO_MATCH) return { kind: 'no_match' };
-  const named = roster.find((entry) => entry.name === triageMonitor);
-  if (named) return { kind: 'resolved', ...named };
+  if (scanHits.length > 0) return { kind: 'resolved', monitors: scanHits };
+  const named = (slots.monitors ?? [])
+    .map((name) => roster.find((entry) => entry.name === name))
+    .filter((entry): entry is MonitorRosterEntry => entry !== undefined);
+  if (named.length > 0) return { kind: 'resolved', monitors: named };
+  if (slots.noMatch) return { kind: 'no_match' };
   return { kind: 'none' };
 }
 
@@ -137,9 +139,11 @@ export function resolveMonitorMention(
  *  Model-facing (rule 5 exempt). */
 export function buildMonitorSystemLine(resolution: MonitorMentionResolution): string {
   if (resolution.kind === 'resolved') {
+    const listed = resolution.monitors.map((m) => `"${m.name}" (monitorId "${m.id}")`).join(', ');
+    const these = resolution.monitors.length === 1 ? 'this monitor' : 'these monitors';
     return (
-      `Monitor for this question, already resolved: pass monitorId "${resolution.id}" to event tools; ` +
-      `the place the question asks about is the monitor named "${resolution.name}".`
+      `Monitors for this question, already resolved: ${listed}. ` +
+      `The place the question asks about is ${these}; pass the monitorId to event tools and attribute events to ${these} by name.`
     );
   }
   if (resolution.kind === 'no_match') {

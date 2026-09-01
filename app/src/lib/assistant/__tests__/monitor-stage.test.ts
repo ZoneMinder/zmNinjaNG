@@ -64,47 +64,54 @@ describe('scanMonitorMentions', () => {
 });
 
 describe('resolveMonitorMention', () => {
-  it('resolves a single scan hit deterministically, ignoring the model verdict', () => {
-    expect(resolveMonitorMention([roster[1]], 'NO_MATCH', roster)).toEqual({
+  it('resolves scan hits deterministically, ignoring the model verdict', () => {
+    expect(resolveMonitorMention([roster[1]], { noMatch: true }, roster)).toEqual({
       kind: 'resolved',
-      id: '2',
-      name: 'Driveway',
+      monitors: [roster[1]],
     });
   });
 
-  // Two named monitors: the model handles them itself (one call each); pinning
-  // one would hide the other.
-  it('resolves multiple scan hits to none', () => {
-    expect(resolveMonitorMention([roster[0], roster[1]], undefined, roster)).toEqual({ kind: 'none' });
-  });
-
-  it('maps a triage monitor name to its roster entry', () => {
-    expect(resolveMonitorMention([], 'Garage Outdoor', roster)).toEqual({
+  // Several named monitors are a SET now (refs #432): "compare front door
+  // and driveway" pins both, one planned call each.
+  it('resolves multiple scan hits as a set', () => {
+    expect(resolveMonitorMention([roster[0], roster[1]], {}, roster)).toEqual({
       kind: 'resolved',
-      id: '1',
-      name: 'Garage Outdoor',
+      monitors: [roster[0], roster[1]],
     });
   });
 
-  it('maps NO_MATCH to no_match and NONE to none', () => {
-    expect(resolveMonitorMention([], 'NO_MATCH', roster)).toEqual({ kind: 'no_match' });
-    expect(resolveMonitorMention([], 'NONE', roster)).toEqual({ kind: 'none' });
+  it('maps the verdict monitor names to roster entries', () => {
+    expect(
+      resolveMonitorMention([], { monitors: ['Garage Outdoor', 'Driveway'] }, roster),
+    ).toEqual({ kind: 'resolved', monitors: [roster[0], roster[1]] });
   });
 
-  // The enum constrains capable backends, but an unconstrained one can reply
-  // anything; a name outside the roster must not be trusted.
-  it('treats an unknown or missing verdict as none', () => {
-    expect(resolveMonitorMention([], 'Backyard', roster)).toEqual({ kind: 'none' });
-    expect(resolveMonitorMention([], undefined, roster)).toEqual({ kind: 'none' });
+  it('maps noMatch to no_match and an empty verdict to none', () => {
+    expect(resolveMonitorMention([], { noMatch: true }, roster)).toEqual({ kind: 'no_match' });
+    expect(resolveMonitorMention([], { monitors: [] }, roster)).toEqual({ kind: 'none' });
+    expect(resolveMonitorMention([], {}, roster)).toEqual({ kind: 'none' });
+  });
+
+  it('drops verdict names that are not in the roster', () => {
+    expect(resolveMonitorMention([], { monitors: ['Backyard'] }, roster)).toEqual({
+      kind: 'none',
+    });
   });
 });
 
 describe('buildMonitorSystemLine', () => {
-  it('names the resolved monitor and its id', () => {
-    const line = buildMonitorSystemLine({ kind: 'resolved', id: '2', name: 'Driveway' });
+  it('names one resolved monitor and its id', () => {
+    const line = buildMonitorSystemLine({ kind: 'resolved', monitors: [roster[1]] });
     expect(line).toContain('"2"');
     expect(line).toContain('Driveway');
     expect(line).toContain('monitorId');
+  });
+
+  it('names every monitor of a resolved set', () => {
+    const line = buildMonitorSystemLine({ kind: 'resolved', monitors: [roster[1], roster[2]] });
+    expect(line).toContain('Driveway');
+    expect(line).toContain('Front Door');
+    expect(line).toContain('"3"');
   });
 
   it('tells the model no camera covers the named place on no_match', () => {

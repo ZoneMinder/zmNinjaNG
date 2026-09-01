@@ -969,3 +969,68 @@ describe('a provider that runs the tool loop natively', () => {
     expect(out[out.length - 1].text).toBe('1 event today.');
   });
 });
+
+/**
+ * Planned tool calls (refs #432): the parse stage determines the calls in
+ * code and the loop executes them BEFORE the first model round, through the
+ * same runOneCall machinery as model-initiated calls, so the model opens on
+ * the data and only writes the answer. A null/absent plan is byte-identical
+ * to the free loop.
+ */
+describe('planned tool calls', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const stub = (output: string) => {
+    const execute = vi.fn().mockResolvedValue({ output, display: [{ kind: 'event', id: 'e1' }] });
+    return {
+      execute,
+      tool: { name: 'list_events', description: 'd', schema: { type: 'object', properties: {} }, execute } as never,
+    };
+  };
+
+  it('executes the planned calls first, and the model only answers', async () => {
+    const { execute, tool } = stub('{"matchCount":3}');
+    const p = new MockProvider();
+    p.setScript([{ text: '3 events on FrontDoor.', toolCalls: [] }]);
+
+    const produced = await runAssistantTurn({
+      ...baseOpts(p, host(), [{ role: 'user', text: 'how many folks came to the front of my house?' }]),
+      tools: [tool],
+      plannedCalls: [
+        { name: 'list_events', input: { when: 'today', monitorId: '3', objectType: 'person' } },
+        { name: 'list_events', input: { when: 'today', monitorId: '4', objectType: 'person' } },
+      ],
+    });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute).toHaveBeenNthCalledWith(1, { when: 'today', monitorId: '3', objectType: 'person' }, expect.anything());
+    expect(execute).toHaveBeenNthCalledWith(2, { when: 'today', monitorId: '4', objectType: 'person' }, expect.anything());
+    // One model round: the answer. The results must already be in the
+    // history that round was sent.
+    const answer = produced[produced.length - 1];
+    expect(answer.role).toBe('assistant');
+    expect(answer.text).toBe('3 events on FrontDoor.');
+    // The planned results ride into history as an ordinary tool round.
+    expect(produced.some((m) => m.role === 'tool' && m.toolResults?.length === 2)).toBe(true);
+    // Result cards from planned calls surface like any other.
+    expect(answer.display).toEqual([{ kind: 'event', id: 'e1' }]);
+  });
+
+  it('registers planned signatures so the model cannot re-run the same call', async () => {
+    const { execute, tool } = stub('{"matchCount":3}');
+    const p = new MockProvider();
+    p.setScript([
+      { toolCalls: [{ id: 'c1', name: 'list_events', input: { when: 'today' } }] },
+      { text: 'done', toolCalls: [] },
+    ]);
+
+    await runAssistantTurn({
+      ...baseOpts(p, host(), [{ role: 'user', text: 'summarize today' }]),
+      tools: [tool],
+      plannedCalls: [{ name: 'list_events', input: { when: 'today' } }],
+    });
+
+    // Executed once by the plan; the model's identical repeat is refused.
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
