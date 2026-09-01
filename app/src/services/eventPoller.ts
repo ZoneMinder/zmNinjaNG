@@ -42,7 +42,36 @@ function parseEventId(id: string | number): number {
   return parseInt(String(id), 10);
 }
 
+/**
+ * Poller run-state is observable so UI can react to it: the notification
+ * settings badge subscribes here instead of reading isRunning() during
+ * render, which never re-ran when a poller started or stopped.
+ */
+const pollerChangeListeners = new Set<() => void>();
+
+function notifyPollerChange(): void {
+  for (const listener of pollerChangeListeners) listener();
+}
+
+/** Subscribe to any poller starting or stopping. Returns an unsubscribe. */
+export function subscribeEventPollers(listener: () => void): () => void {
+  pollerChangeListeners.add(listener);
+  return () => {
+    pollerChangeListeners.delete(listener);
+  };
+}
+
+/**
+ * Whether this profile's poller is running. Unlike
+ * `getEventPoller(id).isRunning()`, this never creates a registry entry for
+ * a profile that has never polled.
+ */
+export function isEventPollerRunning(profileId: string): boolean {
+  return eventPollers.get(profileId)?.isRunning() ?? false;
+}
+
 class EventPollerService {
+  private running = false;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private profileId: string | null = null;
   private deps: EventPollerDeps | null = null;
@@ -75,6 +104,11 @@ class EventPollerService {
     this.deps = deps;
     this.seenEventIds.clear();
     this.isFirstPoll = true;
+    // Running from here, not from the first timer: start() awaits the monitor
+    // load and the first poll, and a UI reading timerId in that window showed
+    // "not running" for a poller that was already working.
+    this.running = true;
+    notifyPollerChange();
 
     log.notifications('Starting event poller for direct mode', LogLevel.INFO, { profileId });
 
@@ -99,6 +133,8 @@ class EventPollerService {
     this.monitorData = [];
     this.namesReloadPromise = null;
     this.namesReloadAfter = 0;
+    this.running = false;
+    notifyPollerChange();
 
     log.notifications('Stopped event poller', LogLevel.INFO);
   }
@@ -107,7 +143,7 @@ class EventPollerService {
    * Check if the poller is running.
    */
   isRunning(): boolean {
-    return this.timerId !== null;
+    return this.running;
   }
 
   private async _loadMonitorNames(): Promise<void> {

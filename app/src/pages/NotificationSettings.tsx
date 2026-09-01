@@ -5,7 +5,7 @@
  * monitor filters, and push notification settings.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '../lib/query/query-keys';
 import { useNotificationStore, startEventPoller } from '../stores/notifications';
@@ -41,7 +41,7 @@ import { useTranslation } from 'react-i18next';
 import { log, LogLevel } from '../lib/logger';
 import { checkNotificationsApiSupport } from '../api/notifications';
 import { getSession } from '../services/sessions';
-import { getEventPoller, stopEventPoller } from '../services/eventPoller';
+import { isEventPollerRunning, stopEventPoller, subscribeEventPollers } from '../services/eventPoller';
 import type { NotificationMode } from '../types/notifications';
 import { NotificationBadge } from '../components/NotificationBadge';
 import { NotificationModeSection } from '../components/notifications/NotificationModeSection';
@@ -99,6 +99,14 @@ export default function NotificationSettings() {
     useShallow((s) => (profileId ? s.getProfileSettings(profileId) : null))
   );
   const unreadCount = useNotificationStore((s) => (profileId ? s.getUnreadCount(profileId) : 0));
+
+  // The poller lives outside React and starts asynchronously after the mode
+  // switch, so its run state has to be subscribed to. Reading isRunning()
+  // during render showed "not running" until an unrelated re-render.
+  const pollerRunning = useSyncExternalStore(
+    subscribeEventPollers,
+    useCallback(() => (profileId ? isEventPollerRunning(profileId) : false), [profileId])
+  );
 
   // Fetch monitors
   const { data: monitorsData } = useQuery({
@@ -277,8 +285,7 @@ export default function NotificationSettings() {
 
   const handlePollingIntervalRestart = () => {
     if (!currentProfile) return;
-    const poller = getEventPoller(currentProfile.id);
-    if (poller.isRunning()) {
+    if (isEventPollerRunning(currentProfile.id)) {
       startEventPoller(currentProfile.id);
     }
   };
@@ -297,8 +304,7 @@ export default function NotificationSettings() {
       // here and the registered/not-registered split would damn an
       // impossibility. Report the thing that actually runs: the poller.
       if (!Platform.isNative) {
-        const polling = currentProfile ? getEventPoller(currentProfile.id).isRunning() : false;
-        return polling ? (
+        return pollerRunning ? (
           <Badge variant="default" className="gap-1.5 bg-blue-500">
             <CheckCircle className="h-3 w-3" />
             {t('notifications.status.direct_polling')}
