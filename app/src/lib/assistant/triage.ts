@@ -20,47 +20,11 @@ import type { AssistantMessage, AssistantProvider, AssistantStatus, TraceEntry }
 import { sanitizeModelText } from './sanitize';
 import { log, LogLevel } from '../logger';
 import { isAbortError } from '../is-abort-error';
-import { ASSISTANT } from '../zmninja-ng-constants';
+import { buildContextualQuestion, type ParseContext } from './parse-context';
+
+export { buildContextualQuestion, latestExchange, type ParseContext } from './parse-context';
 
 export type RequestKind = 'zoneminder' | 'chat' | 'action';
-
-/** The previous completed exchange, for classifying a follow-up (refs #440):
- *  "yes" or "what about the garage?" is unreadable without it. */
-export interface ParseContext {
-  user: string;
-  assistant: string;
-}
-
-/** The latest completed user+assistant exchange BEFORE the message currently
- *  being classified, or undefined on a fresh thread. */
-export function latestExchange(history: ReadonlyArray<{ role: string; text?: string }>): ParseContext | undefined {
-  for (let i = history.length - 1; i >= 1; i--) {
-    const assistant = history[i];
-    if (assistant.role !== 'assistant' || !assistant.text) continue;
-    for (let j = i - 1; j >= 0; j--) {
-      const user = history[j];
-      if (user.role === 'user' && user.text) return { user: user.text, assistant: assistant.text };
-    }
-    return undefined;
-  }
-  return undefined;
-}
-
-/** The question as the parse and coverage calls receive it: bare, or wrapped
- *  with the previous exchange so a short follow-up carries its topic. Both
- *  turns are trimmed hard - the context is a hint, not a transcript. */
-export function buildContextualQuestion(question: string, context?: ParseContext): string {
-  if (!context) return question;
-  const trim = (text: string) =>
-    text.length > ASSISTANT.parseContextCharacters ? `${text.slice(0, ASSISTANT.parseContextCharacters)}...` : text;
-  return [
-    'Earlier exchange, for context only:',
-    `user: ${trim(context.user)}`,
-    `assistant: ${trim(context.assistant)}`,
-    '',
-    `The LATEST message, the one to classify: ${question}`,
-  ].join('\n');
-}
 
 /** What the events/monitors/server question is about; `other` falls back to
  *  the free tool loop (refs #432). */
@@ -84,6 +48,7 @@ export interface TriageVerdict {
    *  interpretation stay there. Absent without a roster. */
   when?: string[];
 }
+
 
 /** Model-facing (rule 5 exempt): never rendered, only matched below.
  *
@@ -170,9 +135,6 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
         '"subject": what the message asks about. events - what happened, who or what came by, was seen,',
         "detected, or counted. monitors - the camera list or a camera's state. server - health or whether",
         'the system is up. groups - monitor groups. other - anything else.',
-        '"when": every time expression the message names, each copied VERBATIM in its own language',
-        '("today", "letzte Woche", "between mon and tue", "at lunch 5 days ago"); [] when it names none.',
-        'Copy whole compound phrases; never invent, translate, or normalize a time.',
         ...(labels.length > 0
           ? [
               '"objects": every listed label the message asks about, judged by meaning ("folks" or "Leute" mean',
@@ -181,7 +143,7 @@ const triagePromptLines = (servers: readonly string[], monitors: readonly string
             ]
           : []),
         '',
-        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "subject", "when"${labels.length > 0 ? ', and "objects"' : ''}.`,
+        `Reply with "kind" (ZONEMINDER, ACTION, or CHAT), "subject"${labels.length > 0 ? ', and "objects"' : ''}.`,
       ]
     : ['Reply with one word: ZONEMINDER, ACTION, or CHAT.']),
 ];
@@ -217,11 +179,8 @@ export function buildTriageSchema(monitors: readonly string[], labels: readonly 
       kind: { type: 'string', enum: ['ZONEMINDER', 'ACTION', 'CHAT'] },
       subject: { type: 'string', enum: [...QUERY_SUBJECTS] },
       ...(labels.length > 0 ? { objects: { type: 'array', items: { type: 'string', enum: [...labels] } } } : {}),
-      // Free strings by necessity (no enum can list every time phrase); the
-      // timeframe stage's provenance filter distrusts them (refs #434).
-      when: { type: 'array', items: { type: 'string' } },
     },
-    required: ['kind', 'subject', ...(labels.length > 0 ? ['objects'] : []), 'when'],
+    required: ['kind', 'subject', ...(labels.length > 0 ? ['objects'] : [])],
     additionalProperties: false,
   };
 }
@@ -267,7 +226,7 @@ export function parseTriageSlots(
   labels: readonly string[] = [],
 ): Omit<TriageVerdict, 'kind'> {
   if (monitors.length === 0) return {};
-  let raw: { subject?: unknown; objects?: unknown; when?: unknown };
+  let raw: { subject?: unknown; objects?: unknown };
   try {
     raw = JSON.parse(reply) as typeof raw;
   } catch {
@@ -283,12 +242,6 @@ export function parseTriageSlots(
     // (observed live on "how busy...", refs #436), and as a filter it
     // silently EXCLUDES events with no detection at all: derive no filter.
     slots.objects = labels.length > 1 && objects.length === labels.length ? [] : objects;
-  }
-  if (Array.isArray(raw.when)) {
-    slots.when = raw.when
-      .filter((w): w is string => typeof w === 'string')
-      .map((w) => w.trim())
-      .filter((w) => w.length > 0);
   }
   return slots;
 }

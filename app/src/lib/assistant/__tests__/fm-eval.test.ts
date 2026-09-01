@@ -8,21 +8,24 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AssistantProvider, AssistantTurn, CompletionResult } from '../types';
 import { runFmTimeEval, FM_EVAL_NOW, FM_EVAL_TZ } from '../fm-eval';
 
-// Two interpretation cases (one class) and two extraction cases (an `expect`
-// and a `none`), enough to exercise both stages and both scoring paths.
+// Two interpretation cases (one class) and two question cases, enough to
+// exercise both stages and both scoring paths (refs #444).
 vi.mock('../time-eval-cases', () => ({
   TIME_INTERPRET_CASES: [
     { phrase: 'today', cls: 'relative-day', ok: (f: Record<string, unknown>) => f.daysAgo === 0 },
     { phrase: 'yesterday', cls: 'relative-day', ok: (f: Record<string, unknown>) => f.daysAgo === 1 },
   ],
-  TIME_EXTRACT_CASES: [
-    // A non-English phrase the deterministic scanner cannot see (scanTimeExpressions
-    // owns the English classes), so extraction rides on the model alone and the
-    // failure path is reachable when the model misses. A 'today' expect would be
-    // the extractor's default fallback and could never fail; an English phrase the
-    // scanner recognizes could never fail either.
-    { question: 'was war letzte woche los', expect: ['letzte woche'] },
-    { question: 'what cameras do I have', none: true },
+  TIME_QUESTION_CASES: [
+    {
+      question: 'was war letzte woche los',
+      ok: (ws: Array<{ fields: Record<string, unknown> }>) =>
+        ws.length === 1 && ws[0].fields.lastUnit === 'week' && ws[0].fields.lastCount === 1,
+    },
+    {
+      question: 'what cameras do I have',
+      cls: 'no-time-default',
+      ok: (ws: Array<{ fields: Record<string, unknown> }>) => ws.length === 1 && ws[0].fields.daysAgo === 0,
+    },
   ],
 }));
 
@@ -43,8 +46,8 @@ class ScriptProvider implements AssistantProvider {
     jsonSchema?: Record<string, unknown>,
   ): Promise<CompletionResult> {
     this.completeCalls += 1;
-    const isExtract = !!(jsonSchema?.properties as Record<string, unknown> | undefined)?.phrases;
-    const key = `${isExtract ? 'q' : 'p'}:${text.trim().toLowerCase()}`;
+    const isQuestion = !!(jsonSchema?.properties as Record<string, unknown> | undefined)?.windows;
+    const key = `${isQuestion ? 'q' : 'p'}:${text.trim().toLowerCase()}`;
     return { text: this.replies[key] ?? '{}' };
   }
   async chat(): Promise<AssistantTurn> {
@@ -55,9 +58,10 @@ class ScriptProvider implements AssistantProvider {
 const ALL_CORRECT: Record<string, string> = {
   'p:today': '{"daysAgo":0}',
   'p:yesterday': '{"daysAgo":1}',
-  'p:letzte woche': '{"lastCount":1,"lastUnit":"week"}',
-  'q:was war letzte woche los': '{"phrases":["letzte woche"]}',
-  'q:what cameras do i have': '{"phrases":[]}',
+  'q:was war letzte woche los': '{"windows":[{"meaning":"last calendar week","lastCount":1,"lastUnit":"week"}]}',
+  // No windows and no scan hit: the stage falls to the scan floor, whose
+  // default 'today' phrase resolves through the per-phrase interpreter.
+  'q:what cameras do i have': '{"windows":[]}',
 };
 
 describe('runFmTimeEval', () => {
@@ -73,11 +77,10 @@ describe('runFmTimeEval', () => {
     expect(report.total).toEqual({ pass: 4, total: 4 });
     expect(report.failures).toEqual([]);
     expect(report.durationMs).toBeGreaterThanOrEqual(0);
-    // 2 interpret cases (today, yesterday) + 2 extract questions + the
-    // 'letzte woche' interpretation the first extraction resolves = 5. The
-    // none-case's default 'today' interpretation hits the cache (today was
-    // already interpreted), so it adds no call.
-    expect(provider.completeCalls).toBe(5);
+    // 2 interpret cases + 2 question calls = 4; the no-time case's default
+    // 'today' interpretation hits the cache seeded by the interpret stage,
+    // so the fallback adds no call.
+    expect(provider.completeCalls).toBe(4);
   });
 
   it('captures a failed interpretation case with its input, expected class, and got', async () => {
@@ -94,14 +97,15 @@ describe('runFmTimeEval', () => {
     });
   });
 
-  it('captures a failed extraction case (wrong phrases)', async () => {
-    // The scanner cannot see the German phrase and the model returns none, so the
-    // extractor falls to default 'today', which does not contain 'letzte woche'.
-    const provider = new ScriptProvider({ ...ALL_CORRECT, 'q:was war letzte woche los': '{"phrases":[]}' });
+  it('captures a failed question case (no usable window)', async () => {
+    // The scanner cannot see the German phrase and the model emits no
+    // windows, so the stage falls to the today default, which fails the
+    // case's last-week predicate.
+    const provider = new ScriptProvider({ ...ALL_CORRECT, 'q:was war letzte woche los': '{"windows":[]}' });
     const report = await runFmTimeEval(provider, FM_EVAL_NOW, FM_EVAL_TZ, new AbortController().signal);
 
-    const extractFailure = report.failures.find((f) => f.stage === 'extract');
-    expect(extractFailure).toMatchObject({ input: 'was war letzte woche los', expected: 'letzte woche' });
+    const questionFailure = report.failures.find((f) => f.stage === 'question');
+    expect(questionFailure).toMatchObject({ input: 'was war letzte woche los' });
     expect(report.extract.pass).toBe(1);
   });
 

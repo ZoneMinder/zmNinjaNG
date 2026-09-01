@@ -1,84 +1,29 @@
 /**
- * Extracts and resolves EVERY timeframe a ZoneMinder question names, before
- * the tool round runs (refs #270).
+ * Resolves every time period a question means, before the tool round runs
+ * (refs #444; the copy-based pipeline this replaced was refs #265/#270).
  *
- * The tool loop asks the model to copy the user's time words into `when` and
- * then interprets each phrase on demand (window-interpreter.ts). On a backend
- * whose runtime owns the tool loop (apple, native) that interpretation would
- * have to nest a second model call INSIDE a tool call, which the native loops
- * cannot do. So this stage front-runs it: one constrained call lists every
- * time expression in the question, each is resolved through the SAME
- * `interpretWhen` (pre-warming its per-day cache, so the later tool call hits
- * the cache and never nests a model call), and the turn learns up front
- * whether the period is knowable at all.
- *
- * Division of labor mirrors the interpreter's (refs #265): the model finds the
- * time words in any language, code decides what to do with them.
- * - No timeframe stated -> "today" (the app's default period).
- * - A stated timeframe that no interpretation can resolve -> abstain: the
- *   caller tells the user it could not work out the period and stops, rather
- *   than answering the wrong window with real data.
- * - Several timeframes -> all of them, so "today vs yesterday" resolves both.
+ * One constrained call takes the WHOLE question (plus the previous exchange
+ * for follow-ups) and expresses each period as a structured window in the
+ * interpreter's own branch shapes, meaning-first. Nothing is copied, so the
+ * copy-truncation class ("same day, last week" -> "last week") cannot occur;
+ * a comparison emits one window per period. Code resolves each window and
+ * seeds the interpreter cache under its meaning label, so the later tool
+ * call resolves with no model at all. The deterministic scan survives as
+ * the fallback and recall floor, not a splicer.
  */
-import { format } from 'date-fns';
-import { toZonedTime } from 'date-fns-tz';
-import { interpretWhen, PART_OF_DAY_WORDS, WEEKDAY_WORDS, WEEKDAY_ABBREVS, MONTH_SEASON_NAMES, AMBIGUOUS_MONTH_WORDS } from './window-interpreter';
+import { interpretWhen, parseFields, seedInterpreterCache, buildQuestionWindowsPrompt, buildQuestionWindowsSchema, questionOffersRolling, PART_OF_DAY_WORDS, WEEKDAY_WORDS, WEEKDAY_ABBREVS, MONTH_SEASON_NAMES, AMBIGUOUS_MONTH_WORDS } from './window-interpreter';
+import { buildContextualQuestion, type ParseContext } from './parse-context';
 import { normalizeWhenPhrase } from './tool-helpers';
 import { log, LogLevel } from '../logger';
 import { WINDOW_UNITS, resolveWindow, type WindowFields } from './event-range';
 import type { AssistantProvider, ResolvedTimeframe } from './types';
 import { isAbortError } from '../is-abort-error';
 
-/** The extractor's output contract, constrained on backends that support it
- *  (Ollama json_schema, WebLLM XGrammar) and parsed defensively everywhere.
- *  `none: true` means the question named no time at all. */
-export const TIMEFRAME_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    phrases: { type: 'array', items: { type: 'string' } },
-    none: { type: 'boolean' },
-  },
-  additionalProperties: false,
-};
-
-/** Model-facing (rule 5 exempt): never rendered, only sent to the model. The
- *  `today` line is computed in code so the model never has to know the date. */
-export function buildTimeframePrompt(now: Date, timezone: string): string {
-  const today = format(toZonedTime(now, timezone), 'EEEE, yyyy-MM-dd');
-  return [
-    'You find the time expressions in one question about security-camera events. Reply with ONLY one JSON object.',
-    `Today is ${today} (timezone ${timezone}).`,
-    'A time expression is ANY phrase naming when events happened: a day ("today", "yesterday"), a rolling span',
-    '("the past 2 weeks", "last month"), a part of the day ("this morning", "this evening"), a month or season',
-    '("april", "this summer"), a weekday, a date ("July 21"), or a clock range, whether written out',
-    '("from 4pm to 10pm", "between 9am and 5pm") or compact ("10am-6pm", "9-5"). They are',
-    'often embedded mid-sentence: "how busy was it in april" contains "april".',
-    'List every one in "phrases", each copied VERBATIM in the user\'s own language ("today", "letzte Woche", "in april").',
-    'Do not translate, normalize, invent, or add a time the question does not state.',
-    'A question may hold several time expressions, or none.',
-    'Set "none" true and "phrases" [] when the question names no time at all.',
-  ].join('\n');
-}
-
 /** The one system line handed to the answering model, naming the exact phrases
  *  it may copy into `when`. Model-facing (rule 5 exempt). */
 export function buildTimeframeSystemLine(phrases: string[]): string {
   const quoted = phrases.map((phrase) => `"${phrase}"`).join(', ');
   return `Timeframes for this question, already resolved (copy these exact phrases into when): ${quoted}.`;
-}
-
-/** The phrases array from the extractor's reply, or [] when unparseable.
- *  Defensive: an unconstrained backend may wrap the object in prose. */
-function parsePhrases(text: string): string[] {
-  const match = /\{[\s\S]*\}/.exec(text);
-  if (!match) return [];
-  try {
-    const raw = JSON.parse(match[0]) as Record<string, unknown>;
-    if (!Array.isArray(raw.phrases)) return [];
-    return raw.phrases.map((entry) => String(entry).trim()).filter((entry) => entry.length > 0);
-  } catch {
-    return [];
-  }
 }
 
 /** A clock token: "4pm", "9 am", "16:30", "9:00pm". Requires a meridian or a
@@ -197,138 +142,83 @@ export interface ExtractedTimeframes {
 }
 
 /**
- * Every timeframe the question resolves to, or an abstention.
- *
- * ONE constrained model call finds the time words; each is then resolved
- * through `interpretWhen`, which caches the result for this calendar day so
- * the later tool call reuses it. A phrase no interpretation can turn into a
- * window is dropped. Never throws except on abort (which propagates from the
- * model calls, matching the rest of the assistant path).
+ * The primary time path on EVERY backend (refs #444): the whole-question
+ * windows interrogation, probed 13/13 on the live-failure matrix. Falls back
+ * to the scan floor on any failure; abstains only when the model saw a
+ * period nothing could resolve and the scan sees no time words either.
  */
-export async function extractTimeframes(
+export async function resolveTimeframesFromQuestion(
   question: string,
   provider: AssistantProvider,
   now: Date,
   timezone: string,
   signal: AbortSignal,
-  /** Time phrases the parse call already copied (refs #434). Given (even
-   *  []), the extraction model call is SKIPPED and these stand in for its
-   *  output: the scan union, provenance filter, containment dedup, and
-   *  interpreter calls below are identical either way. `undefined` keeps the
-   *  old extraction call, so a roster-less install and group mode still
-   *  extract. */
-  statedPhrases?: string[],
+  context?: ParseContext,
 ): Promise<ExtractedTimeframes> {
-  // Code-first extraction (refs #270): a deterministic scan OWNS every time class
-  // it can recognize, so the shapes that flaked on-device (compact clock ranges
-  // never surfacing, multi-value lists dropping members, even "last month"
-  // vanishing once: measured 11-12/16 across FM runs) are decided in code, not
-  // left to a nondeterministic decoder whose worst shape is exactly a free-string
-  // array. The model call still runs and only ADDS phrasings code cannot see
-  // (unlisted languages, odd wording), so extraction flakiness is bounded to
-  // phrasings no scanner could detect.
-  const scanPhrases = scanTimeExpressions(question);
-
-  let extracted: string[] = [];
-  if (statedPhrases !== undefined) {
-    extracted = statedPhrases;
-  } else {
-    try {
-      const reply = await provider.complete(buildTimeframePrompt(now, timezone), question, signal, TIMEFRAME_SCHEMA);
-      extracted = parsePhrases(reply.text);
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      log.assistant('Timeframe extraction failed', LogLevel.WARN, {
-        error: error instanceof Error ? error.message : String(error),
-      });
-      // With the scan in hand the turn is not blind when the model call fails: only
-      // fall straight to the default period when the scan also found nothing (the
-      // pre-scan fail-open path). Otherwise proceed on the scan phrases alone.
-      if (scanPhrases.length === 0) return { phrases: ['today'], resolved: [], abstained: false };
-    }
+  let windows: unknown[] = [];
+  try {
+    const reply = await provider.complete(
+      buildQuestionWindowsPrompt(now, timezone),
+      buildContextualQuestion(question, context),
+      signal,
+      buildQuestionWindowsSchema(questionOffersRolling(question)),
+    );
+    const raw = JSON.parse(/\{[\s\S]*\}/.exec(reply.text)?.[0] ?? '{}') as { windows?: unknown[] };
+    windows = Array.isArray(raw.windows) ? raw.windows : [];
+  } catch (error) {
+    if (isAbortError(error)) throw error;
+    log.assistant('Question-window interrogation failed; falling back to the scan', LogLevel.WARN, {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return scanFallbackTimeframes(question, provider, now, timezone, signal);
   }
 
-  // The model parrots the prompt's own date line (buildTimeframePrompt names
-  // today, the weekday, the ISO date and the timezone), so the extractor returns
-  // time words the user never typed. Provenance is decidable in code, exactly as
-  // whenNotFromQuestion decides it: a phrase that truly came from the question is
-  // a substring of it. Filter the MODEL's phrases to those; scan phrases are
-  // verbatim substrings by construction and never need this filter.
-  const normalizedQuestion = normalizeWhenPhrase(question);
-  const modelStated = extracted.filter((phrase) => {
-    if (normalizedQuestion.includes(normalizeWhenPhrase(phrase))) return true;
-    log.assistant('Dropped parroted timeframe phrase', LogLevel.DEBUG, { phrase });
-    return false;
-  });
-
-  // Union scan + model, de-duped on the normalized form: the scan owns its
-  // classes and wins ties (listed first, in question order), the model only adds
-  // a phrase whose normalized form the scan did not already cover.
-  const scanKeys = new Set(scanPhrases.map(normalizeWhenPhrase));
+  const resolved: ResolvedTimeframe[] = [];
   const seen = new Set<string>();
-  const deduped: string[] = [];
-  for (const phrase of [...scanPhrases, ...modelStated]) {
+  for (const [index, item] of windows.entries()) {
+    if (item === null || typeof item !== 'object') continue;
+    // Production parse, never a raw field read (refs #442): parseFields is
+    // the one place every schema field round-trips.
+    const fields = parseFields(JSON.stringify(item));
+    if (!fields) continue;
+    const window = resolveWindow(fields, now, timezone);
+    if (window === undefined || 'error' in window) continue;
+    const meaning = typeof (item as { meaning?: unknown }).meaning === 'string' ? (item as { meaning: string }).meaning.trim() : '';
+    const phrase = meaning.length > 0 ? meaning : `window ${index + 1}`;
     const key = normalizeWhenPhrase(phrase);
     if (seen.has(key)) continue;
     seen.add(key);
-    deduped.push(phrase);
+    resolved.push({ phrase, fields });
+    seedInterpreterCache(phrase, fields, now, timezone);
   }
-  const namedTime = deduped.length > 0;
 
-  const resolvedByKey = new Map<string, WindowFields>();
-  const windowfulKeys = new Set<string>();
-  for (const phrase of namedTime ? deduped : ['today']) {
+  if (resolved.length > 0) {
+    return { phrases: resolved.map((tf) => tf.phrase), resolved, abstained: false };
+  }
+  if (windows.length > 0 && scanTimeExpressions(question).length === 0) {
+    return { phrases: [], resolved: [], abstained: true };
+  }
+  return scanFallbackTimeframes(question, provider, now, timezone, signal);
+}
+
+/** The deterministic floor: the scan's phrases through the per-phrase
+ *  interpreter, the today default when it finds nothing. Never abstains -
+ *  every phrase here is scan-vouched, and an unresolved one retries at tool
+ *  time exactly as before. */
+async function scanFallbackTimeframes(
+  question: string,
+  provider: AssistantProvider,
+  now: Date,
+  timezone: string,
+  signal: AbortSignal,
+): Promise<ExtractedTimeframes> {
+  const scanPhrases = scanTimeExpressions(question);
+  const phrases = scanPhrases.length > 0 ? scanPhrases : ['today'];
+  const resolved: ResolvedTimeframe[] = [];
+  for (const phrase of phrases) {
     const fields = await interpretWhen(phrase, provider, now, timezone, signal);
     if ('error' in fields && fields.error) continue;
-    const key = normalizeWhenPhrase(phrase);
-    resolvedByKey.set(key, fields as WindowFields);
-    // "Resolved" and "resolved to a WINDOW" differ: none/{} interprets
-    // cleanly but names no period, and such a container must not absorb a
-    // scan-vouched contained phrase (refs #442: "all this week" once
-    // interpreted to nothing and killed "this week" with it).
-    const window = resolveWindow(fields as WindowFields, now, timezone);
-    if (window !== undefined && !('error' in window)) windowfulKeys.add(key);
+    resolved.push({ phrase, fields: fields as WindowFields });
   }
-
-  // Containment dedup, resolution-aware (refs #434, #438): the scan emits
-  // the halves of a compound ("lunch", "5 days ago") while the model copies
-  // it whole; querying both the whole day and the band would double the
-  // fan-out, so a contained phrase is absorbed - but ONLY by a container
-  // that actually resolved. "all this week" once swallowed the scan-vouched
-  // "this week" and then failed to interpret, leaving the turn nothing.
-  const union = deduped.filter((phrase) => {
-    const key = normalizeWhenPhrase(phrase);
-    return !deduped.some((other) => {
-      const otherKey = normalizeWhenPhrase(other);
-      return otherKey !== key && otherKey.includes(key) && windowfulKeys.has(otherKey);
-    });
-  });
-
-  const resolved: ResolvedTimeframe[] = [];
-  for (const phrase of namedTime ? union : ['today']) {
-    const fields = resolvedByKey.get(normalizeWhenPhrase(phrase));
-    if (fields !== undefined) resolved.push({ phrase, fields });
-  }
-
-  // Neither path named a time: the default period, kept even if it failed to
-  // resolve so the turn still proceeds on today.
-  if (!namedTime) return { phrases: ['today'], resolved, abstained: false };
-
-  // A phrase survives into the allowed list if it resolved OR the scan detected
-  // it. An unresolvable compact clock range ("10am-6pm", "9-5", "from 4pm to
-  // 10pm") carries no day to anchor it, yet the token-level provenance layer lets
-  // the answering model legally compose it with a day word from the same
-  // question, so it must still be offered. An unresolved MODEL-only phrase
-  // ("blursday") is a hallucinated period and is dropped.
-  const resolvedKeys = new Set(resolved.map((tf) => normalizeWhenPhrase(tf.phrase)));
-  const phrases = union.filter((phrase) => {
-    const key = normalizeWhenPhrase(phrase);
-    return resolvedKeys.has(key) || scanKeys.has(key);
-  });
-
-  // Everything stated failed to resolve and the scan vouched for nothing: the
-  // question named a period no interpretation could work out, so abstain rather
-  // than answer a wrong window with real data.
-  if (phrases.length === 0) return { phrases: [], resolved: [], abstained: true };
   return { phrases, resolved, abstained: false };
 }

@@ -421,11 +421,9 @@ const TIME_TZ = 'America/New_York';
 async function scoreTime(runs: number) {
   const { WINDOW_SCHEMA, buildInterpreterPrompt, parseFields } = await import('../src/lib/assistant/window-interpreter');
   const { resolveWindow } = await import('../src/lib/assistant/event-range');
-  const { buildTimeframePrompt, TIMEFRAME_SCHEMA } = await import('../src/lib/assistant/timeframe-stage');
   const { normalizeWhenPhrase } = await import('../src/lib/assistant/tool-helpers');
-  const { TIME_INTERPRET_CASES, TIME_EXTRACT_CASES } = await import('../src/lib/assistant/time-eval-cases');
+  const { TIME_INTERPRET_CASES, TIME_QUESTION_CASES } = await import('../src/lib/assistant/time-eval-cases');
   const interpretSystem = buildInterpreterPrompt(TIME_NOW, TIME_TZ);
-  const extractSystem = buildTimeframePrompt(TIME_NOW, TIME_TZ);
 
   const byClass = new Map<string, { pass: number; total: number }>();
   const bump = (cls: string, ok: boolean) => {
@@ -463,37 +461,41 @@ async function scoreTime(runs: number) {
     }
   }
 
-  for (const c of TIME_EXTRACT_CASES) {
+  // The question-window stage (refs #444): the production function end to
+  // end, driven through a provider shim over the same HTTP endpoint - never
+  // a re-implementation (refs #442's lesson).
+  const { resolveTimeframesFromQuestion } = await import('../src/lib/assistant/timeframe-stage');
+  const shim = {
+    complete: async (system: string, text: string, _signal: AbortSignal, schema?: Record<string, unknown>) => {
+      const r = await chat({
+        model: MODEL,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: text }],
+        stream: false,
+        max_tokens: 700,
+        ...(TEMP === undefined ? {} : { temperature: TEMP }),
+        ...REASONING,
+        ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'w', schema, strict: true } } } : {}),
+      });
+      return { text: r.choices?.[0]?.message?.content ?? '' };
+    },
+  } as unknown as import('../src/lib/assistant/types').AssistantProvider;
+  for (const c of TIME_QUESTION_CASES) {
     for (let i = 0; i < runs; i++) {
       try {
-        const r = await chat({
-          model: MODEL,
-          messages: [{ role: 'system', content: extractSystem }, { role: 'user', content: c.question }],
-          stream: false,
-          max_tokens: 200,
-          ...(TEMP === undefined ? {} : { temperature: TEMP }),
-          ...REASONING,
-          response_format: { type: 'json_schema', json_schema: { name: 'timeframe', schema: TIMEFRAME_SCHEMA, strict: true } },
-        });
-        const text = r.choices?.[0]?.message?.content ?? '';
-        const raw = JSON.parse(/\{[\s\S]*\}/.exec(text)?.[0] ?? '{}');
-        const phrasesRaw = Array.isArray(raw.phrases) ? raw.phrases.map((p: unknown) => String(p)) : [];
-        // The extractor parrots the prompt's date line; production filters phrases
-        // that are not substrings of the question, so score the same way.
-        const nq = normalizeWhenPhrase(c.question);
-        const phrases = phrasesRaw.filter((p) => nq.includes(normalizeWhenPhrase(p)));
-        const joined = phrases.map((p) => normalizeWhenPhrase(p)).join(' | ');
-        const good = c.none
-          ? phrases.length === 0
-          : phrases.length > 0 && (c.expect ?? []).every((e) => joined.includes(e.toLowerCase()));
-        bump('extract', good);
-        if (!good) failures.push(`[extract] "${c.question}" -> ${JSON.stringify(phrases)}`);
+        const { resetWindowInterpreterCacheForTests } = await import('../src/lib/assistant/window-interpreter');
+        resetWindowInterpreterCacheForTests();
+        const result = await resolveTimeframesFromQuestion(c.question, shim, TIME_NOW, TIME_TZ, new AbortController().signal, c.context);
+        const windows = result.resolved.map((tf) => ({ fields: tf.fields as Record<string, unknown>, range: resolveWindow(tf.fields, TIME_NOW, TIME_TZ) }));
+        const good = !result.abstained && c.ok(windows);
+        bump(c.cls ?? 'question', good);
+        if (!good) failures.push(`[question] "${c.question}" -> ${JSON.stringify(result.resolved.map((tf) => tf.fields))}`);
       } catch (e) {
-        bump('extract', false);
-        failures.push(`[extract] "${c.q}" error: ${(e as Error).message}`);
+        bump(c.cls ?? 'question', false);
+        failures.push(`[question] "${c.question}" error: ${(e as Error).message}`);
       }
     }
   }
+
   return { byClass, failures };
 }
 
@@ -574,26 +576,23 @@ interface ParseCase {
   kind: string;
   subject?: string;
   objects?: string[];
-  /** Each must appear (normalized) inside the UNION of the deterministic
-   *  scan and the parse's when slot - the same union production queries. */
-  when?: string[];
 }
 const PARSE_CASES: ParseCase[] = [
-  { q: 'How may folks came to the front of my house between mon and tue?', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['between mon and tue'] },
-  { q: 'how many people came to my front door yesterday', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['yesterday'] },
-  { q: 'any cars in the driveway today', kind: 'ZONEMINDER', subject: 'events', objects: ['car'], when: ['today'] },
+  { q: 'How may folks came to the front of my house between mon and tue?', kind: 'ZONEMINDER', subject: 'events', objects: ['person'] },
+  { q: 'how many people came to my front door yesterday', kind: 'ZONEMINDER', subject: 'events', objects: ['person'] },
+  { q: 'any cars in the driveway today', kind: 'ZONEMINDER', subject: 'events', objects: ['car'] },
   { q: 'was war gestern an der Haust\u00fcr los', kind: 'ZONEMINDER', subject: 'events' },
-  { q: 'summarize today', kind: 'ZONEMINDER', subject: 'events', objects: [], when: ['today'] },
-  { q: 'who came at lunch 5 days ago', kind: 'ZONEMINDER', subject: 'events', objects: ['person'], when: ['lunch', '5 days ago'] },
-  { q: 'how busy was the front of my abode over the week?', kind: 'ZONEMINDER', subject: 'events', objects: [], when: ['over the week'] },
-  { q: 'oh the world is so cool. how is my house doing at the back all of this week?', kind: 'ZONEMINDER', subject: 'events', when: ['all of this week'] },
+  { q: 'summarize today', kind: 'ZONEMINDER', subject: 'events', objects: [] },
+  { q: 'who came at lunch 5 days ago', kind: 'ZONEMINDER', subject: 'events', objects: ['person'] },
+  { q: 'how busy was the front of my abode over the week?', kind: 'ZONEMINDER', subject: 'events', objects: [] },
+  { q: 'oh the world is so cool. how is my house doing at the back all of this week?', kind: 'ZONEMINDER', subject: 'events' },
   { q: 'is the server ok', kind: 'ZONEMINDER', subject: 'server' },
   { q: 'what cameras do I have', kind: 'ZONEMINDER', subject: 'monitors' },
   { q: 'hello', kind: 'CHAT' },
   { q: 'arm the backyard camera', kind: 'ACTION' },
   // Standalone status questions default to the system (refs #440, observed
   // live: "how today looking?" went CHAT and the tool-less turn fabricated).
-  { q: 'how today looking?', kind: 'ZONEMINDER', subject: 'events', when: ['today'] },
+  { q: 'how today looking?', kind: 'ZONEMINDER', subject: 'events' },
   { q: 'anything happening?', kind: 'ZONEMINDER', subject: 'events' },
   { q: 'see you tomorrow', kind: 'CHAT' },
   // Follow-ups carry the previous exchange (refs #440).
@@ -666,11 +665,6 @@ async function scoreParse(runs: number) {
         if (kind !== c.kind) bad.push(`kind ${kind}`);
         if (c.subject !== undefined && slots.subject !== c.subject) bad.push(`subject ${String(slots.subject)}`);
         if (c.objects !== undefined && !setEq(slots.objects, c.objects)) bad.push(`objects ${JSON.stringify(slots.objects)}`);
-        if (c.when !== undefined) {
-          const union = [...scanTimeExpressions(c.q), ...(slots.when ?? [])].map(normalizeWhenPhrase);
-          const missing = c.when.filter((w) => !union.some((u) => u.includes(normalizeWhenPhrase(w))));
-          if (missing.length > 0) bad.push(`when missing ${JSON.stringify(missing)}`);
-        }
         if (bad.length === 0) pass++;
         else failures.push(`[routing] "${c.q}" -> ${bad.join('; ')} (raw ${text})`);
       } catch (e) {
@@ -741,7 +735,7 @@ if (variant === 'time') {
   console.log(`\n=== time via ${MODEL}, temp ${TEMP ?? 'default'}, ${runs} runs/case ===`);
   let pass = 0;
   let total = 0;
-  const order = ['relative-day', 'rolling', 'part-of-day', 'weekday', 'weekend', 'ordinal-date', 'month-year', 'clock-range', 'no-time', 'non-english', 'extract'];
+  const order = ['relative-day', 'rolling', 'part-of-day', 'weekday', 'weekend', 'ordinal-date', 'month-year', 'clock-range', 'no-time', 'non-english', 'question', 'no-time-default'];
   for (const cls of order) {
     const e = w.byClass.get(cls);
     if (!e) continue;

@@ -59,17 +59,6 @@ export interface TimeInterpretCase {
   ok: (fields: Record<string, unknown>, range: ResolvedRange) => boolean;
 }
 
-export interface TimeExtractCase {
-  /** The question fed to `extractTimeframes`. */
-  question: string;
-  /** Class label; defaults to 'extract' when omitted. */
-  cls?: string;
-  /** Each must appear as a normalized substring of some returned phrase. */
-  expect?: string[];
-  /** The question names no time: the extractor must fall to the default
-   *  'today' (it never returns an empty phrase list unless it abstains). */
-  none?: boolean;
-}
 
 /** 36 interpretation cases across 10 CLASSES, not variants of one phrase.
  *  Predicates check the RESOLVED range through resolveWindow whenever a window is
@@ -144,44 +133,54 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   { phrase: 'vorgestern', cls: 'non-english', ok: (_f, r) => startsOn(r, '2026-07-17') },
 ];
 
-/** 16 extraction cases: multiple time expressions in one question, time words
- *  embedded mid-sentence, zero-time questions, one non-English.
- *
- *  A compact clock range on its own ("10am-6pm", "9-5") resolves to an error by
- *  design: a bare time-of-day has no day to anchor it. Extraction must still
- *  surface it verbatim, because the token-level provenance layer (the answering
- *  model copies allowed phrases into `when`) lets the model legally compose it
- *  with a day word drawn from the same question ("10am-6pm" + "yesterday"). */
-export const TIME_EXTRACT_CASES: TimeExtractCase[] = [
-  { question: 'what happened today', expect: ['today'] },
-  { question: 'compare today and yesterday', expect: ['today', 'yesterday'] },
-  { question: 'summarize the past 2 weeks', expect: ['past 2 weeks'] },
-  // The "<n> <unit> ago" family: the interpret cases below have carried
-  // "3 days ago" all along, but nothing checked that the scan FINDS it in a
-  // question, so the whole family fell through to the today default (refs #310).
-  { question: 'what was the busiest hour 2 days ago?', expect: ['2 days ago'] },
-  { question: 'anything two days ago', expect: ['two days ago'] },
-  { question: 'what happened 3 hours ago', expect: ['3 hours ago'] },
-  { question: 'how many people came this morning and this evening', expect: ['this morning', 'this evening'] },
-  { question: 'show me events from july 15 and july 21', expect: ['july 15', 'july 21'] },
-  { question: 'anything between june 1 and june 15', expect: ['june 1', 'june 15'] },
-  { question: 'who came by yesterday from 4pm to 10pm', expect: ['yesterday', '4pm', '10pm'] },
-  // Compact clock ranges: a dash form and a bare "between X and Y", each with a
-  // day word the range attaches to.
-  { question: 'Compare 10am-6pm yesterday and today.', expect: ['10am-6pm', 'yesterday', 'today'] },
-  { question: 'anything between 9-5 today', expect: ['9-5', 'today'] },
-  { question: 'were there cars in the driveway yesterday afternoon', expect: ['yesterday', 'afternoon'] },
-  { question: 'give me a recap of last month', expect: ['last month'] },
-  { question: 'how busy was it in april', expect: ['april'] },
-  // Weekday ranges and the month-word guard (refs #434): the range phrase
-  // must surface whole, and the "may" typo must not scan as a month (the
-  // guard is unit-tested; here the range keeps the case answerable).
-  { question: 'who came by between mon and tue?', expect: ['between mon and tue'] },
-  { question: 'How may folks came to the front of my house between mon and tue?', expect: ['between mon and tue'] },
-  { question: 'who came at lunch 5 days ago', expect: ['lunch', '5 days ago'] },
-  { question: 'how was the rear of my house all this week?', expect: ['all this week'] },
-  { question: 'was war letzte Woche bei mir los', expect: ['letzte woche'] },
-  { question: 'what cameras do I have', none: true },
-  { question: 'is the server ok', none: true },
-  { question: 'list all my monitors', none: true },
+/** One resolved window as the question stage produces it: the parsed fields
+ *  plus their resolveWindow range. */
+export interface ResolvedQuestionWindow {
+  fields: Record<string, unknown>;
+  range: ResolvedRange;
+}
+
+export interface TimeQuestionCase {
+  /** The question fed to `resolveTimeframesFromQuestion`. */
+  question: string;
+  /** Previous exchange, for follow-up and comparison cases (refs #444). */
+  context?: { user: string; assistant: string };
+  /** Class label; defaults to 'question'. */
+  cls?: string;
+  /** Predicate over the RESOLVED windows. A question naming no time arrives
+   *  as one default-today window. */
+  ok: (windows: ResolvedQuestionWindow[]) => boolean;
+}
+
+const oneOn = (ws: ResolvedQuestionWindow[], day: string) => ws.length === 1 && startsOn(ws[0].range, day);
+const someOn = (ws: ResolvedQuestionWindow[], day: string) => ws.some((w) => startsOn(w.range, day));
+const bandedW = (w: ResolvedQuestionWindow) => String(w.fields.fromTime ?? '').length > 0;
+
+/** Whole-question window cases (refs #444), anchored to FM_EVAL_NOW: Sunday
+ *  2026-07-19, America/New_York. Every live failure of the copy pipeline is
+ *  a case here; both eval harnesses run them through the production
+ *  `resolveTimeframesFromQuestion`. */
+export const TIME_QUESTION_CASES: TimeQuestionCase[] = [
+  { question: 'what happened today', ok: (ws) => oneOn(ws, '2026-07-19') },
+  { question: 'compare today and yesterday', ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-19') && someOn(ws, '2026-07-18') },
+  { question: 'summarize the past 2 weeks', ok: (ws) => ws.length === 1 && ((ws[0].fields.lastUnit === 'week' && Number(ws[0].fields.lastCount) === 2) || (ws[0].fields.lastUnit === 'day' && Number(ws[0].fields.lastCount) === 14)) },
+  { question: 'what was the busiest hour 2 days ago?', ok: (ws) => oneOn(ws, '2026-07-17') },
+  { question: 'how many people came this morning and this evening', ok: (ws) => ws.length === 2 && ws.every((w) => startsOn(w.range, '2026-07-19') && bandedW(w)) },
+  { question: 'show me events from july 15 and july 12', ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-15') && someOn(ws, '2026-07-12') },
+  { question: 'who came by yesterday from 4pm to 10pm', ok: (ws) => oneOn(ws, '2026-07-18') && bandedW(ws[0]) },
+  { question: 'Compare 10am-6pm yesterday and today.', ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-18') && someOn(ws, '2026-07-19') && ws.every(bandedW) },
+  { question: 'anything between 9-5 today', ok: (ws) => oneOn(ws, '2026-07-19') && String(ws[0].fields.fromTime ?? '').startsWith('09') },
+  { question: 'were there cars in the driveway yesterday afternoon', ok: (ws) => oneOn(ws, '2026-07-18') && bandedW(ws[0]) },
+  { question: 'give me a recap of last month', ok: (ws) => oneOn(ws, '2026-06-01') },
+  { question: 'how busy was it in april', ok: (ws) => oneOn(ws, '2026-04-01') },
+  { question: 'was war letzte Woche bei mir los', ok: (ws) => ws.length === 1 && (ws[0].fields.week === 'last' || (ws[0].fields.lastUnit === 'week' && Number(ws[0].fields.lastCount) === 1) || (ws[0].fields.lastUnit === 'day' && Number(ws[0].fields.lastCount) === 7) || startsOn(ws[0].range, '2026-07-06')) },
+  { question: 'who came by between mon and tue?', ok: (ws) => oneOn(ws, '2026-07-13') },
+  { question: 'How may folks came to the front of my house between mon and tue?', ok: (ws) => oneOn(ws, '2026-07-13') },
+  { question: 'how was the rear of my house all this week?', ok: (ws) => oneOn(ws, '2026-07-13') },
+  { question: 'who came at lunch 5 days ago', ok: (ws) => oneOn(ws, '2026-07-14') && bandedW(ws[0]) },
+  // The copy pipeline's structural blind spot: a context comparison.
+  { question: 'compare to same day, last week', context: { user: 'hows today?', assistant: 'Today there were 5 events.' }, ok: (ws) => ws.length === 2 && someOn(ws, '2026-07-19') && someOn(ws, '2026-07-12') },
+  // No time named: the default today window.
+  { question: 'what cameras do I have', cls: 'no-time-default', ok: (ws) => oneOn(ws, '2026-07-19') },
+  { question: 'is the server ok', cls: 'no-time-default', ok: (ws) => oneOn(ws, '2026-07-19') },
 ];

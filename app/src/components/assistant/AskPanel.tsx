@@ -44,7 +44,7 @@ import { getObjectLabels } from '../../lib/assistant/object-labels';
 import { TOOLS, specializeToolSchemas, withServerArg } from '../../lib/assistant/tools';
 import { buildScopedServers } from '../../lib/assistant/scoped-servers';
 import { interpretWhen } from '../../lib/assistant/window-interpreter';
-import { extractTimeframes, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
+import { resolveTimeframesFromQuestion, buildTimeframeSystemLine } from '../../lib/assistant/timeframe-stage';
 import { getMonitorRoster, scanMonitorMentions, resolveMonitorMention, resolveCoverage, buildMonitorSystemLine } from '../../lib/assistant/monitor-stage';
 import { planToolCalls, type PlannedToolCall } from '../../lib/assistant/plan';
 import { suggestOllamaBaseUrl, warmOllamaModel } from '../../lib/assistant/providers/openai';
@@ -663,7 +663,6 @@ export function AskPanel() {
         kind,
         subject: verdict.subject,
         objects: verdict.objects,
-        when: verdict.when,
       });
 
       // Every timeframe the question names is extracted and resolved BEFORE the
@@ -678,18 +677,18 @@ export function AskPanel() {
       let turnSystem = kind === 'zoneminder' ? system : buildNoToolPrompt(system, kind);
       let plannedCalls: PlannedToolCall[] | undefined;
       if (kind === 'zoneminder' && !isAssistantTestMode()) {
-        // With a roster the parse already copied the time phrases, so this
-        // makes no extraction model call of its own (refs #434): scan union,
-        // provenance, containment dedup, and the cached interpreter calls
-        // run on the parsed phrases. A roster-less turn (verdict.when
-        // undefined) keeps the old extraction call.
-        const { phrases, resolved, abstained } = await extractTimeframes(
+        // The whole-question windows interrogation (refs #444), the same
+        // path on every backend: each period the question means arrives as a
+        // structured window, resolved in code and cache-seeded, so the tool
+        // round never re-interprets. Falls back to the deterministic scan
+        // floor inside the stage on any failure.
+        const { phrases, resolved, abstained } = await resolveTimeframesFromQuestion(
           text,
           provider,
           new Date(),
           timezone,
           controller.signal,
-          verdict.when,
+          latestExchange(history),
         );
         if (abstained) {
           append(profileId, { role: 'assistant', text: `${I18N_SENTINEL}assistant.timeframe_unclear` });

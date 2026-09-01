@@ -6,7 +6,7 @@
  * (scripts/prompt-eval.mts interpret stage), not unit tests.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { interpretWhen, resetWindowInterpreterCacheForTests, selectBranches, WINDOW_SCHEMA, buildInterpreterPrompt } from '../window-interpreter';
+import { interpretWhen, resetWindowInterpreterCacheForTests, selectBranches, WINDOW_SCHEMA, buildInterpreterPrompt, buildQuestionWindowsSchema, questionOffersRolling } from '../window-interpreter';
 import type { AssistantProvider } from '../types';
 
 const NOW = new Date('2026-07-16T14:30:00Z');
@@ -336,5 +336,29 @@ describe('parseFields round-trips every schema field', () => {
       fromWeekday: 'monday',
       toWeekday: 'tuesday',
     });
+  });
+});
+
+/** Refs #444: the rolling branch is offered to the windows call only when
+ *  the question shows a rolling marker - it is the decoder's attractor and
+ *  swallowed "what happened today" (lastCount 1 day, 2/2) when always on. */
+describe('questionOffersRolling', () => {
+  it('detects counted rolling spans and sub-day units', () => {
+    expect(questionOffersRolling('summarize the past 2 weeks')).toBe(true);
+    expect(questionOffersRolling('anything an hour ago')).toBe(true);
+    expect(questionOffersRolling('what happened 3 hours ago')).toBe(true);
+  });
+
+  it('stays off for calendar phrasings', () => {
+    expect(questionOffersRolling('what happened today')).toBe(false);
+    expect(questionOffersRolling('compare to same day, last week')).toBe(false);
+    expect(questionOffersRolling('how was the rear of my house all this week?')).toBe(false);
+  });
+
+  it('drops the rolling branch from the windows schema when off', () => {
+    const on = JSON.stringify(buildQuestionWindowsSchema(true));
+    const off = JSON.stringify(buildQuestionWindowsSchema(false));
+    expect(on).toContain('lastCount');
+    expect(off).not.toContain('lastCount');
   });
 });
