@@ -136,7 +136,15 @@ after any prompt or provider change and put both scores in the PR.
   parse scores 36/36 and the separate extraction call is gone on the roster
   lane; the eval's extract stage still measures the roster-less fallback's
   model-only recall, where multi-phrase misses are pre-existing and the
-  scan union covers them. After the #438 split, routing scores 24/24 and
+  scan union covers them. First on-device datapoint (refs #449, Pixel 10
+  logcat): Gemini Nano ran "this month" as a ROLLING 30 days - schema
+  gating is decorative on a backend that cannot constrain decoding, so
+  every calendar concept needs a first-class field with code arithmetic
+  (`month: this|last` added, mirroring `week`); a parse-time veto of
+  un-offered branches was considered and rejected (it would turn an English
+  regex into an output gate and break non-English rolling phrases). qwen3:8b
+  adopted the new field unprompted and holds time 124/124; Nano's own score
+  comes from the settings system-model eval, run on the device. After the #438 split, routing scores 24/24 and
   coverage 18/18, with every interpret class at 100% including the new
   calendar-week field and the meaning-first branches. With the #440
   context and app-default additions, routing scores 36/36 (standalone
