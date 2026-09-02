@@ -37,13 +37,18 @@ android {
             signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
-            // The -optimize variant, because the plain proguard-android.txt sets
-            // -dontoptimize: R8 then only shrinks and obfuscates, leaving the
-            // inlining, dead-branch removal, and class merging off. Play Console
-            // flags that as a missed optimization ("Improve your app's memory and
-            // performance with R8 optimization"). R8 full mode is already on by
-            // default under AGP 8.
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // proguard-android.txt, NOT the -optimize variant. The -optimize
+            // file drops -dontoptimize, and R8's field optimization then deletes
+            // com.getcapacitor.PluginHandle.pluginAnnotation: the release
+            // mapping.txt kept only bridge/pluginClass/pluginMethods/pluginId/
+            // instance, so the inlined getPluginAnnotation() returned null and
+            // every Capacitor permission check NPE'd in Bridge.getPermissionStates.
+            // FirebaseMessaging.requestPermissions() runs during push init at
+            // startup, so 2.2.1 crashed on open for Android users.
+            // Play Console's "Improve your app's memory and performance with R8
+            // optimization" hint is not worth this; re-landing it needs keep
+            // rules for Capacitor's reflective metadata plus a device pass.
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             ndk {
                 debugSymbolLevel 'FULL'
             }
