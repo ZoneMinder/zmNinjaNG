@@ -8,6 +8,35 @@ end. Nothing here imports React or Zustand: ``agent.ts`` takes an
 ``AssistantHost`` interface instead, so the same loop runs against the real
 app and against tests without a DOM.
 
+Pre-turn interrogations and the plan
+------------------------------------
+
+Before the loop runs, the question is decomposed by three small constrained
+calls - one question per judgment, because consolidated prompts measurably
+dilute each one (see ``llm-models.md`` for the scores behind every claim
+here) - and code composes the tool calls their slots determine:
+
+- ``triage.ts`` is the ROUTING PARSE: ``continues`` (may any context flow),
+  ``kind``, ``subject``, ``objects``. Context is structured previous-turn
+  facts (``parse-context.ts``), never answer prose.
+- ``monitor-stage.ts`` owns place: a deterministic name scan (substring and
+  token-subset), the focused coverage call returning PLACE GROUPS, the
+  per-group derivation guards, and ``contextForTimeCall`` - a multi-group
+  place comparison withholds the previous period from the time call.
+- ``timeframe-stage.ts`` owns time: the whole-question windows
+  interrogation (``window-interpreter.ts`` supplies the prompt, branch
+  schema, and ``parseFields``), range-deduped and cache-seeded, with the
+  regex scan as recall floor and fallback.
+- ``plan.ts`` turns the slots into planned ``list_events`` calls per
+  window x group x monitor and merges same-window results per group, so the
+  answer model quotes code-built summaries and never does cross-result
+  arithmetic.
+
+The free tool loop below remains the fallback for anything the slots do not
+determine (drill-downs, follow-up references to earlier rows, null plans);
+:doc:`call-flows`'s "Asking the assistant a question" traces the whole
+pipeline in order.
+
 Turn loop (``agent.ts``)
 ------------------------
 

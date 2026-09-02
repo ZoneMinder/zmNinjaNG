@@ -2174,52 +2174,74 @@ tool and ``ToolDefinition`` cannot express one), never a runtime decision.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/components/assistant/AskPanel.tsx>`__
    · → :doc:`16-platform-surfaces`
 
-#. **Triage classifies the request, and its verdict is advisory.**
-   ``classifyRequest`` (``triage.ts``) runs ``provider.complete`` with
-   ``TRIAGE_SCHEMA``, a ``{"kind": ZONEMINDER|ACTION|CHAT}`` JSON Schema a
-   backend may enforce through constrained generation, so the reply is
-   exactly ``{"kind":"CHAT"}`` where the server supports it and a loose
-   one-word match everywhere else. A chat or action verdict runs the turn
-   with ``tools: []`` and ``buildNoToolPrompt``. A wrong verdict cannot
-   refuse a data question any more: the loop fails open (next steps), so the
-   old English keyword overrule (``requiresLiveData``) is deleted rather
-   than maintained as a vocabulary.
-
-   The same round is the ROUTING PARSE (refs #432, #438): with a roster,
-   the prompt carries the install's label vocabulary, a status question
-   about a period with no other topic defaults to the system, and a CHAT
-   verdict that contradicts its own subject is flipped to the data lane in
-   code (the tool-less lane fabricates when handed a real question).
-   Relatedness is ONE explicit judgment (refs #446): ``continues`` decodes
-   before every other field, and code gates ALL context on it - a standalone
-   question reaches the coverage and time calls with nothing to inherit.
-   Context itself is STRUCTURED (``prevTurnFromThread`` +
-   ``buildContextualQuestion``): the previous user question, the slots that
-   turn resolved, and the assistant's closing offer only when it asked
-   something - never answer prose, which the model mined for "truck",
-   "Front Yard", and "today" across three live transcripts. The verdict
-   surfaces in the panel as a subdued status above a continuation answer.
-   The schema extends
-   the verdict with ``subject`` (events/monitors/server/groups/other),
-   ``objects`` (an array over the recorded labels, so "folks" or "Leute"
-   land on ``person`` in any language), and ``when`` (the time phrases,
-   copied verbatim; ``extractTimeframes`` unions them with its scan, keeps a
-   contained phrase unless its container actually resolved, and interprets
-   as before, running its own extraction call only for roster-less turns).
-   ``parseTriageSlots`` validates everything in code; a whole-vocabulary
-   ``objects`` selection derives no filter (the creep signature).
-
-   Place coverage is deliberately a SEPARATE, focused call (refs #438):
-   judged inside the consolidated prompt it failed live twice and every
-   rewording rotated the failures, while ``resolveCoverage``
-   (``monitor-stage.ts``) - a three-field prompt asking only place, covered,
-   and monitors - measures perfectly on the same cases. It runs only when
-   the deterministic scan found nothing; ``deriveMonitorSlots`` keeps the
-   code guards (roster-validated names, the covered/named contradiction and
-   whole-roster selections resolve to unset, a time-word place is no place),
-   and a failed call degrades to an unpinned turn. The slots feed
-   ``buildMonitorSystemLine`` and ``planToolCalls`` exactly as before.
+#. **The routing parse: one call, four verdicts.** ``classifyRequest``
+   (``triage.ts``) runs ``provider.complete`` under a constrained schema and
+   decides, in one round: ``continues`` (does the latest message lean on the
+   earlier exchange - decoded FIRST, and the only thing that lets any
+   context reach the later calls, refs #446), ``kind``
+   (ZONEMINDER/ACTION/CHAT - advisory: a chat or action verdict runs the
+   turn with ``tools: []`` and ``buildNoToolPrompt``, and the loop fails
+   open if the model then insists on a real read tool), ``subject``
+   (events/monitors/server/groups/other), and ``objects`` (an array over
+   the install's recorded labels, so "folks" or "Leute" land on ``person``
+   in any language; selecting the whole vocabulary derives no filter, the
+   creep signature). A status question about a period with no other topic
+   defaults to the system, and a CHAT verdict contradicting its own subject
+   is flipped to the data lane in code - the tool-less lane fabricates when
+   handed a real question. Context is STRUCTURED (``prevTurnFromThread`` +
+   ``buildContextualQuestion``, ``parse-context.ts``): the previous user
+   question, the slots that turn resolved, and the assistant's closing
+   offer only when it asked something - never answer prose, which the model
+   mined for "truck", "Front Yard", and "today" across three live
+   transcripts. A continuation answer renders a subdued status line in the
+   panel; a fresh topic renders nothing.
    `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/triage.ts>`__
+   · → :doc:`15-assistant`
+
+#. **Place coverage: a separate, focused call returning place groups.**
+   ``resolveCoverage`` (``monitor-stage.ts``) runs only when the
+   deterministic name scan found nothing, and asks one thing: which monitors
+   the message's places mean. It returns GROUPS - "the front vs the back"
+   is one monitor set per side (refs #446) - because judged inside the
+   consolidated parse this failed live twice and every rewording rotated
+   the failures, while the focused call measures perfectly on the same
+   cases. ``deriveMonitorGroups`` keeps every guard in code, per group:
+   names filtered to the roster, the covered/named contradiction and
+   whole-roster selections drop the group, a time-word place is no place,
+   and a failed call degrades to an unpinned turn.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/monitor-stage.ts>`__
+   · → :doc:`15-assistant`
+
+#. **Time: the whole-question windows interrogation.**
+   ``resolveTimeframesFromQuestion`` (``timeframe-stage.ts``) asks the model
+   to EXPRESS every period the question means as structured windows in the
+   interpreter's own branch shapes, meaning-first - nothing is copied, so
+   the copy-truncation class ("same day, last week" -> "last week") cannot
+   occur, and a comparison of two periods emits one window each
+   (refs #444). Code resolves every window through ``parseFields`` +
+   ``resolveWindow``, dedupes identical ranges, and seeds the interpreter
+   cache under each window's meaning label, so the tool round re-interprets
+   nothing. The rolling branch is offered only when the question shows a
+   rolling marker, and a multi-group (place) comparison skips the model
+   entirely when the deterministic scan can time the question - the windows
+   model emits one window per compared place under every wording measured
+   (refs #446). The scan floor is also the fallback for any failure, and
+   the same path runs on every backend.
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/timeframe-stage.ts>`__
+   · → :doc:`15-assistant`
+
+#. **The plan: code composes the tool calls.** ``planToolCalls``
+   (``plan.ts``) fans one ``list_events`` per window x group x monitor with
+   the parsed ``objectType``, capped at ``ASSISTANT.maxPlannedToolCalls``;
+   server/monitors/groups subjects map to their read tools. A null plan -
+   unknown subject, no roster, group mode, test mode - is the free tool
+   loop, unchanged. Planned calls execute through the loop's own
+   ``runOneCall`` machinery before the first model round, and same-window
+   results merge PER PLACE GROUP in code (``mergePlannedEventResultsByGroup``:
+   summed counts, recomputed busiest hour, one summary sentence, the group
+   label stamped as ``place``), so cross-monitor totals are never the
+   model's arithmetic and a comparison keeps its sides (refs #436, #446).
+   `source <https://github.com/ZoneMinder/zmNinjaNg/blob/main/app/src/lib/assistant/plan.ts>`__
    · → :doc:`15-assistant`
 
 #. **The tool-use loop.** ``runAssistantTurn`` (``lib/assistant/agent.ts``)
