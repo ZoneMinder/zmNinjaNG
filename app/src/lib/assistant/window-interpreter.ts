@@ -67,6 +67,8 @@ export const WINDOW_SCHEMA: Record<string, unknown> = {
     { type: 'object', properties: { meaning: { type: 'string' }, weekday: { type: 'string', enum: [...WEEKDAYS] }, fromTime: { type: 'string' }, toTime: { type: 'string' } }, required: ['meaning', 'weekday'], additionalProperties: false },
     // a calendar week, Monday-anchored; code works out the dates (refs #438).
     { type: 'object', properties: { meaning: { type: 'string' }, week: { type: 'string', enum: ['this', 'last'] } }, required: ['meaning', 'week'], additionalProperties: false },
+    // a calendar month; code works out the dates (refs #449).
+    { type: 'object', properties: { meaning: { type: 'string' }, month: { type: 'string', enum: ['this', 'last'] } }, required: ['meaning', 'month'], additionalProperties: false },
     // a span between two weekdays ("between mon and tue"); code works out the
     // dates, so the model never anchors the wrong calendar day (refs #434).
     { type: 'object', properties: { meaning: { type: 'string' }, fromWeekday: { type: 'string', enum: [...WEEKDAYS] }, toWeekday: { type: 'string', enum: [...WEEKDAYS] } }, required: ['meaning', 'fromWeekday', 'toWeekday'], additionalProperties: false },
@@ -245,10 +247,11 @@ function fieldTeachingLines(now: Date, timezone: string): string[] {
     '- weekday: the most recent such day. "on sunday" -> {"weekday":"sunday"}; "last tuesday" -> {"weekday":"tuesday"}.',
     '- fromWeekday + toWeekday: a span between two weekdays, full names. "between mon and tue" -> {"fromWeekday":"monday","toWeekday":"tuesday"}; "from friday to sunday" -> {"fromWeekday":"friday","toWeekday":"sunday"}. Code works out the dates, so do NOT send fromDate/toDate for these.',
     '- "week": a calendar week, Monday-anchored. "this week" or "all this week" -> {"week":"this"}; "last week" -> {"week":"last"}. Code works out the dates; never send fromDate/toDate for these.',
+    '- "month": ONLY the words "this month" or "last month". "this month" -> {"month":"this"}; "last month" -> {"month":"last"}. Code works out the dates. A NAMED month ("april", "june") is NEVER this field: name it with fromDate+toDate.',
     '- dayOfMonth: a bare ordinal, just the number. "the 21st" -> {"dayOfMonth":21}; "on the 3rd" -> {"dayOfMonth":3}. Code picks the most recent past such day, so do NOT work out the date yourself.',
     '- weekend: which past weekend, ONLY when the phrase literally says "weekend". "this weekend" -> {"weekend":"this"}; "last weekend" -> {"weekend":"last"}; "two weekends ago" -> {"weekend":"two-ago"}. Code works out the two dates.',
     '- date: one explicit calendar date. "July 15" -> {"date":"2026-07-15"} (use the year that makes it most recent, never future).',
-    '- fromDate + toDate: a calendar span, both inclusive. "april" -> {"fromDate":"2026-04-01","toDate":"2026-04-30"}. "this month" -> the 1st of the current month through today. "this year" -> {"fromDate":"2026-01-01","toDate":"2026-12-31"}. "june 1 to 15" -> both dates. Either side may stand alone: "since july 1" -> {"fromDate":"2026-07-01"}.',
+    '- fromDate + toDate: a calendar span, both inclusive. "april" -> {"fromDate":"2026-04-01","toDate":"2026-04-30"}. a NAMED month like "june 1 to 15". "this year" -> {"fromDate":"2026-01-01","toDate":"2026-12-31"}. "june 1 to 15" -> both dates. Either side may stand alone: "since july 1" -> {"fromDate":"2026-07-01"}.',
     '- fromTime/toTime: 24h "HH:MM" from 00:00 to 23:59, narrowing ONE day named by daysAgo/weekday/date. "yesterday from 4pm to 10pm" -> {"daysAgo":1,"fromTime":"16:00","toTime":"22:00"}.',
     '- A part of the day is a day plus a clock band: morning 06:00-12:00, noon or lunch 11:00-13:00, afternoon 12:00-18:00, evening 18:00-23:59, night 20:00-23:59. ALWAYS include the day, defaulting to today (daysAgo 0) when none is named: "this morning" -> {"daysAgo":0,"fromTime":"06:00","toTime":"12:00"}; "around noon" -> {"daysAgo":0,"fromTime":"11:00","toTime":"13:00"}; "last night" -> {"daysAgo":1,"fromTime":"20:00","toTime":"23:59"}; "last tuesday night" -> {"weekday":"tuesday","fromTime":"20:00","toTime":"23:59"}.',
     '- none: true when the phrase asks for no time limit. "all time" -> {"none":true}.',
@@ -401,6 +404,7 @@ export function parseFields(text: string): WindowFields | undefined {
     // raw-parsed replies instead of running this function - scored 100%
     // (refs #442).
     if (raw.week !== undefined) fields.week = String(raw.week);
+    if (raw.month !== undefined) fields.month = String(raw.month);
     if (raw.fromWeekday !== undefined) fields.fromWeekday = String(raw.fromWeekday);
     if (raw.toWeekday !== undefined) fields.toWeekday = String(raw.toWeekday);
     if (raw.dayOfMonth !== undefined) fields.dayOfMonth = Number(raw.dayOfMonth);

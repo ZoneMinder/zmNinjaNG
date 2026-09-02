@@ -362,3 +362,16 @@ describe('questionOffersRolling', () => {
     expect(off).not.toContain('lastCount');
   });
 });
+
+/** Refs #449: the calendar-month field, same shape as week. */
+describe('calendar-month field', () => {
+  beforeEach(() => resetWindowInterpreterCacheForTests());
+
+  it('has a branch, is taught in both prompts, and round-trips the parser', async () => {
+    const branches = WINDOW_SCHEMA.anyOf as Array<{ required: string[] }>;
+    expect(branches.some((b) => b.required.includes('month'))).toBe(true);
+    expect(buildInterpreterPrompt(new Date('2026-07-16T14:30:00Z'), 'UTC')).toContain('"month"');
+    const p = providerSaying('{"meaning":"this calendar month","month":"this"}');
+    expect(await interpretWhen('this month', p, NOW, 'UTC', new AbortController().signal)).toEqual({ month: 'this' });
+  });
+});
