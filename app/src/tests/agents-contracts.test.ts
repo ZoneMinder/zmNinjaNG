@@ -528,6 +528,26 @@ describe('Native contract: Android local network permission', () => {
   });
 });
 
+describe('Native contract: R8 keeps Capacitor plugin metadata', () => {
+  it('does not optimize the release build without keeping PluginHandle', () => {
+    const androidDir = path.join(repoRoot, 'app/android');
+    const gradle = read(path.join(androidDir, 'app/build.gradle'));
+    const optimizing = /getDefaultProguardFile\('proguard-android-optimize\.txt'\)/.test(gradle);
+    if (!optimizing) return;
+
+    // -optimize drops -dontoptimize, and R8's field optimization then deletes
+    // PluginHandle.pluginAnnotation, so getPluginAnnotation() returns null and
+    // every Capacitor permission check NPEs in Bridge.getPermissionStates.
+    // That shipped in 2.2.1 and crashed the app on open. Optimizing
+    // again is fine, but only with the reflective metadata kept.
+    const rules = read(path.join(androidDir, 'app/proguard-rules.pro'));
+    expect(
+      /-keepclassmembers class com\.getcapacitor\.PluginHandle/.test(rules),
+      'proguard-android-optimize.txt needs a keep rule for com.getcapacitor.PluginHandle members',
+    ).toBe(true);
+  });
+});
+
 describe('developer docs reference valid rule IDs', () => {
   it('every "rule <id>" reference resolves', () => {
     // Derived from AGENTS.md so adding or removing a rule cannot desync
