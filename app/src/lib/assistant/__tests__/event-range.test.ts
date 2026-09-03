@@ -307,3 +307,27 @@ describe('calendar weeks', () => {
     expect(at({ week: 'this', daysAgo: 1 })).toHaveProperty('error');
   });
 });
+
+/** Refs #449: "this month" on Gemini Nano ran as a rolling 30 days because
+ *  the vocabulary had no calendar-month word. Code does the arithmetic;
+ *  NOW is Thursday 2026-07-16. */
+describe('calendar months', () => {
+  it('resolves this month from the 1st through now', () => {
+    expect(at({ month: 'this' })).toEqual({
+      startDateTime: '2026-07-01 00:00:00',
+      endDateTime: '2026-07-16 10:30:00',
+    });
+  });
+
+  it('resolves last month as the whole previous month', () => {
+    expect(at({ month: 'last' })).toEqual({
+      startDateTime: '2026-06-01 00:00:00',
+      endDateTime: '2026-07-01 00:00:00',
+    });
+  });
+
+  it('rejects unknown values and mixing with other shapes', () => {
+    expect(at({ month: 'next' })).toHaveProperty('error');
+    expect(at({ month: 'this', week: 'this' })).toHaveProperty('error');
+  });
+});

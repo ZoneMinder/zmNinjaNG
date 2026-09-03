@@ -113,8 +113,8 @@ export const TIME_INTERPRET_CASES: TimeInterpretCase[] = [
   // which resolveWindow clamps to the real last day)
   { phrase: 'april', cls: 'month-year', ok: (_f, r) => startsOn(r, '2026-04-01') && endsOnDate(r, '2026-05-01') },
   { phrase: 'february', cls: 'month-year', ok: (_f, r) => startsOn(r, '2026-02-01') && endsOnDate(r, '2026-03-01') },
-  { phrase: 'this month', cls: 'month-year', ok: (f, r) => f.fromDate === '2026-07-01' && endsBy(r, '2026-07-19') },
-  { phrase: 'last month', cls: 'month-year', ok: (f) => (f.fromDate === '2026-06-01' && f.toDate === '2026-06-30') || (f.lastUnit === 'month' && f.lastCount === 1) },
+  { phrase: 'this month', cls: 'month-year', ok: (f, r) => f.month === 'this' || (f.fromDate === '2026-07-01' && endsBy(r, '2026-07-19')) },
+  { phrase: 'last month', cls: 'month-year', ok: (f) => f.month === 'last' || (f.fromDate === '2026-06-01' && f.toDate === '2026-06-30') || (f.lastUnit === 'month' && f.lastCount === 1) },
   { phrase: 'this year', cls: 'month-year', ok: (f, r) => f.fromDate === '2026-01-01' && endsBy(r, '2026-07-19') },
   { phrase: 'since july 1', cls: 'month-year', ok: (f) => f.fromDate === '2026-07-01' && (f.toDate === undefined || String(f.toDate) >= '2026-07-19') },
   // clock ranges (resolved endpoints: a date branch that lands on the same day is

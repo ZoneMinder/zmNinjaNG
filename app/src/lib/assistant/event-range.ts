@@ -56,6 +56,11 @@ export interface WindowFields {
    *  is Monday 00:00 through now, "last" the previous Monday through
    *  Sunday. Distinct from a rolling lastUnit:"week", which ends now. */
   week?: string;
+  /** A calendar month, resolved in code (refs #449): "this" is the 1st
+   *  through now, "last" the whole previous month. Exists because a
+   *  schema-less backend (Gemini Nano) expressed "this month" as a rolling
+   *  30 days - the vocabulary simply had no calendar-month word. */
+  month?: string;
   /** Most recent past day with this day-of-month number (1-31): "the 21st".
    *  Code finds the date, exactly as `weekday` finds the most recent weekday,
    *  because a small model resolves a bare ordinal to the wrong ISO date. */
@@ -146,16 +151,30 @@ export function resolveWindow(
   now: Date,
   timezone: string,
 ): ResolvedEventRange | { error: string } | undefined {
-  const { lastCount, lastUnit, daysAgo, weekday, fromWeekday, toWeekday, week, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
+  const { lastCount, lastUnit, daysAgo, weekday, fromWeekday, toWeekday, week, month, dayOfMonth, weekend, date, fromDate, toDate, fromTime, toTime } = fields;
   const dayPickers = [daysAgo !== undefined, weekday !== undefined, dayOfMonth !== undefined, date !== undefined].filter(Boolean).length;
   const rolling = lastCount !== undefined || lastUnit !== undefined;
   const ranged = fromDate !== undefined || toDate !== undefined;
   const weekendShape = weekend !== undefined;
   const weekdayRange = fromWeekday !== undefined || toWeekday !== undefined;
   const weekShape = week !== undefined;
+  const monthShape = month !== undefined;
 
-  if ([rolling, dayPickers > 0, ranged, weekendShape, weekdayRange, weekShape].filter(Boolean).length > 1) {
-    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekday span (fromWeekday+toWeekday), a calendar week, a weekend, or a span (fromDate/toDate).' };
+  if ([rolling, dayPickers > 0, ranged, weekendShape, weekdayRange, weekShape, monthShape].filter(Boolean).length > 1) {
+    return { error: 'Send ONE window shape: a rolling window (lastCount+lastUnit), a day (daysAgo, weekday, dayOfMonth, or date), a weekday span (fromWeekday+toWeekday), a calendar week, a calendar month, a weekend, or a span (fromDate/toDate).' };
+  }
+
+  if (monthShape) {
+    if (month !== 'this' && month !== 'last') {
+      return { error: `month must be "this" or "last". Received "${String(month)}".` };
+    }
+    const zonedNow = toZonedTime(now, timezone);
+    const first = new Date(zonedNow.getFullYear(), zonedNow.getMonth() - (month === 'last' ? 1 : 0), 1);
+    const nextFirst = new Date(first.getFullYear(), first.getMonth() + 1, 1);
+    const start = fromZonedTime(first, timezone);
+    const endRaw = fromZonedTime(nextFirst, timezone);
+    const end = endRaw.getTime() > now.getTime() ? now : endRaw;
+    return { startDateTime: formatForZm(start, timezone), endDateTime: formatForZm(end, timezone) };
   }
 
   if (weekShape) {
