@@ -76,6 +76,40 @@ test('proveRed fails when the changed test passes on the base code, and passes w
   }
 });
 
+test('proveRed measures from the fork point, not the base branch tip', () => {
+  const { dir, base, head, git } = repo();
+
+  // The base branch moves on after this branch was cut, which is what CI's
+  // github.event.pull_request.base.sha points at by the time the PR runs.
+  git('checkout', '-q', base);
+  mkdirSync(join(dir, 'app/src/lib/__tests__'), { recursive: true });
+  writeFileSync(join(dir, 'app/src/lib/other.ts'), 'export const other = () => 1;\n');
+  writeFileSync(join(dir, 'app/src/lib/__tests__/other.test.ts'), 'expect(other()).toBe(1)\n');
+  git('add', '.');
+  git('commit', '-qm', 'feat(other): land on the base branch');
+  const movedTip = git('rev-parse', 'HEAD');
+
+  const seen = [];
+  const runTests = (appDir, files) => {
+    seen.push(files);
+    return 1;
+  };
+  const code = proveRed({
+    base: movedTip,
+    head,
+    repo: dir,
+    title: 'fix(sum): add, not subtract',
+    runTests,
+    log: () => {},
+  });
+
+  // Only this branch's own test is proved. Diffing straight from the moved
+  // tip would drag in other.test.ts, which passes on the fork point and would
+  // fail the gate for a branch that changed nothing about it.
+  assert.equal(code, 0);
+  assert.deepEqual(seen, [['src/lib/__tests__/sum.test.ts']]);
+});
+
 test('proveRed fails a behavior change that brings no unit test', () => {
   const { dir, base, git } = repo();
   try {
