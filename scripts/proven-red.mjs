@@ -8,11 +8,11 @@
  * Mode default, refs #385), and each was found only because someone stashed
  * the fix and re-ran by hand. This script does that by machine.
  *
- * For a range base..head it takes the test files the range changed, runs
- * them in a throwaway worktree that holds the base code plus the head
- * tests, and fails when they pass there. A test that is green on the code
- * it claims to guard proves nothing. The normal unit-test job proves the
- * same tests are green on head.
+ * For a range base..head it takes the test files changed since the two
+ * forked, runs them in a throwaway worktree that holds the fork-point code
+ * plus the head tests, and fails when they pass there. A test that is green
+ * on the code it claims to guard proves nothing. The normal unit-test job
+ * proves the same tests are green on head.
  *
  *   node scripts/proven-red.mjs <base> <head> [--title "<pr title>"]
  *
@@ -78,7 +78,16 @@ function git(args, cwd) {
  * `runTests(appDir, files)` returns the vitest exit code; injectable for tests.
  */
 export function proveRed({ base, head, repo, title, runTests = runVitest, log = console.log }) {
-  const files = git(['diff', '--name-only', `${base}..${head}`], repo).split('\n').filter(Boolean);
+  // The fork point, not `base` itself. CI passes
+  // github.event.pull_request.base.sha, which is the base branch's tip at
+  // event time, so on a branch whose base has moved since it was cut, a
+  // two-dot diff reports the base branch's own newer commits as this range's
+  // changes. Those tests then rightly pass on `base` and the gate fails a PR
+  // that did nothing wrong. The same tip is also the wrong worktree to prove
+  // against: the pre-change code is the fork point, not whatever landed on
+  // the base branch afterwards.
+  const forkPoint = git(['merge-base', base, head], repo);
+  const files = git(['diff', '--name-only', `${forkPoint}..${head}`], repo).split('\n').filter(Boolean);
   const split = classify(files);
   const skip = skipReason(title, split);
   if (skip) {
@@ -92,7 +101,7 @@ export function proveRed({ base, head, repo, title, runTests = runVitest, log = 
 
   const worktree = mkdtempSync(path.join(tmpdir(), 'proven-red-'));
   try {
-    git(['worktree', 'add', '--detach', '-q', worktree, base], repo);
+    git(['worktree', 'add', '--detach', '-q', worktree, forkPoint], repo);
     for (const f of [...split.unitTests, ...split.testSupport]) {
       const from = path.join(repo, f);
       if (!existsSync(from)) continue; // deleted at head
