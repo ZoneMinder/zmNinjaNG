@@ -172,7 +172,7 @@ function MontageMonitorComponent({
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isMuted, toggleMuted] = useMonitorMuted(currentProfile?.id, monitor.Id);
+  const [isMuted, setMuted] = useMonitorMuted(currentProfile?.id, monitor.Id);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
   const resolvedFit = objectFit ?? 'cover';
   const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
@@ -340,7 +340,7 @@ function MontageMonitorComponent({
               )}
               onClick={(e) => {
                 e.stopPropagation();
-                toggleMuted();
+                setMuted(!isMuted);
               }}
               title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
               aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}

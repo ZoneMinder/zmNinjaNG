@@ -42,7 +42,9 @@ If Go2RTC connects but no video frames appear within 8 seconds, the app automati
 
 How a feed fills its tile — **Fit whole image** or **Crop to fill** — and **Analysis frames** live in the ⋮ menu at the end of the toolbar, on both the Monitors and Monitor Detail screens. The protocol label (enabled in {doc}`settings`) shows which streaming protocol is active on each feed. The Monitor Detail page also shows native video controls (play, pause, volume) for Go2RTC streams.
 
-Go2RTC feeds in the Monitors list start muted. The speaker icon next to a monitor's name unmutes it, and the app remembers that choice per monitor until you mute it again. The volume control on the Monitor Detail page is the browser's own and is not remembered.
+The maximize button on the Monitor Detail toolbar fills the screen with the feed and hides everything else, and the red **Exit fullscreen** button brings the page back. Maximizing also remembers the monitor: it opens that way every time afterwards, including when you tap it from the Montage. Exiting does not forget it, since exiting is the only way to leave the page; to turn the memory off, use **Open in fullscreen** in the monitor's Settings dialog (Video tab), which is the same switch and applies as soon as you flip it. To open every monitor maximized, turn on **Open live view in fullscreen** in {doc}`settings` instead. On a phone or tablet, turning the device to landscape also fills the screen for as long as it stays landscape. Leaving fullscreen while landscape keeps the normal view until the next rotation.
+
+Go2RTC feeds in the Monitors list start muted. The speaker icon next to a monitor's name unmutes it, and the app remembers that choice per monitor until you mute it again. The Monitor Detail page's volume control shares the same memory, so unmuting there carries to the card and the montage tile and back.
 
 For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode* setting does apply, see {doc}`settings` for details.
 

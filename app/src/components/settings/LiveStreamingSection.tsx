@@ -312,6 +312,20 @@ export function LiveStreamingSection({
           />
         </SettingsRow>
 
+        {/* Open live view in fullscreen */}
+        <SettingsRow>
+          <RowLabel
+            label={t('settings.live_fullscreen')}
+            desc={t('settings.live_fullscreen_desc')}
+          />
+          <Switch
+            id="live-fullscreen"
+            checked={settings.monitorDetailFullscreen}
+            onCheckedChange={(checked) => update('monitorDetailFullscreen', checked)}
+            data-testid="settings-live-fullscreen-switch"
+          />
+        </SettingsRow>
+
         {/* Stream FPS */}
         <div className="px-4 py-3 space-y-2">
           <RowLabel

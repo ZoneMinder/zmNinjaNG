@@ -217,6 +217,10 @@ export interface ProfileSettings {
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
   monitorDetailCycleSeconds: number; // Auto-cycle interval for single monitor view (0 = off)
+  /** Open the Monitor Detail page maximized for every monitor ("Open live view
+   *  in fullscreen" under Settings > Live Streaming). `fullscreenMonitorIds`
+   *  is the per-monitor form (refs #462, #463). */
+  monitorDetailFullscreen: boolean;
   insomnia: boolean; // Global: Keep screen awake across all pages
   monitorDetailInsomnia: boolean; // @deprecated - use global insomnia instead
   montageInsomnia: boolean; // @deprecated - use global insomnia instead
@@ -295,6 +299,14 @@ export interface ProfileSettings {
   // Event playback speed multiplier (one of EVENT_PLAYBACK_RATES). Honored by
   // both the MP4 and ZMS players and reused across a continuous run.
   eventPlaybackRate: number;
+  /** Whether the MP4 event player starts muted. Flipping the player's own
+   *  volume control updates this, so the choice carries to every later event
+   *  on the profile (refs #463). ZMS playback has no audio. */
+  eventPlaybackMuted: boolean;
+  /** Whether the MP4 event player opens fullscreen. Set by "Open events in
+   *  fullscreen" under Settings > Playback or by entering fullscreen on the
+   *  player; only the setting clears it (refs #462, #463). */
+  eventPlaybackFullscreen: boolean;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
   // TV mode: enables D-pad navigation and larger UI
@@ -317,6 +329,11 @@ export interface ProfileSettings {
    *  a grid does not open as a cacophony; listing a monitor here restores
    *  its last choice across remounts (refs #463). */
   unmutedMonitorIds: string[];
+  /** Monitors whose detail page opens fullscreen. Set by "Open in fullscreen"
+   *  in the monitor's settings dialog or by maximizing the page; only the
+   *  dialog clears it. Exiting is the only way off a fullscreen page, so a
+   *  remembered exit could never be kept (refs #462, #463). */
+  fullscreenMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
@@ -443,6 +460,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
   monitorDetailCycleSeconds: 0,
+  monitorDetailFullscreen: false,
   insomnia: false,
   monitorDetailInsomnia: false,
   montageInsomnia: false,
@@ -502,6 +520,8 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   eventVideoAutoplay: true,
   eventContinuousPlay: false,
   eventPlaybackRate: DEFAULT_EVENT_PLAYBACK_RATE,
+  eventPlaybackMuted: true,
+  eventPlaybackFullscreen: false,
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,
@@ -509,6 +529,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorStreamingOverrides: {},
   forceZmsMonitorIds: [],
   unmutedMonitorIds: [],
+  fullscreenMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
   apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,

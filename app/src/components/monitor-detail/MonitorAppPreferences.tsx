@@ -16,6 +16,7 @@ import { Switch } from '../ui/switch';
 import { SettingsRow } from './SettingsRow';
 import { useSettingsStore } from '../../stores/settings';
 import { useCurrentProfile } from '../../hooks/useCurrentProfile';
+import { useMonitorFlag } from '../../hooks/useMonitorFlag';
 import type { Monitor, ProfileId } from '../../api/types';
 
 interface MonitorAppPreferencesProps {
@@ -57,6 +58,7 @@ export function MonitorAppPreferences({ monitor, profileId }: MonitorAppPreferen
   };
 
   const forceZms = profileSettings?.forceZmsMonitorIds?.includes(monitor.Id) ?? false;
+  const [openFullscreen, setOpenFullscreen] = useMonitorFlag(effectiveProfileId, monitor.Id, 'fullscreenMonitorIds');
 
   const handleForceZmsToggle = (enabled: boolean) => {
     if (!effectiveProfileId || !profileSettings) return;
@@ -74,6 +76,15 @@ export function MonitorAppPreferences({ monitor, profileId }: MonitorAppPreferen
           onCheckedChange={handleForceZmsToggle}
           aria-label={t('monitor_detail.force_zms_label')}
           data-testid="settings-monitor-force-zms-switch"
+        />
+      </SettingsRow>
+
+      <SettingsRow label={t('monitor_detail.open_fullscreen_label')} testId="settings-open-fullscreen-row">
+        <Switch
+          checked={openFullscreen}
+          onCheckedChange={setOpenFullscreen}
+          aria-label={t('monitor_detail.open_fullscreen_label')}
+          data-testid="settings-monitor-open-fullscreen-switch"
         />
       </SettingsRow>
 

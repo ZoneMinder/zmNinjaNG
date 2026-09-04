@@ -88,6 +88,7 @@ Settings that control live camera feeds:
 | **Streaming Protocols** | WebRTC, MSE, and HLS, tried in parallel when Go2RTC is configured. The first protocol to produce video wins. |
 | **Snapshot interval** | How often to refresh the still image when Streaming Mode is set to *Snapshot* (1–30 seconds) |
 | **Protocol Label** | Shows or hides the streaming protocol indicator (MJPEG/MSE/WebRTC) on video feeds across all pages |
+| **Open live view in fullscreen** | Every monitor's detail page opens maximized. For one monitor only, use **Open in fullscreen** in that monitor's Settings dialog instead. |
 | **Stream FPS** | Maximum frame rate for live MJPEG streams (1–30 fps, default 10; presets 5/10/15/30). Lower values reduce bandwidth and CPU. |
 | **Stream Scale** | Server-side scaling applied to MJPEG frames before they are sent (10–100%, default 50; presets 25/50/75/100). Lower values reduce bandwidth. |
 
@@ -170,6 +171,7 @@ Settings that affect event video playback and dashboard refresh:
 | Setting | Description |
 |---------|-------------|
 | **Event autoplay** | Start video playback automatically when opening the Event Detail page |
+| **Open events in fullscreen** | Play event video fullscreen as soon as the Event Detail page opens. Entering fullscreen on the player turns this on; this switch is how you turn it off. |
 | **Events per page** | How many events to load per page on the Events screen (10–1000, presets at 100/300/500) |
 | **Dashboard refresh interval** | How often the dashboard widgets reload data (5–300 seconds, presets at 10/30/60) |
 

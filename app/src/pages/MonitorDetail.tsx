@@ -15,6 +15,9 @@ import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
+import { useMonitorMuted } from '../hooks/useMonitorMuted';
+import { useMonitorFlag } from '../hooks/useMonitorFlag';
+import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
 import { useAuthSlice } from '../stores/auth';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
@@ -92,7 +95,6 @@ export default function MonitorDetail() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showZones, setShowZones] = useState(false);
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
 
   // Navigation state
@@ -107,6 +109,12 @@ export default function MonitorDetail() {
   // unknown profile, so the existing error state below covers both cases
   // without new branching (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
+  const [openFullscreen, setOpenFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
+  const [isFullscreen, setFullscreen] = useAutoFullscreen({
+    startFullscreen: settings.monitorDetailFullscreen || openFullscreen,
+    resetKey: id,
+  });
   // One value for the picture and the zone overlay on top of it: the overlay
   // has to be letterboxed or cropped exactly as the feed is, or the zones sit
   // at a different scale than what they outline.
@@ -251,10 +259,14 @@ export default function MonitorDetail() {
     [monitor?.Monitor.Height, monitor?.Monitor.Orientation, monitor?.Monitor.Width]
   );
 
+  // Maximizing remembers the monitor; exiting is session-only, since exit is
+  // the only way off the page and a remembered exit could never be kept.
+  // The monitor's settings dialog is the off switch (refs #462, #463).
   const handleToggleFullscreen = useCallback(() => {
-    setIsFullscreen((prev) => !prev);
+    setFullscreen(!isFullscreen);
+    if (!isFullscreen) setOpenFullscreen(true);
     zoomPan.reset();
-  }, [zoomPan]);
+  }, [zoomPan, isFullscreen, setFullscreen, setOpenFullscreen]);
 
   // Settings handlers - write to the OWNING profile's settings bucket, not
   // whichever profile is globally current (refs #337).
@@ -428,7 +440,7 @@ export default function MonitorDetail() {
               data-testid="monitor-detail-exit-fullscreen"
             >
               <Minimize2 className="h-3.5 w-3.5 mr-1" />
-              {t('monitor_detail.exit_fullscreen')}
+              {t('monitor_detail.exit')}
             </Button>
           </div>
         </div>
@@ -470,6 +482,8 @@ export default function MonitorDetail() {
               onProtocolChange={setProtocol}
               forceViewMode="streaming"
               bypassGo2rtcFailureCache
+              muted={isMuted}
+              onMutedChange={setMuted}
             />
             <ZoneOverlay
               zones={zones}

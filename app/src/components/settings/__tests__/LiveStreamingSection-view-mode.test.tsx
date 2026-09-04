@@ -9,7 +9,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 vi.mock('../../../api/store-gates', () => import('../../../tests/fake-store-gates'));
@@ -94,5 +94,20 @@ describe('LiveStreamingSection Streaming Mode recommendation', () => {
     );
     expect(screen.getByTestId('settings-view-mode-recommended-snapshot')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-view-mode-recommended-streaming')).toBeNull();
+  });
+
+  it('writes the open-live-view-in-fullscreen switch (refs #462, #463)', () => {
+    seedProfiles([profile()]);
+    const update = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <LiveStreamingSection settings={{ ...DEFAULT_SETTINGS }} update={update} currentProfile={profile()} updateSettings={vi.fn()} />
+      </QueryClientProvider>
+    );
+    const toggle = screen.getByTestId('settings-live-fullscreen-switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith('monitorDetailFullscreen', true);
   });
 });

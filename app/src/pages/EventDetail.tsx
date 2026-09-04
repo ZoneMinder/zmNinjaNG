@@ -23,6 +23,7 @@ import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
+import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import type { ProfileId } from '../api/types';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -173,6 +174,21 @@ export default function EventDetail() {
     if (!ownerProfile) return;
     updateSettings(ownerProfile.id, { eventPlaybackRate: rate });
   }, [ownerProfile, updateSettings]);
+
+  const handleMutedChange = useCallback((muted: boolean) => {
+    if (!ownerProfile) return;
+    updateSettings(ownerProfile.id, { eventPlaybackMuted: muted });
+  }, [ownerProfile, updateSettings]);
+
+  // Entering fullscreen on the player turns the "open events in fullscreen"
+  // setting on for later events; leaving changes this session only, since
+  // leaving is forced before navigating away. The setting is the off switch
+  // (refs #462, #463).
+  const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: settings.eventPlaybackFullscreen });
+  const handleFullscreenChange = useCallback((fullscreen: boolean) => {
+    setFullscreen(fullscreen);
+    if (fullscreen && ownerProfile) updateSettings(ownerProfile.id, { eventPlaybackFullscreen: true });
+  }, [setFullscreen, ownerProfile, updateSettings]);
 
   // Guards against a stray second 'ended' (video.js can emit it during teardown)
   // triggering a double advance. Re-armed for each event by the id-change effect.
@@ -688,6 +704,10 @@ export default function EventDetail() {
                         onEnded={handleVideoEnded}
                         playbackRate={settings.eventPlaybackRate}
                         onRateChange={handleRateChange}
+                        muted={settings.eventPlaybackMuted}
+                        onMutedChange={handleMutedChange}
+                        fullscreen={isFullscreen}
+                        onFullscreenChange={handleFullscreenChange}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/70">

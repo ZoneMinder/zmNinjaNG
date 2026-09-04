@@ -31,12 +31,17 @@ vi.mock('sonner', () => ({ toast: { info: vi.fn(), error: vi.fn() } }));
 function seedSettings(overrides: {
   disableLogRedaction?: boolean;
   forceZmsMonitorIds?: string[];
+  fullscreenMonitorIds?: string[];
   profileB?: { disableLogRedaction?: boolean; forceZmsMonitorIds?: string[] };
 } = {}) {
   seedProfiles([makeProfile('p1'), makeProfile('profile-b')], {
     current: 'p1',
     settings: {
-      p1: { disableLogRedaction: overrides.disableLogRedaction ?? false, forceZmsMonitorIds: overrides.forceZmsMonitorIds ?? [] },
+      p1: {
+        disableLogRedaction: overrides.disableLogRedaction ?? false,
+        forceZmsMonitorIds: overrides.forceZmsMonitorIds ?? [],
+        fullscreenMonitorIds: overrides.fullscreenMonitorIds ?? [],
+      },
       'profile-b': {
         disableLogRedaction: overrides.profileB?.disableLogRedaction ?? false,
         forceZmsMonitorIds: overrides.profileB?.forceZmsMonitorIds ?? [],
@@ -453,5 +458,26 @@ describe('MonitorSettingsDialog without permission to edit', () => {
     expect(screen.getByTestId('monitor-settings-restricted-note')).toHaveTextContent(
       'monitor_detail.settings_restricted_monitor'
     );
+  });
+});
+
+describe('MonitorSettingsDialog open-in-fullscreen (refs #462, #463)', () => {
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
+  const toggle = () => screen.getByTestId('settings-monitor-open-fullscreen-switch');
+
+  it('reads the monitor list and writes it the moment the switch flips', () => {
+    seedSettings({ fullscreenMonitorIds: ['1'] });
+    render(<MonitorSettingsDialog open onOpenChange={vi.fn()} monitor={baseMonitor} zmVersion="1.38.0" onSave={vi.fn()} />);
+    expect(toggle()).toHaveAttribute('aria-checked', 'true');
+
+    fireEvent.click(toggle());
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).fullscreenMonitorIds).toEqual([]);
+
+    fireEvent.click(toggle());
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).fullscreenMonitorIds).toEqual(['1']);
   });
 });

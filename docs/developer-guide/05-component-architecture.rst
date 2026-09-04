@@ -135,13 +135,47 @@ never-seeded one (the watermark is ``null``, so the whole history is the new set
 share. A Go2RTC tile starts muted so a grid does not open as a cacophony, but
 the choice used to live in component state and reset on every remount: a group
 switch, a route change, or a relaunch put every unmuted monitor back to muted.
-The hook reads ``unmutedMonitorIds`` from the owning profile's settings through
-``getProfileSettings`` and returns ``[isMuted, toggleMuted]``; ``toggleMuted``
-writes the list back with ``updateProfileSettings``, so the state survives
-remounts and syncs with the rest of the profile. The key is the monitor id
-within one profile, which is why the same id on a second server does not
-collide. Without a profile id the tile is always muted and the toggle is a
-no-op.
+The hook is a thin inversion over ``useMonitorFlag``
+(``hooks/useMonitorFlag.ts``), which turns membership in one of the profile's
+monitor-id lists (``unmutedMonitorIds``, ``fullscreenMonitorIds``) into a
+``[value, setValue]`` pair: read through ``getProfileSettings``, written back
+with ``updateProfileSettings``, so the state survives remounts and syncs with
+the rest of the profile. The key is the monitor id within one profile, which
+is why the same id on a second server does not collide. Without a profile id
+the value is false and the setter is a no-op. ``MonitorDetail`` uses the same
+mute hook, but its mute control is the browser's own (``showControls``), so
+``useGo2RTCStream`` listens for ``volumechange`` on the video element and
+reports through ``onMutedChange``. A change that lands on the value the hook
+itself just wrote from the ``muted`` option is skipped, so only the user's
+clicks reach the setting.
+
+``useAutoFullscreen`` (``hooks/useAutoFullscreen.ts``) drives fullscreen on
+the two player pages, ``MonitorDetail`` (seeded by the monitor's
+``fullscreenMonitorIds`` entry, the "Open in fullscreen" switch in
+``MonitorAppPreferences``) and ``EventDetail`` (seeded by
+``eventPlaybackFullscreen``, "Open events in fullscreen" in
+``PlaybackSection``). It returns ``[isFullscreen, setFullscreen]`` where
+``isFullscreen`` is the setting OR a temporary landscape term, a
+``(orientation: landscape) and (pointer: coarse)`` media query so a rotated
+phone fills the screen and a desktop window, landscape all day, does not, OR
+a session override from ``setFullscreen``, the page's own maximize/exit
+button. The hook itself writes no setting; the pages do, and only on enter:
+maximizing writes the monitor into ``fullscreenMonitorIds``, entering
+fullscreen on the event player sets ``eventPlaybackFullscreen``. Exit is
+session-only because exit is the only way off a fullscreen page, so a
+remembered exit would end every visit by forgetting; the settings switches
+are the off switches. ``monitorDetailFullscreen`` (Settings > Live Streaming)
+is the every-monitor form and ORs in beside the per-monitor entry. The
+override lasts until the next rotation or until ``resetKey`` (the monitor id)
+changes, since the detail page stays mounted across monitors (refs #462,
+#463).
+
+``useZoomPan`` writes no ``transform`` or ``will-change`` at identity. Either
+one makes the element the containing block for every ``position: fixed``
+descendant, and video.js full-window mode (the fallback when the real
+Fullscreen API refuses a request made without a gesture, so every rotation
+and every "open in fullscreen") positions the player ``fixed``: with the
+transform in place it filled the card, not the viewport (refs #462).
 
 The whole component is wrapped in ``memo``:
 
@@ -510,8 +544,20 @@ on the MP4 / HLS branch. Its props (declared as ``Mp4EventPlayerProps`` at the
 top of the file) are the usual media inputs (``src``, ``type``, ``poster``,
 ``autoplay``, ``muted``, ``aspectRatio``), the marker pair discussed below,
 ``onReady`` and ``onError``, the continuous-playback callbacks
-(``onEnded``, ``playbackRate``, ``onRateChange``, refs #250), and ``eventId``,
-which is what enables Picture-in-Picture survival across navigation.
+(``onEnded``, ``playbackRate``, ``onRateChange``, refs #250), ``onMutedChange``,
+and ``eventId``, which is what enables Picture-in-Picture survival across
+navigation. ``onMutedChange`` fires on video.js ``volumechange`` with
+``player.muted()``; the player only ever sets muted from its prop at
+construction, so every such event is the user's, and ``EventDetail`` writes it
+to the ``eventPlaybackMuted`` setting for the next event to read (refs #463).
+``fullscreen`` / ``onFullscreenChange`` follow the ``playbackRate`` shape: a
+``desiredFullscreenRef`` records what the component asked for, and the
+``fullscreenchange`` / ``enterFullWindow`` / ``exitFullWindow`` listeners
+report only a state that differs from it, so a remembered flag or a rotation
+applying itself is not mistaken for a user click. The real Fullscreen API
+refuses a request made without a user gesture, so ``applyFullscreen`` falls
+back to video.js full-window mode when the request rejects; video.js counts
+full-window as ``isFullscreen()``, which keeps the write-back uniform.
 
 Markers are rendered by ``videojs-markers``: the ``markers`` array maps to the
 alarm and max-score frames on the event timeline, and ``onMarkerClick`` seeks

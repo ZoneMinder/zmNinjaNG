@@ -129,6 +129,9 @@ export interface LiveMonitorPlayerProps {
   showControls?: boolean;
   externalMediaRef?: React.RefObject<HTMLImageElement | HTMLVideoElement | null>;
   muted?: boolean;
+  /** User mute/unmute through the native controls (Go2RTC only), for callers
+   *  that persist the choice (refs #463). */
+  onMutedChange?: (muted: boolean) => void;
   onLoad?: () => void;
   /** Called when the effective streaming protocol changes (e.g., 'MSE', 'WebRTC', 'MJPEG') */
   onProtocolChange?: (protocol: string) => void;
@@ -174,6 +177,7 @@ export function LiveMonitorPlayer({
   showControls = false,
   externalMediaRef,
   muted = true,
+  onMutedChange,
   onLoad,
   onProtocolChange,
   forceViewMode,
@@ -293,6 +297,7 @@ export function LiveMonitorPlayer({
     expectedHost: portalHost,
     enabled: streamingMethod === 'webrtc' && !!profile?.go2rtcUrl && !go2rtcFailed && !paused && !streamDenied,
     muted,
+    onMutedChange,
     controls: showControls,
     useStun: rawSettings?.webrtcUseStun ?? false,
   });

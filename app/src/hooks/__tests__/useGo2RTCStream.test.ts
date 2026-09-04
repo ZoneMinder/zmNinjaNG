@@ -583,6 +583,54 @@ describe('useGo2RTCStream', () => {
     });
   });
 
+  describe('Mute write-back (refs #463)', () => {
+    function renderWithVideo(muted: boolean, onMutedChange: (m: boolean) => void) {
+      const video = document.createElement('video');
+      video.muted = muted;
+      installProtocolMock({ modes: ['webrtc'], pcStateAfterOnpcvideo: WebSocket.OPEN, video });
+      const containerRef = { current: containerElement };
+      const hook = renderHook(
+        (props: { muted: boolean }) =>
+          useGo2RTCStream({
+            go2rtcUrl: 'http://localhost:1984',
+            monitorId: '1',
+            containerRef,
+            enabled: true,
+            controls: true,
+            muted: props.muted,
+            onMutedChange,
+          }),
+        { initialProps: { muted } },
+      );
+      return { video, hook };
+    }
+
+    it('reports a user unmute from the native controls', async () => {
+      const onMutedChange = vi.fn();
+      const { video } = renderWithVideo(true, onMutedChange);
+      await waitFor(() => expect(mockVideoRtcInstances.length).toBe(1));
+      act(() => mockVideoRtcInstances[0].oninit());
+
+      video.muted = false;
+      video.dispatchEvent(new Event('volumechange'));
+
+      expect(onMutedChange).toHaveBeenCalledWith(false);
+    });
+
+    it('stays quiet for its own muted writes', async () => {
+      const onMutedChange = vi.fn();
+      const { video, hook } = renderWithVideo(true, onMutedChange);
+      await waitFor(() => expect(mockVideoRtcInstances.length).toBe(1));
+      act(() => mockVideoRtcInstances[0].oninit());
+
+      hook.rerender({ muted: false });
+      video.dispatchEvent(new Event('volumechange'));
+
+      expect(video.muted).toBe(false);
+      expect(onMutedChange).not.toHaveBeenCalled();
+    });
+  });
+
   describe('State transitions', () => {
     it('transitions: idle → connecting → connected', async () => {
       const containerRef = { current: containerElement };
