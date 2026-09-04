@@ -440,7 +440,7 @@ export default function MonitorDetail() {
               data-testid="monitor-detail-exit-fullscreen"
             >
               <Minimize2 className="h-3.5 w-3.5 mr-1" />
-              {t('monitor_detail.exit_fullscreen')}
+              {t('monitor_detail.exit')}
             </Button>
           </div>
         </div>

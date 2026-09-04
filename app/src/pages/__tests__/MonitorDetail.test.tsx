@@ -224,7 +224,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     monitorQuery();
 
     render(<MonitorDetail />);
-    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('monitor_detail.exit');
 
     fireEvent.click(screen.getByTestId('monitor-detail-exit-fullscreen'));
     expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
@@ -239,7 +239,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
 
     fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
-    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('monitor_detail.exit');
     expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
   });
 
@@ -249,7 +249,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     monitorQuery();
 
     render(<MonitorDetail />);
-    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('monitor_detail.exit');
     expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual([]);
   });
 
