@@ -45,6 +45,13 @@ Feature: Monitor List and Navigation
     Then I should see at least 1 monitor cards
     And the monitor grid should lay out cards in more than one column
 
+  @all
+  Scenario: Monitor info popover lists the capture settings with labels
+    Then I should see at least 1 monitor cards
+    When I open the first monitor's info popover
+    Then the info popover should show the capture settings and the card's resolution
+    And the monitors page should still be open
+
   @web
   Scenario: Holding an icon button explains it instead of acting on it
     Then I should see at least 1 monitor cards

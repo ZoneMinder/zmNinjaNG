@@ -12,7 +12,7 @@ import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { ProfileChip } from '../ui/profile-chip';
 import { Button, HintButton } from '../ui/button';
-import { Activity, Settings, Download, Clock, Video, Eye, Disc, Volume2, VolumeX } from 'lucide-react';
+import { Activity, Settings, Download, Clock, Volume2, VolumeX } from 'lucide-react';
 import { cn, formatEventCount } from '../../lib/utils';
 import { handleKeyClick } from '../../lib/tv/tv-a11y';
 import { downloadSnapshotFromElement } from '../../services/download';
@@ -28,6 +28,7 @@ import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-s
 import { useAuthSlice } from '../../stores/auth';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 import { useMonitorMuted } from '../../hooks/useMonitorMuted';
+import { MonitorInfoPopover } from './MonitorInfoPopover';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
   /** Callback to open the settings dialog for this monitor. `profileId` is
@@ -178,6 +179,7 @@ function MonitorCardComponent({
                 {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
               </HintButton>
             )}
+            <MonitorInfoPopover monitor={monitor} className="h-4 w-4" iconClassName="h-3 w-3" />
             <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 shrink-0">
               {monitor.Id}
             </Badge>
@@ -185,43 +187,12 @@ function MonitorCardComponent({
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
             <span>{status?.CaptureFPS || '0'} FPS</span>
             <span>&middot;</span>
-            <span>{monitor.Width}x{monitor.Height}</span>
+            <span data-testid="monitor-resolution">{monitor.Width}x{monitor.Height}</span>
             {monitor.Controllable === '1' && (
               <>
                 <span>&middot;</span>
                 <span className="text-blue-600 dark:text-blue-400">PTZ</span>
               </>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-            {monitor.Capturing !== undefined ? (
-              <>
-                <span className="flex items-center gap-0.5" title={t('monitors.capturing')}>
-                  <Video className="h-2.5 w-2.5" />
-                  <Badge variant={monitor.Capturing === 'None' ? 'outline' : 'secondary'} className="font-mono text-[9px] px-1 py-0 h-4">
-                    {monitor.Capturing}
-                  </Badge>
-                </span>
-                <span className="flex items-center gap-0.5" title={t('monitors.analysing')}>
-                  <Eye className="h-2.5 w-2.5" />
-                  <Badge variant={monitor.Analysing === 'None' ? 'outline' : 'secondary'} className="font-mono text-[9px] px-1 py-0 h-4">
-                    {monitor.Analysing}
-                  </Badge>
-                </span>
-                <span className="flex items-center gap-0.5" title={t('monitors.recording')}>
-                  <Disc className="h-2.5 w-2.5" />
-                  <Badge variant={monitor.Recording === 'None' ? 'outline' : 'secondary'} className="font-mono text-[9px] px-1 py-0 h-4">
-                    {monitor.Recording}
-                  </Badge>
-                </span>
-              </>
-            ) : (
-              <span className="flex items-center gap-0.5" title={t('monitors.function')}>
-                <Video className="h-2.5 w-2.5" />
-                <Badge variant={monitor.Function === 'None' ? 'outline' : 'secondary'} className="font-mono text-[9px] px-1 py-0 h-4">
-                  {monitor.Function}
-                </Badge>
-              </span>
             )}
           </div>
           <div className="flex items-center gap-1 pt-0.5 min-w-0">
@@ -312,6 +283,7 @@ function MonitorCardComponent({
                 data-testid="monitor-status"
               />
               <div className="font-semibold text-base truncate" data-testid="monitor-name">{monitor.Name}</div>
+              <MonitorInfoPopover monitor={monitor} className="h-5 w-5" />
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 shrink-0">
                 ID: {monitor.Id}
               </Badge>
@@ -342,7 +314,7 @@ function MonitorCardComponent({
                 <Activity className="h-3 w-3" />
                 {status?.CaptureFPS || '0'} FPS
               </span>
-              <span>
+              <span data-testid="monitor-resolution">
                 {monitor.Width}x{monitor.Height}
               </span>
               {monitor.Controllable === '1' && (
@@ -354,37 +326,6 @@ function MonitorCardComponent({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            {monitor.Capturing !== undefined ? (
-              <>
-                <div className="flex items-center gap-1" title={t('monitors.capturing')}>
-                  <Video className="h-3 w-3" /><span className="text-[10px]">Cap</span>
-                  <Badge variant={monitor.Capturing === 'None' ? 'outline' : 'secondary'} className="font-mono text-xs">
-                    {monitor.Capturing}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-1" title={t('monitors.analysing')}>
-                  <Eye className="h-3 w-3" /><span className="text-[10px]">Anl</span>
-                  <Badge variant={monitor.Analysing === 'None' ? 'outline' : 'secondary'} className="font-mono text-xs">
-                    {monitor.Analysing}
-                  </Badge>
-                </div>
-                <div className="flex items-center gap-1" title={t('monitors.recording')}>
-                  <Disc className="h-3 w-3" /><span className="text-[10px]">Rec</span>
-                  <Badge variant={monitor.Recording === 'None' ? 'outline' : 'secondary'} className="font-mono text-xs">
-                    {monitor.Recording}
-                  </Badge>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-1" title={t('monitors.function')}>
-                <Video className="h-3 w-3" />
-                <Badge variant={monitor.Function === 'None' ? 'outline' : 'secondary'} className="font-mono text-xs">
-                  {monitor.Function}
-                </Badge>
-              </div>
-            )}
-          </div>
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2 pt-1 min-w-0">

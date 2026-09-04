@@ -17,13 +17,14 @@ import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
 import { useMonitorMuted } from '../hooks/useMonitorMuted';
 import { useMonitorFlag } from '../hooks/useMonitorFlag';
+import { MonitorInfoPopover } from '../components/monitors/MonitorInfoPopover';
 import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
 import { useAuthSlice } from '../stores/auth';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers, Video, Eye, Disc } from 'lucide-react';
+import { ArrowLeft, Settings, Maximize2, Minimize2, AlertTriangle, Download, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, ChevronsUpDown, Layers } from 'lucide-react';
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
@@ -37,7 +38,6 @@ import { ZoneOverlay } from '../components/monitors/ZoneOverlay';
 import { ZoneLegend } from '../components/monitors/ZoneLegend';
 import { log, LogLevel } from '../lib/logger';
 import { getOrientedResolution, parseMonitorRotation } from '../lib/monitor/monitor-rotation';
-import { isZmVersionAtLeast } from '../lib/zm/zm-version';
 import { getMonitorRunState, monitorDotColor } from '../lib/monitor/monitor-status';
 import { useZoomPan } from '../hooks/useZoomPan';
 import { useScrollPad } from '../hooks/useScrollPad';
@@ -211,7 +211,6 @@ export default function MonitorDetail() {
 
   // ZM version for feature detection
   const zmVersion = useAuthSlice(ownerProfile?.id ?? null).version;
-  const is138Plus = isZmVersionAtLeast(zmVersion, '1.38.0');
 
   // Whether the settings dialog offers an editor at all. Unknown permissions
   // stay optimistic: System='None' with Monitors='Edit' is a legal account, so
@@ -356,17 +355,7 @@ export default function MonitorDetail() {
                 )}
               />
               <h1 className="text-sm sm:text-base font-semibold" data-testid="monitor-detail-name">{monitor.Monitor.Name}</h1>
-            </div>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground ml-3">
-              {is138Plus ? (
-                <>
-                  <span className="flex items-center gap-0.5" title={t('monitors.capturing')}><Video className="h-2.5 w-2.5" />Cap: {monitor.Monitor.Capturing}</span>
-                  <span className="flex items-center gap-0.5" title={t('monitors.analysing')}><Eye className="h-2.5 w-2.5" />Anl: {monitor.Monitor.Analysing}</span>
-                  <span className="flex items-center gap-0.5" title={t('monitors.recording')}><Disc className="h-2.5 w-2.5" />Rec: {monitor.Monitor.Recording}</span>
-                </>
-              ) : (
-                <span className="flex items-center gap-0.5" title={t('monitors.function')}><Video className="h-2.5 w-2.5" />{monitor.Monitor.Function}</span>
-              )}
+              <MonitorInfoPopover monitor={monitor.Monitor} className="h-6 w-6 flex items-center justify-center" iconClassName="h-4 w-4" />
             </div>
           </div>
           <Button

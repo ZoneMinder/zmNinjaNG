@@ -131,6 +131,24 @@ counted rather than what "seen" becomes after the click. It drops the date param
 entirely for a quiet monitor (``newEventCount`` is 0 or undefined) or a
 never-seeded one (the watermark is ``null``, so the whole history is the new set).
 
+``MonitorInfoPopover`` (``components/monitors/MonitorInfoPopover.tsx``) is the
+info button beside the monitor name on both card layouts and in the
+``MonitorDetail`` header. It replaced three icon-only badges whose meaning
+lived in a hover ``title`` (invisible on touch) and gave ``Decoding`` its
+first appearance in the UI: the popover lists the four capture-pipeline
+fields ZM 1.38+ splits Function into, Decoding among them
+(``monitor.Capturing !== undefined`` is the tell, the same one the card
+used), or Function before that, then resolution and the frame-rate cap,
+each with a label. Decoding other than
+``Always`` is emphasised with a one-line note, since on-demand decoding is
+behind the frozen-snapshot reports (#383, #461). Radix's trigger toggles on
+click, which serves touch and keyboard; a mouse gets hover in addition:
+``pointerenter`` opens, ``pointerleave`` from trigger or content closes after
+``HOVER_CLOSE_DELAY_MS``, and the click that follows a hover-open is
+``preventDefault``-ed so Radix does not toggle it shut again (its handlers
+are composed to skip on ``defaultPrevented``). Every handler stops
+propagation, because the card around it navigates on click (refs #467).
+
 ``useMonitorMuted`` (``hooks/useMonitorMuted.ts``) is the other hook both tiles
 share. A Go2RTC tile starts muted so a grid does not open as a cacophony, but
 the choice used to live in component state and reset on every remount: a group
