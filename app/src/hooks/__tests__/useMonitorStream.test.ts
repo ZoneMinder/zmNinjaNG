@@ -225,6 +225,31 @@ describe('useMonitorStream', () => {
     expect(result.current.streamUrl).toContain('rand='); // cacheBuster in snapshot
   });
 
+  it('drops a caller-supplied maxfps in snapshot mode (refs #461)', async () => {
+    useSettingsStore.setState({
+      profileSettings: {
+        'profile-1': {
+          ...DEFAULT_SETTINGS,
+          viewMode: 'snapshot',
+        },
+      },
+    });
+    useMonitorStore.setState({ regenerateConnKey: vi.fn(() => 12345) });
+
+    // LiveMonitorPlayer always passes maxfps through streamOptions; the
+    // spread used to put it back on a request that has no frame rate.
+    const { result } = renderHook(() =>
+      useMonitorStream({ monitorId: '1', streamOptions: { maxfps: 10, scale: 50 } })
+    );
+
+    await waitFor(() => {
+      expect(result.current.streamUrl).toBeTruthy();
+    });
+
+    expect(result.current.streamUrl).toContain('scale=50');
+    expect(result.current.streamUrl).not.toContain('maxfps');
+  });
+
   describe('snapshot request shape by monitor decoding', () => {
     // mode=single reads shared memory without marking the monitor as viewed, so
     // a monitor that decodes on demand stops decoding and the snapshot freezes

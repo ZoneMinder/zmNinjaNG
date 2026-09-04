@@ -169,6 +169,11 @@ matching reality, fixing it is a protocol change like any rule edit.
 - A ZoneMinder server with auth disabled returns login success with no
   tokens: track `requiresAuth` explicitly instead of deriving freshness
   from token presence, or no-auth servers refresh-loop forever (cf0d3b8f).
+- A profile with no stored credentials never logs in, and login is where
+  the server version arrives. `bootstrapAuth` fetches
+  `/host/getVersion.json` for that path; without it every version-gated
+  branch (the `frames=1` snapshot shape, run-state detection, the Server
+  page) silently took its legacy arm on public servers (#461).
 
 ## Platform quirks
 
