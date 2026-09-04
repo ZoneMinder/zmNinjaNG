@@ -8,7 +8,7 @@
  * unknown profileId.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import MonitorDetail from '../MonitorDetail';
 import { getSession, tryGetCurrentSession } from '../../services/sessions';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
@@ -208,6 +208,27 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     const props = liveMonitorPlayerMock.mock.calls.at(-1)?.[0] as { onMutedChange: (m: boolean) => void };
     props.onMutedChange(true);
     expect(useSettingsStore.getState().getProfileSettings('profile-1').unmutedMonitorIds).toEqual([]);
+  });
+
+  it('opens fullscreen for a monitor remembered that way and forgets it on exit (refs #462, #463)', () => {
+    h.routeParams = { id: '1' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { fullscreenMonitorIds: ['1'] });
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'monitor') {
+        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
+    });
+
+    render(<MonitorDetail />);
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+
+    fireEvent.click(screen.getByTestId('monitor-detail-exit-fullscreen'));
+    expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual([]);
+
+    fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
   });
 
   it('falls back to the current session and single-mode key when the route has no profileId', () => {

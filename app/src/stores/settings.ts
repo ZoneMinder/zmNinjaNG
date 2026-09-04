@@ -299,6 +299,10 @@ export interface ProfileSettings {
    *  volume control updates this, so the choice carries to every later event
    *  on the profile (refs #463). ZMS playback has no audio. */
   eventPlaybackMuted: boolean;
+  /** Whether the MP4 event player opens fullscreen. Written when the user
+   *  enters or leaves fullscreen on the player; rotation does not write it
+   *  (refs #462, #463). */
+  eventPlaybackFullscreen: boolean;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
   // TV mode: enables D-pad navigation and larger UI
@@ -321,6 +325,10 @@ export interface ProfileSettings {
    *  a grid does not open as a cacophony; listing a monitor here restores
    *  its last choice across remounts (refs #463). */
   unmutedMonitorIds: string[];
+  /** Monitors whose detail page opens fullscreen. Written by the page's own
+   *  maximize button; a rotation-triggered fullscreen never lands here
+   *  (refs #462, #463). */
+  fullscreenMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
@@ -507,6 +515,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   eventContinuousPlay: false,
   eventPlaybackRate: DEFAULT_EVENT_PLAYBACK_RATE,
   eventPlaybackMuted: true,
+  eventPlaybackFullscreen: false,
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,
@@ -514,6 +523,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorStreamingOverrides: {},
   forceZmsMonitorIds: [],
   unmutedMonitorIds: [],
+  fullscreenMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
   apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,

@@ -32,6 +32,8 @@ describe('Settings Store', () => {
     expect(settings.eventPlaybackRate).toBe(1);
     // Event audio starts muted until the user unmutes once (refs #463).
     expect(settings.eventPlaybackMuted).toBe(true);
+    expect(settings.eventPlaybackFullscreen).toBe(false);
+    expect(settings.fullscreenMonitorIds).toEqual([]);
   });
 
   it('persists continuous playback toggle and speed (#250)', () => {

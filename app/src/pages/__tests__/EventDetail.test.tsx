@@ -133,16 +133,19 @@ vi.mock('../../components/ui/zoom-controls', () => ({
 }));
 
 vi.mock('../../components/events/Mp4EventPlayer', () => ({
-  Mp4EventPlayer: ({ onEnded, onError, muted, onMutedChange }: {
+  Mp4EventPlayer: ({ onEnded, onError, muted, onMutedChange, fullscreen, onFullscreenChange }: {
     onEnded?: () => void;
     onError?: () => void;
     muted?: boolean;
     onMutedChange?: (muted: boolean) => void;
+    fullscreen?: boolean;
+    onFullscreenChange?: (fullscreen: boolean) => void;
   }) => (
-    <div data-testid="mp4-player" data-muted={String(muted ?? true)}>
+    <div data-testid="mp4-player" data-muted={String(muted ?? true)} data-fullscreen={String(fullscreen ?? false)}>
       <button data-testid="mp4-fire-ended" onClick={() => onEnded?.()} />
       <button data-testid="mp4-fire-error" onClick={() => onError?.()} />
       <button data-testid="mp4-fire-unmute" onClick={() => onMutedChange?.(false)} />
+      <button data-testid="mp4-fire-fullscreen" onClick={() => onFullscreenChange?.(true)} />
     </div>
   ),
 }));
@@ -363,6 +366,19 @@ describe('EventDetail forced ZMS playback (#313)', () => {
 
     expect(screen.getByTestId('mp4-player')).toBeTruthy();
     expect(screen.queryByTestId('zms-player')).toBeNull();
+  });
+
+  it('remembers entering fullscreen for every later event (refs #462, #463)', () => {
+    const { unmount } = render(<EventDetail />);
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'false');
+
+    fireEvent.click(screen.getByTestId('mp4-fire-fullscreen'));
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackFullscreen).toBe(true);
+    unmount();
+
+    h.routeParams = { id: '102' };
+    render(<EventDetail />);
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'true');
   });
 
   it('starts the MP4 player muted and remembers an unmute for every later event (refs #463)', () => {

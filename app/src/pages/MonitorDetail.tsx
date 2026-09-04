@@ -16,6 +16,8 @@ import type { ApiClient } from '../api/client';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
 import { useMonitorMuted } from '../hooks/useMonitorMuted';
+import { useMonitorFlag } from '../hooks/useMonitorFlag';
+import { useRememberedFullscreen } from '../hooks/useRememberedFullscreen';
 import { useAuthSlice } from '../stores/auth';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
@@ -93,7 +95,6 @@ export default function MonitorDetail() {
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
   const [showZones, setShowZones] = useState(false);
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
 
   // Navigation state
@@ -108,6 +109,12 @@ export default function MonitorDetail() {
   // unknown profile, so the existing error state below covers both cases
   // without new branching (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
+  const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
+  const [fullscreenRemembered, rememberFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
+  const [isFullscreen, setFullscreen] = useRememberedFullscreen({
+    persisted: fullscreenRemembered,
+    persist: rememberFullscreen,
+  });
   // One value for the picture and the zone overlay on top of it: the overlay
   // has to be letterboxed or cropped exactly as the feed is, or the zones sit
   // at a different scale than what they outline.
@@ -115,7 +122,6 @@ export default function MonitorDetail() {
   const accessToken = useAuthSlice(ownerProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const dataEnabled = !!id && !!ownerProfile;
-  const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
 
   // Keep screen awake when Insomnia is enabled
   useInsomnia({ enabled: settings.insomnia });
@@ -254,9 +260,9 @@ export default function MonitorDetail() {
   );
 
   const handleToggleFullscreen = useCallback(() => {
-    setIsFullscreen((prev) => !prev);
+    setFullscreen(!isFullscreen);
     zoomPan.reset();
-  }, [zoomPan]);
+  }, [zoomPan, isFullscreen, setFullscreen]);
 
   // Settings handlers - write to the OWNING profile's settings bucket, not
   // whichever profile is globally current (refs #337).

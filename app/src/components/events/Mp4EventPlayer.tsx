@@ -59,8 +59,34 @@ interface Mp4EventPlayerProps {
    * so the choice can be persisted. The player itself only ever sets muted
    * from the prop at construction, so every volumechange is the user's. */
   onMutedChange?: (muted: boolean) => void;
+  /** Desired fullscreen state. Applied on ready and whenever it changes; a
+   * real Fullscreen API request needs a user gesture, so when it is refused
+   * the player falls back to video.js full-window mode. */
+  fullscreen?: boolean;
+  /** Called when the user enters or leaves fullscreen (either mode) through
+   * the player's own control. Programmatic changes from `fullscreen` are
+   * filtered out, so every report is the user's (refs #462, #463). */
+  onFullscreenChange?: (fullscreen: boolean) => void;
   /** Event ID for PiP persistence: when provided, enables PiP survival across navigation */
   eventId?: string;
+}
+
+/**
+ * Drive the player toward the requested fullscreen state. The real Fullscreen
+ * API refuses a request made without a user gesture (a remembered flag on
+ * mount, a rotation), and then the CSS full-window mode is the fallback.
+ */
+function applyFullscreen(player: Player, fullscreen: boolean): void {
+  if (fullscreen === (player.isFullscreen() ?? false)) return;
+  if (!fullscreen) {
+    if (player.isFullWindow) player.exitFullWindow();
+    else player.exitFullscreen().catch(() => player.exitFullWindow());
+    return;
+  }
+  const request = player.requestFullscreen();
+  if (request && typeof request.catch === 'function') {
+    request.catch(() => { if (!player.isFullscreen()) player.enterFullWindow(); });
+  }
 }
 
 export function Mp4EventPlayer({
@@ -80,6 +106,8 @@ export function Mp4EventPlayer({
   playbackRate,
   onRateChange,
   onMutedChange,
+  fullscreen = false,
+  onFullscreenChange,
   eventId
 }: Mp4EventPlayerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
@@ -97,6 +125,7 @@ export function Mp4EventPlayer({
   const onEndedRef = useRef(onEnded);
   const onRateChangeRef = useRef(onRateChange);
   const onMutedChangeRef = useRef(onMutedChange);
+  const onFullscreenChangeRef = useRef(onFullscreenChange);
   const markersRef = useRef(markers);
   const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => {
@@ -105,9 +134,17 @@ export function Mp4EventPlayer({
     onEndedRef.current = onEnded;
     onRateChangeRef.current = onRateChange;
     onMutedChangeRef.current = onMutedChange;
+    onFullscreenChangeRef.current = onFullscreenChange;
     markersRef.current = markers;
     onMarkerClickRef.current = onMarkerClick;
-  }, [onReady, onError, onEnded, onRateChange, onMutedChange, markers, onMarkerClick]);
+  }, [onReady, onError, onEnded, onRateChange, onMutedChange, onFullscreenChange, markers, onMarkerClick]);
+
+  // Same shape as desiredRateRef: the fullscreen listeners compare the
+  // player's state against what we last asked for, so only the user's own
+  // enter/exit reaches onFullscreenChange.
+  const desiredFullscreenRef = useRef(fullscreen);
+  useEffect(() => { desiredFullscreenRef.current = fullscreen; }, [fullscreen]);
+
 
   // Desired playback rate held in a ref so the mount-only 'ratechange' listener
   // can tell a genuine user menu change (rate differs from desired) from our own
@@ -278,6 +315,8 @@ export function Mp4EventPlayer({
         player.playbackRate(rate);
       }
 
+      if (desiredFullscreenRef.current) applyFullscreen(player, true);
+
       onReadyRef.current?.(player);
     });
 
@@ -306,7 +345,25 @@ export function Mp4EventPlayer({
     player.on('volumechange', () => {
       onMutedChangeRef.current?.(player.muted() ?? true);
     });
+
+    // video.js only raises fullscreenchange for full-window mode on prefixed
+    // browsers, so the two full-window events are listened to as well.
+    const reportFullscreen = () => {
+      const fs = player.isFullscreen() ?? false;
+      if (fs !== desiredFullscreenRef.current) {
+        desiredFullscreenRef.current = fs;
+        onFullscreenChangeRef.current?.(fs);
+      }
+    };
+    player.on(['fullscreenchange', 'enterFullWindow', 'exitFullWindow'], reportFullscreen);
   }, []);
+
+  // Apply a fullscreen change that arrives after init (a rotation, or the
+  // remembered flag flipping); the ready callback handles the initial one.
+  useEffect(() => {
+    const player = playerRef.current;
+    if (player && playerReadyRef.current && !player.isDisposed()) applyFullscreen(player, fullscreen);
+  }, [fullscreen]);
 
   // Update effect: propagate src/poster/autoplay changes to the existing player
   // without re-initializing. Only writes when the value actually changed to avoid
