@@ -15,6 +15,7 @@ import {
 import type { Profile } from '../../api/types';
 import { asProfileId } from '../../api/types';
 import { useAuthStore } from '../auth';
+import { getVersion } from '../../api/auth';
 import { useSettingsStore } from '../settings';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
@@ -46,6 +47,7 @@ vi.mock('../../api/time', () => ({
 vi.mock('../../api/auth', () => ({
   fetchZmsPath: vi.fn(),
   fetchGo2RTCPath: vi.fn(),
+  getVersion: vi.fn(),
 }));
 
 vi.mock('../../api/server', () => ({
@@ -107,6 +109,33 @@ describe('Profile Bootstrap', () => {
       expect(setTokensSpy).toHaveBeenCalledWith(mockProfile.id, {});
       expect(useAuthStore.getState().slices[mockProfile.id]?.isAuthenticated).toBe(true);
       expect(useAuthStore.getState().slices[mockProfile.id]?.requiresAuth).toBe(false);
+    });
+
+    // A no-auth server never goes through login, which is where the version
+    // normally arrives, so the snapshot request shape and every other
+    // version-gated branch saw null and took the legacy path (refs #461).
+    it('fetches and stores the server version when no credentials are stored', async () => {
+      vi.mocked(getVersion).mockResolvedValue({ version: '1.39.3', apiversion: '2.0' });
+      const profileWithoutCreds = { ...mockProfile, username: undefined, password: undefined };
+
+      await bootstrapAuth(profileWithoutCreds, mockContext);
+
+      const slice = useAuthStore.getState().slices[mockProfile.id];
+      expect(slice?.version).toBe('1.39.3');
+      expect(slice?.apiVersion).toBe('2.0');
+      expect(slice?.isAuthenticated).toBe(true);
+      expect(slice?.requiresAuth).toBe(false);
+    });
+
+    it('stays authenticated with no version when the version fetch fails on a public server', async () => {
+      vi.mocked(getVersion).mockRejectedValue(new Error('network'));
+      const profileWithoutCreds = { ...mockProfile, username: undefined, password: undefined };
+
+      await bootstrapAuth(profileWithoutCreds, mockContext);
+
+      const slice = useAuthStore.getState().slices[mockProfile.id];
+      expect(slice?.version).toBeNull();
+      expect(slice?.isAuthenticated).toBe(true);
     });
 
     it('authenticates with stored credentials', async () => {

@@ -7,7 +7,7 @@
 
 import type { Profile } from '../api/types';
 import { getServerTimeZone } from '../api/time';
-import { fetchGo2RTCPath, fetchZmsPath } from '../api/auth';
+import { fetchGo2RTCPath, fetchZmsPath, getVersion } from '../api/auth';
 import { getSession } from './sessions';
 import { log, LogLevel } from '../lib/logger';
 
@@ -29,6 +29,20 @@ export async function bootstrapAuth(
     // Mark as authenticated so API client doesn't try to re-login
     const { useAuthStore } = await import('../stores/auth');
     useAuthStore.getState().setTokens(profile.id, {});
+    // Login is where the server version normally arrives, and this path never
+    // logs in. Without it every version-gated branch (the frames=1 snapshot
+    // shape for on-demand monitors, run-state detection, the Server page)
+    // took its legacy arm on public servers (refs #461). setTokens with no
+    // tokens keeps the no-auth state and merges the version in.
+    try {
+      const { version, apiversion } = await getVersion(getSession(profile.id).client);
+      useAuthStore.getState().setTokens(profile.id, { version, apiversion });
+      log.profileService('Server version fetched for public server', LogLevel.INFO, { version });
+    } catch (versionError) {
+      log.profileService('Failed to fetch server version for public server', LogLevel.WARN, {
+        error: versionError,
+      });
+    }
     return;
   }
 

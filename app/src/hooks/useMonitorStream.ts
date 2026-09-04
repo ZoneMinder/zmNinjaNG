@@ -242,6 +242,9 @@ export function useMonitorStream({
       // Only use multi-port in streaming mode, not snapshot (and not force-disabled)
       minStreamingPort: effectiveMinStreamingPort,
       ...streamOptions,
+      // A snapshot has no frame rate; the caller's maxfps (LiveMonitorPlayer
+      // always passes one) must not put it back after the spread (refs #461).
+      ...(effectiveViewMode === 'snapshot' ? { maxfps: undefined } : {}),
     })
     : '';
 
