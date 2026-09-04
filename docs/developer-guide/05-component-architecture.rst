@@ -131,6 +131,18 @@ counted rather than what "seen" becomes after the click. It drops the date param
 entirely for a quiet monitor (``newEventCount`` is 0 or undefined) or a
 never-seeded one (the watermark is ``null``, so the whole history is the new set).
 
+``useMonitorMuted`` (``hooks/useMonitorMuted.ts``) is the other hook both tiles
+share. A Go2RTC tile starts muted so a grid does not open as a cacophony, but
+the choice used to live in component state and reset on every remount: a group
+switch, a route change, or a relaunch put every unmuted monitor back to muted.
+The hook reads ``unmutedMonitorIds`` from the owning profile's settings through
+``getProfileSettings`` and returns ``[isMuted, toggleMuted]``; ``toggleMuted``
+writes the list back with ``updateProfileSettings``, so the state survives
+remounts and syncs with the rest of the profile. The key is the monitor id
+within one profile, which is why the same id on a second server does not
+collide. Without a profile id the tile is always muted and the toggle is a
+no-op.
+
 The whole component is wrapped in ``memo``:
 
 .. code:: tsx

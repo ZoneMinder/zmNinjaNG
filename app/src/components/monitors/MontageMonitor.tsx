@@ -41,6 +41,7 @@ import { useNotificationStore } from '../../stores/notifications';
 import type { NotificationEvent } from '../../stores/notifications';
 import { formatEventCount } from '../../lib/utils';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
+import { useMonitorMuted } from '../../hooks/useMonitorMuted';
 
 // Stable empty-array reference so the selector doesn't force a re-render
 // every time it returns "no events" for this monitor.
@@ -171,7 +172,7 @@ function MontageMonitorComponent({
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, toggleMuted] = useMonitorMuted(currentProfile?.id, monitor.Id);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
   const resolvedFit = objectFit ?? 'cover';
   const isRTC = monitor.Go2RTCEnabled === true && !!currentProfile?.go2rtcUrl;
@@ -339,7 +340,7 @@ function MontageMonitorComponent({
               )}
               onClick={(e) => {
                 e.stopPropagation();
-                setIsMuted((m) => !m);
+                toggleMuted();
               }}
               title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
               aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
