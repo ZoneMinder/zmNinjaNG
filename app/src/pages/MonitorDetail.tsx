@@ -413,7 +413,9 @@ export default function MonitorDetail() {
       {/* Fullscreen exit bar */}
       {isFullscreen && (
         <div
-          className="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-sm pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))] pt-[var(--sai-top,env(safe-area-inset-top))]"
+          // Landscape corners: Android reports no side inset, and the rounded
+          // corner then swallowed the Exit button. Never less than 1.25rem.
+          className="fixed top-0 left-0 right-0 z-50 bg-black/50 backdrop-blur-sm pl-[max(1.25rem,var(--sai-left,env(safe-area-inset-left)))] pr-[max(1.25rem,var(--sai-right,env(safe-area-inset-right)))] pt-[var(--sai-top,env(safe-area-inset-top))]"
           data-testid="monitor-detail-fullscreen-toolbar"
         >
           <div className="h-[var(--fullscreen-toolbar-h)] flex items-center justify-between px-3">
@@ -437,9 +439,14 @@ export default function MonitorDetail() {
 
       {/* Main Content */}
       <div className={cn(
+        // min-h-0: a flex item's default min-height is its content, and the
+        // feed's percentage height resolves to the image's natural aspect at
+        // full width while that is measured. In landscape that is taller than
+        // the screen, so the item grew past it and the frame lost its bottom.
+        // With the floor removed the card is the screen and contain applies.
         'flex-1 flex flex-col items-center justify-center',
         isFullscreen
-          ? 'pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
+          ? 'min-h-0 overflow-hidden pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
           : 'p-2 sm:p-3 md:p-4 bg-muted/10'
       )}>
         <Card

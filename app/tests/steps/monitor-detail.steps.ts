@@ -151,3 +151,27 @@ Then('the currently open monitor should show a live MJPEG frame', async ({ page 
   await assertMjpegFrameLoaded(page);
   log.info('E2E: Final monitor MJPEG frame verified', { component: 'e2e' });
 });
+
+When('I maximize the monitor feed', async ({ page }) => {
+  // A touch device in landscape is already fullscreen from the rotation
+  // term (useAutoFullscreen), and then there is no header button to press.
+  const toolbar = page.getByTestId('monitor-detail-fullscreen-toolbar');
+  if (!(await toolbar.isVisible().catch(() => false))) {
+    await page.getByTestId('monitor-detail-maximize').click();
+  }
+  await expect(toolbar).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
+
+// The feed card sat in a flex item whose min-height defaulted to its content,
+// so in landscape it grew past the screen and the frame lost its bottom. The
+// card has to be the screen for object-fit contain to mean anything.
+Then('the fullscreen feed should fit within the viewport', async ({ page }) => {
+  const viewport = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  await expect(page.getByTestId('monitor-player')).toBeVisible();
+  // Polled: the card slides in on navigation, so the first box can be mid-flight.
+  const box = () => page.getByTestId('monitor-player').boundingBox();
+  await expect.poll(async () => { const c = await box(); return c ? c.y + c.height : Infinity; }, { message: 'card bottom' }).toBeLessThanOrEqual(viewport.height + 1);
+  await expect.poll(async () => { const c = await box(); return c ? c.x + c.width : Infinity; }, { message: 'card right' }).toBeLessThanOrEqual(viewport.width + 1);
+  await expect.poll(async () => (await box())?.height ?? 0, { message: 'card height' }).toBeGreaterThan(viewport.height * 0.6);
+});
+

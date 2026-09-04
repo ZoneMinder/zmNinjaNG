@@ -135,6 +135,10 @@ Then('I should be on the {string} page', async ({ page }, pageName: string) => {
 });
 
 // Generic viewport steps used across multiple features
+Given('the viewport is landscape phone size', async ({ page }) => {
+  await page.setViewportSize({ width: 852, height: 393 });
+});
+
 Given('the viewport is mobile size', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.waitForTimeout(300);
