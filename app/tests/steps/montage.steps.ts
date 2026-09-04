@@ -359,3 +359,26 @@ Then('the montage grid should be scrolled to the top', async ({ page }) => {
 Then('the montage tile order should be unchanged', async ({ page }) => {
   expect(await readTileOrder(page)).toEqual(scrollPadTileOrder);
 });
+
+// The tile's "..." menu carries the same monitor info popover the cards
+// open from their info button (refs #467).
+When("I open the first tile's menu and choose monitor details", async ({ page }) => {
+  const tile = page.locator('[data-testid^="montage-monitor-"]').first();
+  await expect(tile).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await tile.hover();
+  await tile.getByTestId('montage-more-btn').click();
+  await page.getByTestId('montage-info-btn').click();
+  await expect(page.getByTestId('monitor-info-popover')).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
+
+Then('the info popover should show a resolution and the capture settings', async ({ page }) => {
+  const popover = page.getByTestId('monitor-info-popover');
+  await expect(popover.getByTestId('monitor-info-resolution')).toHaveText(/^\d+x\d+$/);
+  const modern = await popover.getByTestId('monitor-info-decoding').count();
+  const keys = modern ? ['capturing', 'analysing', 'recording', 'decoding'] : ['function'];
+  for (const key of keys) {
+    const value = (await popover.getByTestId(`monitor-info-${key}`).innerText()).trim();
+    expect(value.length, `${key} value`).toBeGreaterThan(0);
+  }
+});
+

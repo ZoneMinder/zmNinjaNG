@@ -139,10 +139,11 @@ first appearance in the UI: the popover lists the four capture-pipeline
 fields ZM 1.38+ splits Function into, Decoding among them
 (``monitor.Capturing !== undefined`` is the tell, the same one the card
 used), or Function before that, then resolution and the frame-rate cap,
-each with a label. Decoding other than
-``Always`` is emphasised with a one-line note, since on-demand decoding is
-behind the frozen-snapshot reports (#383, #461). Radix's trigger toggles on
-click, which serves touch and keyboard; a mouse gets hover in addition:
+each with a label and nothing singled out. ``MonitorInfoContent`` is the
+body alone; ``MontageMonitor`` renders it in a ``Popover`` anchored
+(``PopoverAnchor``) to the tile's "..." button and opened from a menu item,
+so the popover appears where the menu just closed. Radix's trigger toggles
+on click, which serves touch and keyboard; a mouse gets hover in addition:
 ``pointerenter`` opens, ``pointerleave`` from trigger or content closes after
 ``HOVER_CLOSE_DELAY_MS``, and the click that follows a hover-open is
 ``preventDefault``-ed so Radix does not toggle it shut again (its handlers

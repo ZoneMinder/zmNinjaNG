@@ -49,13 +49,11 @@ describe('MonitorInfoPopover', () => {
     expect(screen.getByTestId('monitor-info-max_fps')).toHaveTextContent('15');
   });
 
-  it('explains on-demand decoding in one line, and says nothing for Always', () => {
-    const { unmount } = render(<MonitorInfoPopover monitor={modern} />);
-    expect(open()).toHaveTextContent('monitors.decoding_on_demand_note');
-    unmount();
-
-    render(<MonitorInfoPopover monitor={{ ...modern, Decoding: 'Always' } as Monitor} />);
-    expect(open()).not.toHaveTextContent('monitors.decoding_on_demand_note');
+  it('treats Decoding as a plain row, no note and no emphasis', () => {
+    render(<MonitorInfoPopover monitor={modern} />);
+    const popover = open();
+    expect(popover).not.toHaveTextContent('monitors.decoding_on_demand_note');
+    expect(screen.getByTestId('monitor-info-decoding').className).not.toMatch(/amber/);
   });
 
   it('falls back to Function on servers without the split fields', () => {

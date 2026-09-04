@@ -80,7 +80,7 @@ Each tile honors the same streaming rules as elsewhere in the app:
 - Monitors with Go2RTC enabled stream live video (WebRTC, MSE, or HLS).
 - Monitors on MJPEG follow the global *Streaming Mode* setting, *Streaming* shows continuous MJPEG, *Snapshot* shows a periodic JPEG that refreshes on the configured interval. While aggregating, each tile follows its own server's setting unless you set the group's Streaming Mode in {doc}`settings`.
 
-Go2RTC streams in the montage are muted by default. Tap the speaker icon on a tile to unmute it; the app remembers the choice per monitor, so that monitor starts unmuted next time until you mute it again. The protocol label (MJPEG/MSE/WebRTC) visibility is controlled by the toolbar eye toggle. Monitors that cannot be reached display a VideoOff placeholder instead of a broken feed.
+Go2RTC streams in the montage are muted by default. Tap the speaker icon on a tile to unmute it; the app remembers the choice per monitor, so that monitor starts unmuted next time until you mute it again. A tile's ⋮ menu also has **Monitor details**, the same capture-settings popover the Monitors page opens from its info button. The protocol label (MJPEG/MSE/WebRTC) visibility is controlled by the toolbar eye toggle. Monitors that cannot be reached display a VideoOff placeholder instead of a broken feed.
 
 ## Performance
 
