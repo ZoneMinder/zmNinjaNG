@@ -13,6 +13,12 @@ Feature: Monitor Detail Page
     Then I should see the monitor player
     And I should see a video player element
 
+  @web
+  Scenario: Fullscreen feed fits a landscape phone screen
+    Given the viewport is landscape phone size
+    When I maximize the monitor feed
+    Then the fullscreen feed should fit within the viewport
+
   @all
   Scenario: Snapshot button downloads an image
     Then I should see the monitor player
