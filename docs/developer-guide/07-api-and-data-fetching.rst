@@ -1727,7 +1727,8 @@ a "no more videos" toast rather than looping. Advancing goes through the same
 ``navigateToEvent(id, 'left')`` call as the next button, so the new event slides
 in from the right with no extra animation code. Speed carries across the run via
 the ``eventPlaybackRate`` setting, applied to both players (video.js
-``playbackRate`` for MP4, ``CMD_VARPLAY`` rate for ZMS).
+``playbackRate`` for MP4, ``CMD_VARPLAY`` rate for ZMS). Mute carries the same
+way through ``eventPlaybackMuted``, MP4 only, since ZMS has no audio (refs #463).
 
 Notifications API (``api/notifications.ts``)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

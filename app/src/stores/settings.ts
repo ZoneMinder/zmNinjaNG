@@ -295,6 +295,10 @@ export interface ProfileSettings {
   // Event playback speed multiplier (one of EVENT_PLAYBACK_RATES). Honored by
   // both the MP4 and ZMS players and reused across a continuous run.
   eventPlaybackRate: number;
+  /** Whether the MP4 event player starts muted. Flipping the player's own
+   *  volume control updates this, so the choice carries to every later event
+   *  on the profile (refs #463). ZMS playback has no audio. */
+  eventPlaybackMuted: boolean;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
   // TV mode: enables D-pad navigation and larger UI
@@ -502,6 +506,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   eventVideoAutoplay: true,
   eventContinuousPlay: false,
   eventPlaybackRate: DEFAULT_EVENT_PLAYBACK_RATE,
+  eventPlaybackMuted: true,
   sidebarWidth: 256,
   tvMode: false,
   showProtocolLabel: true,

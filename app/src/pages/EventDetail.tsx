@@ -174,6 +174,11 @@ export default function EventDetail() {
     updateSettings(ownerProfile.id, { eventPlaybackRate: rate });
   }, [ownerProfile, updateSettings]);
 
+  const handleMutedChange = useCallback((muted: boolean) => {
+    if (!ownerProfile) return;
+    updateSettings(ownerProfile.id, { eventPlaybackMuted: muted });
+  }, [ownerProfile, updateSettings]);
+
   // Guards against a stray second 'ended' (video.js can emit it during teardown)
   // triggering a double advance. Re-armed for each event by the id-change effect.
   const advancingRef = useRef(false);
@@ -688,6 +693,8 @@ export default function EventDetail() {
                         onEnded={handleVideoEnded}
                         playbackRate={settings.eventPlaybackRate}
                         onRateChange={handleRateChange}
+                        muted={settings.eventPlaybackMuted}
+                        onMutedChange={handleMutedChange}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/70">

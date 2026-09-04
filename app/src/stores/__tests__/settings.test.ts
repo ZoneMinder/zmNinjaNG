@@ -30,6 +30,8 @@ describe('Settings Store', () => {
     // Continuous event playback (#250): off by default, 1x speed.
     expect(settings.eventContinuousPlay).toBe(false);
     expect(settings.eventPlaybackRate).toBe(1);
+    // Event audio starts muted until the user unmutes once (refs #463).
+    expect(settings.eventPlaybackMuted).toBe(true);
   });
 
   it('persists continuous playback toggle and speed (#250)', () => {

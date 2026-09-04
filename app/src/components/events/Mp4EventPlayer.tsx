@@ -55,6 +55,10 @@ interface Mp4EventPlayerProps {
   /** Called when the user changes speed via the video.js rate menu, so the
    * chosen rate can be persisted. Not called for programmatic reapplies. */
   onRateChange?: (rate: number) => void;
+  /** Called when the user mutes or unmutes via the video.js volume control,
+   * so the choice can be persisted. The player itself only ever sets muted
+   * from the prop at construction, so every volumechange is the user's. */
+  onMutedChange?: (muted: boolean) => void;
   /** Event ID for PiP persistence: when provided, enables PiP survival across navigation */
   eventId?: string;
 }
@@ -75,6 +79,7 @@ export function Mp4EventPlayer({
   onEnded,
   playbackRate,
   onRateChange,
+  onMutedChange,
   eventId
 }: Mp4EventPlayerProps) {
   const videoRef = useRef<HTMLDivElement>(null);
@@ -91,6 +96,7 @@ export function Mp4EventPlayer({
   const onErrorRef = useRef(onError);
   const onEndedRef = useRef(onEnded);
   const onRateChangeRef = useRef(onRateChange);
+  const onMutedChangeRef = useRef(onMutedChange);
   const markersRef = useRef(markers);
   const onMarkerClickRef = useRef(onMarkerClick);
   useEffect(() => {
@@ -98,9 +104,10 @@ export function Mp4EventPlayer({
     onErrorRef.current = onError;
     onEndedRef.current = onEnded;
     onRateChangeRef.current = onRateChange;
+    onMutedChangeRef.current = onMutedChange;
     markersRef.current = markers;
     onMarkerClickRef.current = onMarkerClick;
-  }, [onReady, onError, onEnded, onRateChange, markers, onMarkerClick]);
+  }, [onReady, onError, onEnded, onRateChange, onMutedChange, markers, onMarkerClick]);
 
   // Desired playback rate held in a ref so the mount-only 'ratechange' listener
   // can tell a genuine user menu change (rate differs from desired) from our own
@@ -294,6 +301,10 @@ export function Mp4EventPlayer({
         player.defaultPlaybackRate(r);
         onRateChangeRef.current?.(r);
       }
+    });
+
+    player.on('volumechange', () => {
+      onMutedChangeRef.current?.(player.muted() ?? true);
     });
   }, []);
 

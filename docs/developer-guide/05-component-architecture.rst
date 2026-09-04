@@ -510,8 +510,12 @@ on the MP4 / HLS branch. Its props (declared as ``Mp4EventPlayerProps`` at the
 top of the file) are the usual media inputs (``src``, ``type``, ``poster``,
 ``autoplay``, ``muted``, ``aspectRatio``), the marker pair discussed below,
 ``onReady`` and ``onError``, the continuous-playback callbacks
-(``onEnded``, ``playbackRate``, ``onRateChange``, refs #250), and ``eventId``,
-which is what enables Picture-in-Picture survival across navigation.
+(``onEnded``, ``playbackRate``, ``onRateChange``, refs #250), ``onMutedChange``,
+and ``eventId``, which is what enables Picture-in-Picture survival across
+navigation. ``onMutedChange`` fires on video.js ``volumechange`` with
+``player.muted()``; the player only ever sets muted from its prop at
+construction, so every such event is the user's, and ``EventDetail`` writes it
+to the ``eventPlaybackMuted`` setting for the next event to read (refs #463).
 
 Markers are rendered by ``videojs-markers``: the ``markers`` array maps to the
 alarm and max-score frames on the event timeline, and ``onMarkerClick`` seeks

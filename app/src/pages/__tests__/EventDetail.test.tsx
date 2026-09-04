@@ -133,10 +133,16 @@ vi.mock('../../components/ui/zoom-controls', () => ({
 }));
 
 vi.mock('../../components/events/Mp4EventPlayer', () => ({
-  Mp4EventPlayer: ({ onEnded, onError }: { onEnded?: () => void; onError?: () => void }) => (
-    <div data-testid="mp4-player">
+  Mp4EventPlayer: ({ onEnded, onError, muted, onMutedChange }: {
+    onEnded?: () => void;
+    onError?: () => void;
+    muted?: boolean;
+    onMutedChange?: (muted: boolean) => void;
+  }) => (
+    <div data-testid="mp4-player" data-muted={String(muted ?? true)}>
       <button data-testid="mp4-fire-ended" onClick={() => onEnded?.()} />
       <button data-testid="mp4-fire-error" onClick={() => onError?.()} />
+      <button data-testid="mp4-fire-unmute" onClick={() => onMutedChange?.(false)} />
     </div>
   ),
 }));
@@ -357,6 +363,19 @@ describe('EventDetail forced ZMS playback (#313)', () => {
 
     expect(screen.getByTestId('mp4-player')).toBeTruthy();
     expect(screen.queryByTestId('zms-player')).toBeNull();
+  });
+
+  it('starts the MP4 player muted and remembers an unmute for every later event (refs #463)', () => {
+    const { unmount } = render(<EventDetail />);
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-muted', 'true');
+
+    fireEvent.click(screen.getByTestId('mp4-fire-unmute'));
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackMuted).toBe(false);
+    unmount();
+
+    h.routeParams = { id: '102' };
+    render(<EventDetail />);
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-muted', 'false');
   });
 
   it('still falls back to ZMS with a toast when MP4 fails on an unlisted monitor', () => {
