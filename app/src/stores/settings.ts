@@ -217,6 +217,10 @@ export interface ProfileSettings {
   monitorDetailFeedFit: MonitorFeedFit; // Object-fit for monitor detail feed
   eventsThumbnailFit: MonitorFeedFit; // Object-fit for event thumbnails
   monitorDetailCycleSeconds: number; // Auto-cycle interval for single monitor view (0 = off)
+  /** Open the Monitor Detail page maximized for every monitor ("Open live view
+   *  in fullscreen" under Settings > Live Streaming). `fullscreenMonitorIds`
+   *  is the per-monitor form (refs #462, #463). */
+  monitorDetailFullscreen: boolean;
   insomnia: boolean; // Global: Keep screen awake across all pages
   monitorDetailInsomnia: boolean; // @deprecated - use global insomnia instead
   montageInsomnia: boolean; // @deprecated - use global insomnia instead
@@ -299,9 +303,9 @@ export interface ProfileSettings {
    *  volume control updates this, so the choice carries to every later event
    *  on the profile (refs #463). ZMS playback has no audio. */
   eventPlaybackMuted: boolean;
-  /** Whether the MP4 event player opens fullscreen ("Open events in
-   *  fullscreen" under Settings > Playback). The player's own button changes
-   *  the session only (refs #462, #463). */
+  /** Whether the MP4 event player opens fullscreen. Set by "Open events in
+   *  fullscreen" under Settings > Playback or by entering fullscreen on the
+   *  player; only the setting clears it (refs #462, #463). */
   eventPlaybackFullscreen: boolean;
   // Desktop sidebar width in pixels (60–320, persisted across sessions)
   sidebarWidth: number;
@@ -325,9 +329,9 @@ export interface ProfileSettings {
    *  a grid does not open as a cacophony; listing a monitor here restores
    *  its last choice across remounts (refs #463). */
   unmutedMonitorIds: string[];
-  /** Monitors whose detail page opens fullscreen ("Open in fullscreen" in
-   *  the monitor's settings dialog). The page's own maximize and exit
-   *  buttons never write this: exiting is the only way off the page, so a
+  /** Monitors whose detail page opens fullscreen. Set by "Open in fullscreen"
+   *  in the monitor's settings dialog or by maximizing the page; only the
+   *  dialog clears it. Exiting is the only way off a fullscreen page, so a
    *  remembered exit could never be kept (refs #462, #463). */
   fullscreenMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
@@ -456,6 +460,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   monitorDetailFeedFit: 'contain',
   eventsThumbnailFit: 'contain',
   monitorDetailCycleSeconds: 0,
+  monitorDetailFullscreen: false,
   insomnia: false,
   monitorDetailInsomnia: false,
   montageInsomnia: false,

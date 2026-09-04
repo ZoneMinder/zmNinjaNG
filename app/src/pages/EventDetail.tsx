@@ -180,9 +180,15 @@ export default function EventDetail() {
     updateSettings(ownerProfile.id, { eventPlaybackMuted: muted });
   }, [ownerProfile, updateSettings]);
 
-  // The player's own fullscreen button changes this session only; the
-  // "open events in fullscreen" setting seeds it (refs #462, #463).
+  // Entering fullscreen on the player turns the "open events in fullscreen"
+  // setting on for later events; leaving changes this session only, since
+  // leaving is forced before navigating away. The setting is the off switch
+  // (refs #462, #463).
   const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: settings.eventPlaybackFullscreen });
+  const handleFullscreenChange = useCallback((fullscreen: boolean) => {
+    setFullscreen(fullscreen);
+    if (fullscreen && ownerProfile) updateSettings(ownerProfile.id, { eventPlaybackFullscreen: true });
+  }, [setFullscreen, ownerProfile, updateSettings]);
 
   // Guards against a stray second 'ended' (video.js can emit it during teardown)
   // triggering a double advance. Re-armed for each event by the id-change effect.
@@ -701,7 +707,7 @@ export default function EventDetail() {
                         muted={settings.eventPlaybackMuted}
                         onMutedChange={handleMutedChange}
                         fullscreen={isFullscreen}
-                        onFullscreenChange={setFullscreen}
+                        onFullscreenChange={handleFullscreenChange}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-muted-foreground/70">

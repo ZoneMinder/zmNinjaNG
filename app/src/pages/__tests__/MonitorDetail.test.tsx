@@ -210,15 +210,18 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     expect(useSettingsStore.getState().getProfileSettings('profile-1').unmutedMonitorIds).toEqual([]);
   });
 
-  it('opens fullscreen for a monitor set to open that way; the buttons change only the session (refs #462, #463)', () => {
-    h.routeParams = { id: '1' };
-    useSettingsStore.getState().updateProfileSettings('profile-1', { fullscreenMonitorIds: ['1'] });
+  const monitorQuery = () =>
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
       if (queryKey[0] === 'monitor') {
         return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
       }
       return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
     });
+
+  it('opens fullscreen for a monitor set to open that way; exiting changes only the session (refs #462, #463)', () => {
+    h.routeParams = { id: '1' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { fullscreenMonitorIds: ['1'] });
+    monitorQuery();
 
     render(<MonitorDetail />);
     expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
@@ -226,24 +229,26 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     fireEvent.click(screen.getByTestId('monitor-detail-exit-fullscreen'));
     expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
     expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
-
-    fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
-    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
   });
 
-  it('opens a monitor not set to fullscreen in the normal view, and maximizing does not change the setting', () => {
+  it('maximizing a monitor remembers it for that monitor', () => {
     h.routeParams = { id: '1' };
-    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
-      if (queryKey[0] === 'monitor') {
-        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
-      }
-      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
-    });
+    monitorQuery();
 
     render(<MonitorDetail />);
     expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
 
     fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
+  });
+
+  it('opens every monitor fullscreen when the live view setting is on', () => {
+    h.routeParams = { id: '1' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { monitorDetailFullscreen: true });
+    monitorQuery();
+
+    render(<MonitorDetail />);
     expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
     expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual([]);
   });

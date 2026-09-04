@@ -34,6 +34,7 @@ describe('Settings Store', () => {
     expect(settings.eventPlaybackMuted).toBe(true);
     expect(settings.eventPlaybackFullscreen).toBe(false);
     expect(settings.fullscreenMonitorIds).toEqual([]);
+    expect(settings.monitorDetailFullscreen).toBe(false);
   });
 
   it('persists continuous playback toggle and speed (#250)', () => {

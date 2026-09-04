@@ -110,8 +110,11 @@ export default function MonitorDetail() {
   // without new branching (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
   const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
-  const [openFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
-  const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: openFullscreen, resetKey: id });
+  const [openFullscreen, setOpenFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
+  const [isFullscreen, setFullscreen] = useAutoFullscreen({
+    startFullscreen: settings.monitorDetailFullscreen || openFullscreen,
+    resetKey: id,
+  });
   // One value for the picture and the zone overlay on top of it: the overlay
   // has to be letterboxed or cropped exactly as the feed is, or the zones sit
   // at a different scale than what they outline.
@@ -256,10 +259,14 @@ export default function MonitorDetail() {
     [monitor?.Monitor.Height, monitor?.Monitor.Orientation, monitor?.Monitor.Width]
   );
 
+  // Maximizing remembers the monitor; exiting is session-only, since exit is
+  // the only way off the page and a remembered exit could never be kept.
+  // The monitor's settings dialog is the off switch (refs #462, #463).
   const handleToggleFullscreen = useCallback(() => {
     setFullscreen(!isFullscreen);
+    if (!isFullscreen) setOpenFullscreen(true);
     zoomPan.reset();
-  }, [zoomPan, isFullscreen, setFullscreen]);
+  }, [zoomPan, isFullscreen, setFullscreen, setOpenFullscreen]);
 
   // Settings handlers - write to the OWNING profile's settings bucket, not
   // whichever profile is globally current (refs #337).

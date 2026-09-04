@@ -159,11 +159,16 @@ the two player pages, ``MonitorDetail`` (seeded by the monitor's
 ``(orientation: landscape) and (pointer: coarse)`` media query so a rotated
 phone fills the screen and a desktop window, landscape all day, does not, OR
 a session override from ``setFullscreen``, the page's own maximize/exit
-button. Nothing in the hook writes a setting. The first cut persisted the
-button instead, and that could not work: exit is the only way off a
-fullscreen page, so every visit ended by forgetting. The override lasts until
-the next rotation or until ``resetKey`` (the monitor id) changes, since the
-detail page stays mounted across monitors (refs #462, #463).
+button. The hook itself writes no setting; the pages do, and only on enter:
+maximizing writes the monitor into ``fullscreenMonitorIds``, entering
+fullscreen on the event player sets ``eventPlaybackFullscreen``. Exit is
+session-only because exit is the only way off a fullscreen page, so a
+remembered exit would end every visit by forgetting; the settings switches
+are the off switches. ``monitorDetailFullscreen`` (Settings > Live Streaming)
+is the every-monitor form and ORs in beside the per-monitor entry. The
+override lasts until the next rotation or until ``resetKey`` (the monitor id)
+changes, since the detail page stays mounted across monitors (refs #462,
+#463).
 
 ``useZoomPan`` writes no ``transform`` or ``will-change`` at identity. Either
 one makes the element the containing block for every ``position: fixed``

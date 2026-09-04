@@ -546,6 +546,8 @@
     "go2rtc_disabled_note": "Tous les moniteurs utilisent MJPEG.",
     "show_protocol_label": "Protocole",
     "show_protocol_label_desc": "Afficher le protocole sur les flux vidéo",
+    "live_fullscreen": "Ouvrir la vue en direct en plein écran",
+    "live_fullscreen_desc": "Chaque moniteur s'ouvre maximisé. Pour un seul moniteur, utilisez Ouvrir en plein écran dans ses réglages",
     "webrtc_use_stun": "Serveurs STUN",
     "webrtc_use_stun_desc": "À activer uniquement pour go2rtc accessible directement via Internet. Désactivé en LAN ou VPN.",
     "webrtc_protocols": "Protocoles de Streaming",

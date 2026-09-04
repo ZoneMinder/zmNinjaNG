@@ -546,6 +546,8 @@
     "go2rtc_disabled_note": "所有监控使用 MJPEG。",
     "show_protocol_label": "协议标签",
     "show_protocol_label_desc": "在视频源上显示流协议",
+    "live_fullscreen": "以全屏打开实时视图",
+    "live_fullscreen_desc": "每个监视器都最大化打开。单个监视器请在其设置中使用“以全屏打开”",
     "webrtc_use_stun": "STUN 服务器",
     "webrtc_use_stun_desc": "仅当通过公网直接访问 go2rtc 时启用。局域网或 VPN 下关闭。",
     "webrtc_protocols": "流媒体协议",
