@@ -26,7 +26,7 @@ import { Badge } from '../ui/badge';
 import { ProfileChip } from '../ui/profile-chip';
 import { LiveMonitorPlayer } from './LiveMonitorPlayer';
 import { MonitorHoverPreview } from './MonitorHoverPreview';
-import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical } from 'lucide-react';
+import { Clock, ChartGantt, Download, Volume2, VolumeX, Pin, MoreVertical, Info } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { downloadSnapshotFromElement } from '../../services/download';
 import {
@@ -42,6 +42,8 @@ import type { NotificationEvent } from '../../stores/notifications';
 import { formatEventCount } from '../../lib/utils';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
 import { useMonitorMuted } from '../../hooks/useMonitorMuted';
+import { MonitorInfoContent } from './MonitorInfoPopover';
+import { Popover, PopoverAnchor, PopoverContent } from '../ui/popover';
 
 // Stable empty-array reference so the selector doesn't force a re-render
 // every time it returns "no events" for this monitor.
@@ -172,6 +174,7 @@ function MontageMonitorComponent({
     useShallow((state) => state.getProfileSettings(currentProfile?.id || ''))
   );
   const [protocol, setProtocol] = useState('MJPEG');
+  const [infoOpen, setInfoOpen] = useState(false);
   const [isMuted, setMuted] = useMonitorMuted(currentProfile?.id, monitor.Id);
   const mediaRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
   const resolvedFit = objectFit ?? 'cover';
@@ -349,24 +352,36 @@ function MontageMonitorComponent({
               {isMuted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
             </Button>
           )}
+          {/* The info popover anchors to the same "..." button its menu item
+              lives in, so it opens where the menu just closed (refs #467). */}
+          <Popover open={infoOpen} onOpenChange={setInfoOpen}>
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-6 w-6",
-                  isFullscreen ? "text-white hover:bg-white/20" : "text-muted-foreground hover:text-foreground"
-                )}
-                onClick={(e) => e.stopPropagation()}
-                title={t('montage.menu_more')}
-                aria-label={t('montage.menu_more')}
-                data-testid="montage-more-btn"
-              >
-                <MoreVertical className="h-3 w-3" />
-              </Button>
+              <PopoverAnchor asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "h-6 w-6",
+                    isFullscreen ? "text-white hover:bg-white/20" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={(e) => e.stopPropagation()}
+                  title={t('montage.menu_more')}
+                  aria-label={t('montage.menu_more')}
+                  data-testid="montage-more-btn"
+                >
+                  <MoreVertical className="h-3 w-3" />
+                </Button>
+              </PopoverAnchor>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" side="bottom" className="min-w-[140px]">
+              <DropdownMenuItem
+                onClick={(e) => { e.stopPropagation(); setInfoOpen(true); }}
+                data-testid="montage-info-btn"
+              >
+                <Info className="h-3.5 w-3.5 mr-2" />
+                {t('monitors.info_button')}
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(e) => { e.stopPropagation(); handleDownload(e as unknown as React.MouseEvent); }}
                 data-testid="montage-download-btn"
@@ -386,6 +401,16 @@ function MontageMonitorComponent({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <PopoverContent
+            align="end"
+            sideOffset={6}
+            className="w-64 p-0 text-xs"
+            onClick={(e) => e.stopPropagation()}
+            data-testid="monitor-info-popover"
+          >
+            <MonitorInfoContent monitor={monitor} />
+          </PopoverContent>
+          </Popover>
         </div>
       </div>
 

@@ -136,7 +136,6 @@
     "recording": "Recording",
     "decoding": "Decoding",
     "info_button": "Monitor details",
-    "decoding_on_demand_note": "Decodes only while someone is watching; live snapshots pause otherwise.",
     "controllable": "PTZ",
     "protocol": "Protocol",
     "method": "Method",

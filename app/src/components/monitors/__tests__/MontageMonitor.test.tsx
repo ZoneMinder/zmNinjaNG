@@ -519,6 +519,27 @@ describe('MontageMonitor', () => {
     expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
   });
 
+  it('opens the monitor info popover from the tile menu (refs #467)', async () => {
+    const user = userEvent.setup();
+    const detailed = { ...mockMonitor, Capturing: 'Always', Analysing: 'None', Recording: 'OnMotion', Decoding: 'Ondemand' } as Monitor;
+    render(
+      <MontageMonitor
+        monitor={detailed}
+        status={mockStatus}
+        currentProfile={mockProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    await user.click(screen.getByTestId('montage-more-btn'));
+    await user.click(screen.getByTestId('montage-info-btn'));
+
+    expect(screen.getByTestId('monitor-info-decoding')).toHaveTextContent('Ondemand');
+    expect(screen.getByTestId('monitor-info-resolution')).toHaveTextContent('1920x1080');
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('remembers an unmuted Go2RTC monitor across remounts (refs #463)', async () => {
     const user = userEvent.setup();
     const rtcMonitor = { ...mockMonitor, Go2RTCEnabled: true } as Monitor;

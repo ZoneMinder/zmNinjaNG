@@ -8,6 +8,12 @@ Feature: Montage Live Grid
     When I navigate to the "Montage" page
 
   @all
+  Scenario: Tile menu opens the monitor info popover
+    Then I should see at least 1 monitor in montage grid
+    When I open the first tile's menu and choose monitor details
+    Then the info popover should show a resolution and the capture settings
+
+  @all
   Scenario: Montage grid shows monitor feeds with names
     Then I should see at least 1 monitor in montage grid
     And each montage cell should show a monitor name label

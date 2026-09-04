@@ -136,7 +136,6 @@
     "recording": "Grabación",
     "decoding": "Decodificación",
     "info_button": "Detalles del monitor",
-    "decoding_on_demand_note": "Solo decodifica mientras alguien está mirando; si no, las capturas en vivo se pausan.",
     "controllable": "PTZ",
     "protocol": "Protocolo",
     "method": "Método",

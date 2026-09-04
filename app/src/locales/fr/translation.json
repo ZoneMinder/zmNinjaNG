@@ -136,7 +136,6 @@
     "recording": "Enregistrement",
     "decoding": "Décodage",
     "info_button": "Détails du moniteur",
-    "decoding_on_demand_note": "Ne décode que lorsque quelqu'un regarde ; sinon les instantanés en direct se figent.",
     "controllable": "PTZ",
     "protocol": "Protocole",
     "method": "Méthode",
