@@ -12,6 +12,7 @@ import { render, screen, cleanup } from '@testing-library/react';
 import MonitorDetail from '../MonitorDetail';
 import { getSession, tryGetCurrentSession } from '../../services/sessions';
 import { seedProfiles, resetProfileFixture } from '../../tests/profile-fixture';
+import { useSettingsStore } from '../../stores/settings';
 import { resetFakeStoreGates } from '../../tests/fake-store-gates';
 
 vi.mock('../../api/store-gates', () => import('../../tests/fake-store-gates'));
@@ -189,6 +190,24 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     expect(liveMonitorPlayerMock).toHaveBeenCalledWith(
       expect.objectContaining({ profileId: 'profile-b' })
     );
+  });
+
+  it('starts the player in the remembered mute state and persists native-control changes (refs #463)', () => {
+    h.routeParams = { id: '1' };
+    useSettingsStore.getState().updateProfileSettings('profile-1', { unmutedMonitorIds: ['1'] });
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'monitor') {
+        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
+    });
+
+    render(<MonitorDetail />);
+
+    expect(liveMonitorPlayerMock).toHaveBeenCalledWith(expect.objectContaining({ muted: false }));
+    const props = liveMonitorPlayerMock.mock.calls.at(-1)?.[0] as { onMutedChange: (m: boolean) => void };
+    props.onMutedChange(true);
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').unmutedMonitorIds).toEqual([]);
   });
 
   it('falls back to the current session and single-mode key when the route has no profileId', () => {

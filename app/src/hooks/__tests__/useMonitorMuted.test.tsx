@@ -27,7 +27,7 @@ describe('useMonitorMuted', () => {
     const first = renderHook(() => useMonitorMuted(HOME, '1'));
     expect(first.result.current[0]).toBe(true);
 
-    act(() => first.result.current[1]());
+    act(() => first.result.current[1](false));
     expect(first.result.current[0]).toBe(false);
     expect(useSettingsStore.getState().getProfileSettings(HOME).unmutedMonitorIds).toEqual(['1']);
     first.unmount();
@@ -38,15 +38,15 @@ describe('useMonitorMuted', () => {
 
   it('muting again forgets the monitor', () => {
     const { result } = renderHook(() => useMonitorMuted(HOME, '1'));
-    act(() => result.current[1]());
-    act(() => result.current[1]());
+    act(() => result.current[1](false));
+    act(() => result.current[1](true));
     expect(result.current[0]).toBe(true);
     expect(useSettingsStore.getState().getProfileSettings(HOME).unmutedMonitorIds).toEqual([]);
   });
 
   it('is scoped to the monitor and the profile', () => {
     const { result } = renderHook(() => useMonitorMuted(HOME, '1'));
-    act(() => result.current[1]());
+    act(() => result.current[1](false));
 
     expect(renderHook(() => useMonitorMuted(HOME, '2')).result.current[0]).toBe(true);
     expect(renderHook(() => useMonitorMuted(SHED, '1')).result.current[0]).toBe(true);
@@ -54,7 +54,7 @@ describe('useMonitorMuted', () => {
 
   it('stays muted with no profile and ignores toggles', () => {
     const { result } = renderHook(() => useMonitorMuted(undefined, '1'));
-    act(() => result.current[1]());
+    act(() => result.current[1](false));
     expect(result.current[0]).toBe(true);
     expect(useSettingsStore.getState().profileSettings).toEqual(
       expect.not.objectContaining({ '': expect.anything() }),

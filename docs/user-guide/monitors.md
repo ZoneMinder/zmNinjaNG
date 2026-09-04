@@ -42,7 +42,7 @@ If Go2RTC connects but no video frames appear within 8 seconds, the app automati
 
 How a feed fills its tile — **Fit whole image** or **Crop to fill** — and **Analysis frames** live in the ⋮ menu at the end of the toolbar, on both the Monitors and Monitor Detail screens. The protocol label (enabled in {doc}`settings`) shows which streaming protocol is active on each feed. The Monitor Detail page also shows native video controls (play, pause, volume) for Go2RTC streams.
 
-Go2RTC feeds in the Monitors list start muted. The speaker icon next to a monitor's name unmutes it, and the app remembers that choice per monitor until you mute it again. The volume control on the Monitor Detail page is the browser's own and is not remembered.
+Go2RTC feeds in the Monitors list start muted. The speaker icon next to a monitor's name unmutes it, and the app remembers that choice per monitor until you mute it again. The Monitor Detail page's volume control shares the same memory, so unmuting there carries to the card and the montage tile and back.
 
 For tile views (Monitors list, Montage, Dashboard widgets), the *Streaming Mode* setting does apply, see {doc}`settings` for details.
 

@@ -68,7 +68,7 @@ function MonitorCardComponent({
   const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isMuted, toggleMuted] = useMonitorMuted(ownerProfile?.id, monitor.Id);
+  const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, monitor.Id);
   const runState = getMonitorRunState(monitor, status, zmVersion);
   const isRTC = monitor.Go2RTCEnabled === true && !!ownerProfile?.go2rtcUrl;
   const aspectRatio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
@@ -170,7 +170,7 @@ function MonitorCardComponent({
               <HintButton
                 type="button"
                 className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={(e) => { e.stopPropagation(); toggleMuted(); }}
+                onClick={(e) => { e.stopPropagation(); setMuted(!isMuted); }}
                 title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                 aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                 data-testid="monitor-volume-btn"
@@ -328,7 +328,7 @@ function MonitorCardComponent({
                 <HintButton
                   type="button"
                   className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); toggleMuted(); }}
+                  onClick={(e) => { e.stopPropagation(); setMuted(!isMuted); }}
                   title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                   aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                   data-testid="monitor-volume-btn"

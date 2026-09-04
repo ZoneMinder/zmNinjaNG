@@ -11,17 +11,17 @@ import type { ProfileId } from '../api/types';
 export function useMonitorMuted(
   profileId: ProfileId | null | undefined,
   monitorId: string,
-): [isMuted: boolean, toggleMuted: () => void] {
+): [isMuted: boolean, setMuted: (muted: boolean) => void] {
   const isMuted = useSettingsStore((state) =>
     profileId ? !state.getProfileSettings(profileId).unmutedMonitorIds.includes(monitorId) : true,
   );
-  const toggleMuted = useCallback(() => {
+  const setMuted = useCallback((muted: boolean) => {
     if (!profileId) return;
     const { getProfileSettings, updateProfileSettings } = useSettingsStore.getState();
     const others = getProfileSettings(profileId).unmutedMonitorIds.filter((id) => id !== monitorId);
     updateProfileSettings(profileId, {
-      unmutedMonitorIds: isMuted ? [...others, monitorId] : others,
+      unmutedMonitorIds: muted ? others : [...others, monitorId],
     });
-  }, [profileId, monitorId, isMuted]);
-  return [isMuted, toggleMuted];
+  }, [profileId, monitorId]);
+  return [isMuted, setMuted];
 }

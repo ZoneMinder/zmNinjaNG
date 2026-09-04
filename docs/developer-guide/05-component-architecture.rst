@@ -140,8 +140,12 @@ The hook reads ``unmutedMonitorIds`` from the owning profile's settings through
 writes the list back with ``updateProfileSettings``, so the state survives
 remounts and syncs with the rest of the profile. The key is the monitor id
 within one profile, which is why the same id on a second server does not
-collide. Without a profile id the tile is always muted and the toggle is a
-no-op.
+collide. Without a profile id the tile is always muted and the setter is a
+no-op. ``MonitorDetail`` uses the same hook, but its mute control is the
+browser's own (``showControls``), so ``useGo2RTCStream`` listens for
+``volumechange`` on the video element and reports through ``onMutedChange``.
+A change that lands on the value the hook itself just wrote from the ``muted``
+option is skipped, so only the user's clicks reach the setting.
 
 The whole component is wrapped in ``memo``:
 

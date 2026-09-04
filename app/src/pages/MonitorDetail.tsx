@@ -15,6 +15,7 @@ import { getSession, tryGetCurrentSession } from '../services/sessions';
 import type { ApiClient } from '../api/client';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
+import { useMonitorMuted } from '../hooks/useMonitorMuted';
 import { useAuthSlice } from '../stores/auth';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
@@ -114,6 +115,7 @@ export default function MonitorDetail() {
   const accessToken = useAuthSlice(ownerProfile?.id ?? null).accessToken;
   const updateSettings = useSettingsStore((state) => state.updateProfileSettings);
   const dataEnabled = !!id && !!ownerProfile;
+  const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
 
   // Keep screen awake when Insomnia is enabled
   useInsomnia({ enabled: settings.insomnia });
@@ -470,6 +472,8 @@ export default function MonitorDetail() {
               onProtocolChange={setProtocol}
               forceViewMode="streaming"
               bypassGo2rtcFailureCache
+              muted={isMuted}
+              onMutedChange={setMuted}
             />
             <ZoneOverlay
               zones={zones}

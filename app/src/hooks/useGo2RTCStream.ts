@@ -80,6 +80,10 @@ export interface UseGo2RTCStreamOptions {
   expectedHost?: string;
   enabled?: boolean;
   muted?: boolean;
+  /** Fires when the user mutes or unmutes through the native controls. The
+   *  hook's own writes (from the `muted` option) are filtered out, so the
+   *  caller can persist every report as a user choice (refs #463). */
+  onMutedChange?: (muted: boolean) => void;
   /** Show native video controls (play/pause, volume, fullscreen) */
   controls?: boolean;
   /**
@@ -113,6 +117,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
     enabled = true,
     muted = false,
     controls = false,
+    onMutedChange,
     useStun = false,
   } = options;
 
@@ -126,6 +131,16 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
   const wsConnectedRef = useRef(false);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const onMutedChangeRef = useRef(onMutedChange);
+  onMutedChangeRef.current = onMutedChange;
+
+  // One stable listener so re-adding it on the final video element (WebRTC
+  // may replace the MSE element) is a no-op rather than a duplicate. A change
+  // that lands on the value applyMuted just wrote is ours, not the user's.
+  const handleVolumeChange = useCallback((e: Event) => {
+    const video = e.currentTarget as HTMLVideoElement;
+    if (video.muted !== mutedRef.current) onMutedChangeRef.current?.(video.muted);
+  }, []);
 
   // Helper to apply muted state to video element
   const applyMuted = useCallback((video: HTMLVideoElement | undefined | null) => {
@@ -215,6 +230,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       videoRtc.oninit = () => {
         originalOninit();
         if (videoRtc.video) {
+          videoRtc.video.addEventListener('volumechange', handleVolumeChange);
           videoRtc.video.controls = controls;
           videoRtc.video.disablePictureInPicture = true;
           videoRtc.video.playsInline = true;
@@ -277,6 +293,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
           log.videoPlayer('GO2RTC: WebRTC won the priority race', LogLevel.INFO, { monitorId });
         }
         applyMuted(videoRtc.video);  // Apply muted to the final video element
+        videoRtc.video?.addEventListener('volumechange', handleVolumeChange);
       };
 
       // Add to DOM and start connection
@@ -289,7 +306,7 @@ export function useGo2RTCStream(options: UseGo2RTCStreamOptions): UseGo2RTCStrea
       setState('error');
       setError(err instanceof Error ? err.message : 'Connection failed');
     }
-  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, expectedHost, protocols, channel, applyMuted, useStun]);
+  }, [cleanup, containerRef, monitorId, go2rtcUrl, token, expectedHost, protocols, channel, applyMuted, handleVolumeChange, useStun]);
 
   const retry = useCallback(() => {
     log.videoPlayer('GO2RTC: Retry requested', LogLevel.INFO, { monitorId });
