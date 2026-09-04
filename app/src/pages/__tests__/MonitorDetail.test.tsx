@@ -210,7 +210,7 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
     expect(useSettingsStore.getState().getProfileSettings('profile-1').unmutedMonitorIds).toEqual([]);
   });
 
-  it('opens fullscreen for a monitor remembered that way and forgets it on exit (refs #462, #463)', () => {
+  it('opens fullscreen for a monitor set to open that way; the buttons change only the session (refs #462, #463)', () => {
     h.routeParams = { id: '1' };
     useSettingsStore.getState().updateProfileSettings('profile-1', { fullscreenMonitorIds: ['1'] });
     useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
@@ -225,10 +225,27 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
 
     fireEvent.click(screen.getByTestId('monitor-detail-exit-fullscreen'));
     expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
-    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual([]);
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
 
     fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
-    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual(['1']);
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+  });
+
+  it('opens a monitor not set to fullscreen in the normal view, and maximizing does not change the setting', () => {
+    h.routeParams = { id: '1' };
+    useQueryMock.mockImplementation(({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[0] === 'monitor') {
+        return { data: monitor, isLoading: false, error: null, refetch: vi.fn() };
+      }
+      return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
+    });
+
+    render(<MonitorDetail />);
+    expect(screen.queryByTestId('monitor-detail-fullscreen-toolbar')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('monitor-detail-maximize'));
+    expect(screen.getByTestId('monitor-detail-exit-fullscreen')).toHaveTextContent('exit_fullscreen');
+    expect(useSettingsStore.getState().getProfileSettings('profile-1').fullscreenMonitorIds).toEqual([]);
   });
 
   it('falls back to the current session and single-mode key when the route has no profileId', () => {

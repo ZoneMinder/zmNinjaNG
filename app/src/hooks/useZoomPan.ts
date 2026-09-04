@@ -57,7 +57,6 @@ export function useZoomPan({
     innerElRef.current = el;
     if (el) {
       el.style.transformOrigin = '0 0';
-      el.style.willChange = 'transform';
       el.style.width = '100%';
       el.style.height = '100%';
     }
@@ -91,8 +90,15 @@ export function useZoomPan({
       stateRef.current = { scale, x: cx, y: cy };
 
       if (innerElRef.current) {
-        innerElRef.current.style.transition = animate ? 'transform 0.2s ease-out' : 'none';
-        innerElRef.current.style.transform = `translate(${cx}px, ${cy}px) scale(${scale})`;
+        const el = innerElRef.current;
+        el.style.transition = animate ? 'transform 0.2s ease-out' : 'none';
+        // At identity, no transform at all: a transformed (or will-change:
+        // transform) element is the containing block for every fixed-position
+        // descendant, which trapped video.js's full-window player inside the
+        // card instead of the viewport (refs #462).
+        const identity = scale === 1 && cx === 0 && cy === 0;
+        el.style.transform = identity ? '' : `translate(${cx}px, ${cy}px) scale(${scale})`;
+        el.style.willChange = identity ? '' : 'transform';
       }
     },
     [maxScale],

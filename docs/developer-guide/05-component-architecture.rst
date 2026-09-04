@@ -149,16 +149,28 @@ reports through ``onMutedChange``. A change that lands on the value the hook
 itself just wrote from the ``muted`` option is skipped, so only the user's
 clicks reach the setting.
 
-``useRememberedFullscreen`` (``hooks/useRememberedFullscreen.ts``) sits on top
-of a persisted flag for the two player pages, ``MonitorDetail`` (the
-``fullscreenMonitorIds`` entry for the current monitor) and ``EventDetail``
-(``eventPlaybackFullscreen``). It returns ``[isFullscreen, setFullscreen]``
-where ``isFullscreen`` is the persisted flag OR a temporary landscape term:
-a ``(orientation: landscape) and (pointer: coarse)`` media query, so a
-rotated phone fills the screen and a desktop window, landscape all day, does
-not. Rotation never writes the flag; ``setFullscreen`` is the user's own
-toggle and always does. Leaving fullscreen while landscape is remembered until
-the next rotation in, or the user could never get out (refs #462, #463).
+``useAutoFullscreen`` (``hooks/useAutoFullscreen.ts``) drives fullscreen on
+the two player pages, ``MonitorDetail`` (seeded by the monitor's
+``fullscreenMonitorIds`` entry, the "Open in fullscreen" switch in
+``MonitorAppPreferences``) and ``EventDetail`` (seeded by
+``eventPlaybackFullscreen``, "Open events in fullscreen" in
+``PlaybackSection``). It returns ``[isFullscreen, setFullscreen]`` where
+``isFullscreen`` is the setting OR a temporary landscape term, a
+``(orientation: landscape) and (pointer: coarse)`` media query so a rotated
+phone fills the screen and a desktop window, landscape all day, does not, OR
+a session override from ``setFullscreen``, the page's own maximize/exit
+button. Nothing in the hook writes a setting. The first cut persisted the
+button instead, and that could not work: exit is the only way off a
+fullscreen page, so every visit ended by forgetting. The override lasts until
+the next rotation or until ``resetKey`` (the monitor id) changes, since the
+detail page stays mounted across monitors (refs #462, #463).
+
+``useZoomPan`` writes no ``transform`` or ``will-change`` at identity. Either
+one makes the element the containing block for every ``position: fixed``
+descendant, and video.js full-window mode (the fallback when the real
+Fullscreen API refuses a request made without a gesture, so every rotation
+and every "open in fullscreen") positions the player ``fixed``: with the
+transform in place it filled the card, not the viewport (refs #462).
 
 The whole component is wrapped in ``memo``:
 

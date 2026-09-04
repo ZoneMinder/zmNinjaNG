@@ -111,6 +111,22 @@ describe('useZoomPan keyboard pan', () => {
   });
 
 
+  it('carries no transform at identity so a fixed descendant reaches the viewport (refs #462)', () => {
+    // video.js full-window mode positions the player `fixed`; a transformed
+    // ancestor would contain it inside the card instead.
+    const { inner } = mountZoomable();
+    expect(inner.style.transform).toBe('');
+    expect(inner.style.willChange).toBe('');
+
+    act(() => api.zoomIn());
+    expect(inner.style.transform).not.toBe('');
+    expect(inner.style.willChange).toBe('transform');
+
+    act(() => api.reset());
+    expect(inner.style.transform).toBe('');
+    expect(inner.style.willChange).toBe('');
+  });
+
   it('shows a grab cursor only when zoomed', () => {
     const { container } = mountZoomable();
     expect(container.style.cursor).toBe('');

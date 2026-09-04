@@ -57,6 +57,20 @@ export function PlaybackSection({
           />
         </SettingsRow>
 
+        {/* Open events in fullscreen */}
+        <SettingsRow>
+          <RowLabel
+            label={t('settings.event_fullscreen')}
+            desc={t('settings.event_fullscreen_desc')}
+          />
+          <Switch
+            id="event-fullscreen"
+            checked={settings.eventPlaybackFullscreen}
+            onCheckedChange={(checked) => update('eventPlaybackFullscreen', checked)}
+            data-testid="settings-event-fullscreen-switch"
+          />
+        </SettingsRow>
+
         {/* Events Per Page */}
         <div className="px-4 py-3 space-y-2">
           <RowLabel

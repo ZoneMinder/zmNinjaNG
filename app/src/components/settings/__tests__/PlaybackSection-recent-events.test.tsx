@@ -54,4 +54,20 @@ describe('PlaybackSection recent-events count', () => {
     fireEvent.change(input, { target: { value: '244' } });
     expect(updateSettings).toHaveBeenCalledWith('p1', { monitorDetailRecentEventsCount: 50 });
   });
+
+  it('writes the open-events-in-fullscreen switch (refs #462, #463)', () => {
+    const update = vi.fn();
+    render(
+      <PlaybackSection
+        settings={{ ...DEFAULT_SETTINGS }}
+        update={update}
+        currentProfile={profile}
+        updateSettings={vi.fn()}
+      />
+    );
+    const toggle = screen.getByTestId('settings-event-fullscreen-switch');
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(toggle);
+    expect(update).toHaveBeenCalledWith('eventPlaybackFullscreen', true);
+  });
 });

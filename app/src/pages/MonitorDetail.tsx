@@ -17,7 +17,7 @@ import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
 import { useMonitorMuted } from '../hooks/useMonitorMuted';
 import { useMonitorFlag } from '../hooks/useMonitorFlag';
-import { useRememberedFullscreen } from '../hooks/useRememberedFullscreen';
+import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
 import { useAuthSlice } from '../stores/auth';
 import type { ProfileId } from '../api/types';
 import { useSettingsStore } from '../stores/settings';
@@ -110,11 +110,8 @@ export default function MonitorDetail() {
   // without new branching (refs #337).
   const { profile: ownerProfile, settings } = useProfileById(routeProfileId);
   const [isMuted, setMuted] = useMonitorMuted(ownerProfile?.id, id ?? '');
-  const [fullscreenRemembered, rememberFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
-  const [isFullscreen, setFullscreen] = useRememberedFullscreen({
-    persisted: fullscreenRemembered,
-    persist: rememberFullscreen,
-  });
+  const [openFullscreen] = useMonitorFlag(ownerProfile?.id, id ?? '', 'fullscreenMonitorIds');
+  const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: openFullscreen, resetKey: id });
   // One value for the picture and the zone overlay on top of it: the overlay
   // has to be letterboxed or cropped exactly as the feed is, or the zones sit
   // at a different scale than what they outline.

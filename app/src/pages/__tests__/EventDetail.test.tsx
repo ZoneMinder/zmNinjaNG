@@ -146,6 +146,7 @@ vi.mock('../../components/events/Mp4EventPlayer', () => ({
       <button data-testid="mp4-fire-error" onClick={() => onError?.()} />
       <button data-testid="mp4-fire-unmute" onClick={() => onMutedChange?.(false)} />
       <button data-testid="mp4-fire-fullscreen" onClick={() => onFullscreenChange?.(true)} />
+      <button data-testid="mp4-fire-exit-fullscreen" onClick={() => onFullscreenChange?.(false)} />
     </div>
   ),
 }));
@@ -368,17 +369,23 @@ describe('EventDetail forced ZMS playback (#313)', () => {
     expect(screen.queryByTestId('zms-player')).toBeNull();
   });
 
-  it('remembers entering fullscreen for every later event (refs #462, #463)', () => {
-    const { unmount } = render(<EventDetail />);
+  it('opens the player fullscreen when the setting is on; the player button changes only the session (refs #462, #463)', () => {
+    setSettings(PROFILE_1, { eventPlaybackFullscreen: true });
+    render(<EventDetail />);
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'true');
+
+    fireEvent.click(screen.getByTestId('mp4-fire-exit-fullscreen'));
+    expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'false');
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackFullscreen).toBe(true);
+  });
+
+  it('opens the player in the normal view by default, and entering fullscreen does not write the setting', () => {
+    render(<EventDetail />);
     expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'false');
 
     fireEvent.click(screen.getByTestId('mp4-fire-fullscreen'));
-    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackFullscreen).toBe(true);
-    unmount();
-
-    h.routeParams = { id: '102' };
-    render(<EventDetail />);
     expect(screen.getByTestId('mp4-player')).toHaveAttribute('data-fullscreen', 'true');
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackFullscreen).toBe(false);
   });
 
   it('starts the MP4 player muted and remembers an unmute for every later event (refs #463)', () => {

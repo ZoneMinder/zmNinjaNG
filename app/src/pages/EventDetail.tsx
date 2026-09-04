@@ -23,7 +23,7 @@ import { resolveBackNavigation } from '../lib/back-navigation';
 import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
-import { useRememberedFullscreen } from '../hooks/useRememberedFullscreen';
+import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import type { ProfileId } from '../api/types';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -180,14 +180,9 @@ export default function EventDetail() {
     updateSettings(ownerProfile.id, { eventPlaybackMuted: muted });
   }, [ownerProfile, updateSettings]);
 
-  const persistFullscreen = useCallback((fullscreen: boolean) => {
-    if (!ownerProfile) return;
-    updateSettings(ownerProfile.id, { eventPlaybackFullscreen: fullscreen });
-  }, [ownerProfile, updateSettings]);
-  const [isFullscreen, setFullscreen] = useRememberedFullscreen({
-    persisted: settings.eventPlaybackFullscreen,
-    persist: persistFullscreen,
-  });
+  // The player's own fullscreen button changes this session only; the
+  // "open events in fullscreen" setting seeds it (refs #462, #463).
+  const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: settings.eventPlaybackFullscreen });
 
   // Guards against a stray second 'ended' (video.js can emit it during teardown)
   // triggering a double advance. Re-armed for each event by the id-change effect.
