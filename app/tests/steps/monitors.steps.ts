@@ -299,3 +299,34 @@ Then('I should see a hint toast naming the view toggle', async ({ page }) => {
 Then('the monitors view should not have switched', async ({ page }) => {
   await expect(page.getByTestId('monitors-view-toggle')).toHaveAttribute('title', heldButtonLabel);
 });
+
+// The capture pipeline used to sit on the card face as unlabelled badges;
+// it now lives behind one info button, with labels and Decoding (refs #467).
+When("I open the first monitor's info popover", async ({ page }) => {
+  const firstCard = page.getByTestId('monitor-card').first();
+  await expect(firstCard).toBeVisible({ timeout: testConfig.timeouts.pageLoad });
+  await firstCard.getByTestId('monitor-info-btn').click();
+  await expect(page.getByTestId('monitor-info-popover')).toBeVisible({ timeout: testConfig.timeouts.transition });
+});
+
+Then("the info popover should show the capture settings and the card's resolution", async ({ page }) => {
+  const popover = page.getByTestId('monitor-info-popover');
+  const cardResolution = (await page.getByTestId('monitor-card').first().getByTestId('monitor-resolution').innerText()).trim();
+  await expect(popover.getByTestId('monitor-info-resolution')).toHaveText(cardResolution);
+
+  // ZM 1.38+ splits the pipeline into four labelled rows; older servers have
+  // Function. Either way every value row carries a non-empty value.
+  const modern = await popover.getByTestId('monitor-info-decoding').count();
+  const keys = modern ? ['capturing', 'analysing', 'recording', 'decoding'] : ['function'];
+  for (const key of keys) {
+    const value = (await popover.getByTestId(`monitor-info-${key}`).innerText()).trim();
+    expect(value.length, `${key} value`).toBeGreaterThan(0);
+  }
+  log.info('E2E monitor info popover', { component: 'e2e', action: 'monitor_info_popover', modern: modern > 0 });
+});
+
+Then('the monitors page should still be open', async ({ page }) => {
+  await expect(page).toHaveURL(/\/monitors\/?(\?.*)?$/);
+  await expect(page.getByTestId('monitor-card').first()).toBeVisible();
+});
+

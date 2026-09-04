@@ -218,6 +218,18 @@ describe('MonitorDetail All-mode deep route (refs #337)', () => {
       return { data: undefined, isLoading: false, error: null, refetch: vi.fn() };
     });
 
+  it('replaces the Cap/Anl/Rec header line with the info popover (refs #467)', () => {
+    h.routeParams = { id: '1' };
+    monitorQuery();
+
+    render(<MonitorDetail />);
+    expect(screen.queryByText(/Cap:/)).toBeNull();
+
+    fireEvent.click(screen.getByTestId('monitor-info-btn'));
+    expect(screen.getByTestId('monitor-info-function')).toHaveTextContent('Monitor');
+    expect(screen.getByTestId('monitor-info-resolution')).toHaveTextContent('640x480');
+  });
+
   it('opens fullscreen for a monitor set to open that way; exiting changes only the session (refs #462, #463)', () => {
     h.routeParams = { id: '1' };
     useSettingsStore.getState().updateProfileSettings('profile-1', { fullscreenMonitorIds: ['1'] });

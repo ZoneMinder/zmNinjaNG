@@ -481,3 +481,25 @@ describe('MonitorSettingsDialog open-in-fullscreen (refs #462, #463)', () => {
     expect(useSettingsStore.getState().getProfileSettings(asProfileId('p1')).fullscreenMonitorIds).toEqual(['1']);
   });
 });
+
+describe('MonitorSettingsDialog Decoding row (refs #467)', () => {
+  beforeEach(() => seedSettings());
+  afterEach(() => {
+    resetProfileFixture();
+    resetFakeStoreGates();
+  });
+
+  it('shows the monitor Decoding value read-only on ZM 1.38+', () => {
+    render(
+      <MonitorSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        monitor={{ ...baseMonitor, Decoding: 'Ondemand' } as unknown as Monitor}
+        zmVersion="1.38.0"
+        onSave={vi.fn()}
+      />
+    );
+    fireEvent.mouseDown(screen.getByTestId('settings-tab-capture'));
+    expect(screen.getByTestId('settings-decoding-row')).toHaveTextContent('Ondemand');
+  });
+});

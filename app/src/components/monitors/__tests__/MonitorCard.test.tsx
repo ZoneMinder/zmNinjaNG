@@ -259,6 +259,21 @@ describe('MonitorCard', () => {
     );
   });
 
+  it('moves the capture pipeline off the card face into the info popover (refs #467)', async () => {
+    const user = userEvent.setup();
+    const modern = { ...monitor, Capturing: 'Always', Analysing: 'None', Recording: 'OnMotion', Decoding: 'Ondemand' } as Monitor;
+    render(<MonitorCard monitor={modern} status={status} onShowSettings={vi.fn()} />);
+
+    // Nothing on the card face reads as a bare pipeline value any more.
+    expect(screen.queryByText('OnMotion')).toBeNull();
+
+    await user.click(screen.getByTestId('monitor-info-btn'));
+    expect(screen.getByTestId('monitor-info-recording')).toHaveTextContent('OnMotion');
+    expect(screen.getByTestId('monitor-info-decoding')).toHaveTextContent('Ondemand');
+    // Opening the popover is not a tap on the card.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it('remembers an unmuted Go2RTC monitor across remounts (refs #463)', async () => {
     const user = userEvent.setup();
     seedProfiles([makeProfile('test', { go2rtcUrl: 'https://go2rtc.test' })], {

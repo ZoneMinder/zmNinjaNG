@@ -262,6 +262,11 @@ export function MonitorSettingsDialog({
                     </SelectContent>
                   </Select>
                 </SettingsRow>
+
+                {/* Decoding: read-only. Editing it restarts capture, so it stays in ZM's own UI. */}
+                <SettingsRow label={t('monitors.decoding')} testId="settings-decoding-row">
+                  {monitor.Decoding ?? '-'}
+                </SettingsRow>
               </>
             ) : (
               <SettingsRow label={t('monitor_detail.function_label')} testId="settings-function-row" editable>
