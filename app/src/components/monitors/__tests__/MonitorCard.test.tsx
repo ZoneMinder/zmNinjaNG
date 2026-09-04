@@ -9,6 +9,7 @@ vi.mock('../../../lib/security/secureStorage', () => import('../../../tests/fake
 import { MonitorCard } from '../MonitorCard';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 import { useProfileStore } from '../../../stores/profile';
+import { useSettingsStore } from '../../../stores/settings';
 import { asProfileId } from '../../../api/types';
 import type { Monitor, MonitorStatus } from '../../../api/types';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
@@ -17,8 +18,8 @@ import { resetFakeStoreGates } from '../../../tests/fake-store-gates';
 const OTHER_PROFILE_ID = asProfileId('other-profile');
 
 vi.mock('../LiveMonitorPlayer', () => ({
-  LiveMonitorPlayer: ({ monitor }: { monitor: { Name: string } }) => (
-    <div data-testid="video-player">{monitor.Name}</div>
+  LiveMonitorPlayer: ({ monitor, muted }: { monitor: { Name: string }; muted?: boolean }) => (
+    <div data-testid="video-player" data-muted={String(muted ?? true)}>{monitor.Name}</div>
   ),
 }));
 
@@ -256,5 +257,26 @@ describe('MonitorCard', () => {
       `/events?monitorId=1&profileId=${OTHER_PROFILE_ID}`,
       { state: { from: '/monitors' } }
     );
+  });
+
+  it('remembers an unmuted Go2RTC monitor across remounts (refs #463)', async () => {
+    const user = userEvent.setup();
+    seedProfiles([makeProfile('test', { go2rtcUrl: 'https://go2rtc.test' })], {
+      current: 'test',
+      settings: { test: { viewMode: 'streaming' } },
+    });
+    const rtcMonitor = { ...monitor, Go2RTCEnabled: true } as Monitor;
+    const card = <MonitorCard monitor={rtcMonitor} status={status} onShowSettings={vi.fn()} />;
+
+    const { unmount } = render(card);
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'true');
+    await user.click(screen.getByTestId('monitor-volume-btn'));
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'false');
+    expect(useSettingsStore.getState().getProfileSettings(asProfileId('test')).unmutedMonitorIds).toEqual(['1']);
+    unmount();
+
+    render(card);
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'false');
+    expect(screen.getByTestId('monitor-volume-btn')).toHaveAttribute('aria-label', 'monitor_detail.mute');
   });
 });

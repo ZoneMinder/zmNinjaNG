@@ -15,6 +15,7 @@ import { MontageMonitor } from '../MontageMonitor';
 import type { Monitor, MonitorStatus, Profile } from '../../../api/types';
 import { asProfileId } from '../../../api/types';
 import { useMonitorStore } from '../../../stores/monitors';
+import { useSettingsStore } from '../../../stores/settings';
 import { useMonitorSeenStore } from '../../../stores/monitorSeen';
 import { useNotificationStore } from '../../../stores/notifications';
 import { seedProfiles, resetProfileFixture, makeProfile } from '../../../tests/profile-fixture';
@@ -66,16 +67,19 @@ vi.mock('../LiveMonitorPlayer', () => ({
     reduceStream,
     paused,
     forceViewMode,
+    muted,
   }: {
     reduceStream?: boolean;
     paused?: boolean;
     forceViewMode?: string;
+    muted?: boolean;
   }) => (
     <div
       data-testid="video-player"
       data-reduce-stream={String(reduceStream ?? false)}
       data-paused={String(paused ?? false)}
       data-force-view-mode={forceViewMode ?? 'none'}
+      data-muted={String(muted ?? true)}
     >
       Mock LiveMonitorPlayer
     </div>
@@ -514,6 +518,33 @@ describe('MontageMonitor', () => {
     // resolved from it would produce no startDateTime at all.
     expect(params.get('startDateTime')).toBe('2026-07-10T08:49:38');
   });
+
+  it('remembers an unmuted Go2RTC monitor across remounts (refs #463)', async () => {
+    const user = userEvent.setup();
+    const rtcMonitor = { ...mockMonitor, Go2RTCEnabled: true } as Monitor;
+    const rtcProfile = { ...mockProfile, go2rtcUrl: 'https://go2rtc.test' };
+    const tile = (
+      <MontageMonitor
+        monitor={rtcMonitor}
+        status={mockStatus}
+        currentProfile={rtcProfile}
+        accessToken="test-token"
+        navigate={mockNavigate}
+      />
+    );
+
+    const { unmount } = render(tile);
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'true');
+    await user.click(screen.getByTestId('montage-volume-btn'));
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'false');
+    expect(useSettingsStore.getState().getProfileSettings(rtcProfile.id).unmutedMonitorIds).toEqual(['1']);
+    unmount();
+
+    render(tile);
+    expect(screen.getByTestId('video-player')).toHaveAttribute('data-muted', 'false');
+    expect(screen.getByTestId('montage-volume-btn')).toHaveAttribute('aria-label', 'monitor_detail.mute');
+  });
+
 });
 
 /**
@@ -597,4 +628,5 @@ describe('MontageMonitor alarm state is conveyed without animation', () => {
       expect(screen.getByRole('status')).toHaveTextContent('montage.alarm_status');
     });
   });
+
 });

@@ -313,6 +313,10 @@ export interface ProfileSettings {
    *  request and an error toast on every visit. Listing the monitor here skips
    *  the MP4 attempt entirely. App-local, not a ZoneMinder monitor field. */
   forceZmsMonitorIds: string[];
+  /** Go2RTC monitors the user unmuted on a live tile. Tiles start muted so
+   *  a grid does not open as a cacophony; listing a monitor here restores
+   *  its last choice across remounts (refs #463). */
+  unmutedMonitorIds: string[];
   // Force-disable multi-port streaming. When true, the app ignores the server's
   // ZM_MIN_STREAMING_PORT and uses the portal's default port for all streams.
   // Default false = auto (use the server config when present).
@@ -504,6 +508,7 @@ export const DEFAULT_SETTINGS: ProfileSettings = {
   showAnalysisFrames: false,
   monitorStreamingOverrides: {},
   forceZmsMonitorIds: [],
+  unmutedMonitorIds: [],
   // Auto by default: honor the server's ZM_MIN_STREAMING_PORT when present
   forceDisableMultiPort: false,
   apiTimeoutSeconds: API_REQUEST.defaultTimeoutSeconds,

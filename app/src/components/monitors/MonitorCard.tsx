@@ -27,6 +27,7 @@ import { getMonitorAspectRatio } from '../../lib/monitor/monitor-rotation';
 import { getMonitorRunState, monitorDotColor } from '../../lib/monitor/monitor-status';
 import { useAuthSlice } from '../../stores/auth';
 import { useOpenMonitorEvents } from '../../hooks/useOpenMonitorEvents';
+import { useMonitorMuted } from '../../hooks/useMonitorMuted';
 
 interface MonitorCardComponentProps extends MonitorCardProps {
   /** Callback to open the settings dialog for this monitor. `profileId` is
@@ -67,7 +68,7 @@ function MonitorCardComponent({
   const openMonitorEvents = useOpenMonitorEvents();
   const resolvedFit = (objectFit === 'flex' ? 'cover' : (objectFit ?? 'cover')) as 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   const [protocol, setProtocol] = useState('MJPEG');
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, toggleMuted] = useMonitorMuted(ownerProfile?.id, monitor.Id);
   const runState = getMonitorRunState(monitor, status, zmVersion);
   const isRTC = monitor.Go2RTCEnabled === true && !!ownerProfile?.go2rtcUrl;
   const aspectRatio = getMonitorAspectRatio(monitor.Width, monitor.Height, monitor.Orientation);
@@ -169,7 +170,7 @@ function MonitorCardComponent({
               <HintButton
                 type="button"
                 className="h-4 w-4 shrink-0 text-muted-foreground hover:text-foreground"
-                onClick={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
+                onClick={(e) => { e.stopPropagation(); toggleMuted(); }}
                 title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                 aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                 data-testid="monitor-volume-btn"
@@ -327,7 +328,7 @@ function MonitorCardComponent({
                 <HintButton
                   type="button"
                   className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
+                  onClick={(e) => { e.stopPropagation(); toggleMuted(); }}
                   title={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                   aria-label={isMuted ? t('monitor_detail.unmute') : t('monitor_detail.mute')}
                   data-testid="monitor-volume-btn"
