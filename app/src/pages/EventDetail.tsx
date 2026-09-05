@@ -24,6 +24,7 @@ import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
 import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
+import { FullscreenExitBar } from '../components/ui/fullscreen-exit-bar';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import type { ProfileId } from '../api/types';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -185,6 +186,8 @@ export default function EventDetail() {
   // leaving is forced before navigating away. The setting is the off switch
   // (refs #462, #463).
   const [isFullscreen, setFullscreen] = useAutoFullscreen({ startFullscreen: settings.eventPlaybackFullscreen });
+  // The player's own fullscreen button takes the page along (and back), and
+  // entering turns the setting on for later events; leaving never writes.
   const handleFullscreenChange = useCallback((fullscreen: boolean) => {
     setFullscreen(fullscreen);
     if (fullscreen && ownerProfile) updateSettings(ownerProfile.id, { eventPlaybackFullscreen: true });
@@ -490,9 +493,25 @@ export default function EventDetail() {
   const startTime = new Date(event.Event.StartDateTime.replace(' ', 'T'));
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
+  // The page itself goes fullscreen the way Monitor Detail does: header gone,
+  // exit bar on top, player taking the height (refs #462). Not video.js's own
+  // fullscreen: on iPhone that is a position:fixed full-window player, and a
+  // transformed pinch-zoom container becomes its containing block, so pinch
+  // behaved differently depending on which state it started from. The
+  // player's own fullscreen button still does native fullscreen when tapped.
+  const pageFullscreen = isFullscreen;
+
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className={cn('flex flex-col h-full', pageFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background')}>
+      {pageFullscreen && (
+        <FullscreenExitBar
+          title={monitorData?.Monitor.Name ?? event.Event.Name}
+          onExit={() => setFullscreen(false)}
+          testIdPrefix="event-detail"
+        />
+      )}
       {/* Header */}
+      {!pageFullscreen && (
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
@@ -642,6 +661,7 @@ export default function EventDetail() {
           )}
         </div>
       </div>
+      )}
 
       {/* Main Content */}
       <div
@@ -649,12 +669,15 @@ export default function EventDetail() {
         ref={scrollerRef}
         data-testid="event-detail-scroller"
         className={cn(
-          'flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto',
+          'flex-1 flex flex-col items-center overflow-y-auto',
+          pageFullscreen
+            ? 'min-h-0 overflow-hidden pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
+            : 'p-2 sm:p-3 md:p-4 bg-muted/10',
           incomingSlide === 'left' && 'event-slide-left',
           incomingSlide === 'right' && 'event-slide-right',
         )}
       >
-        <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
+        <div className={cn('w-full', pageFullscreen ? 'h-full min-h-0' : 'max-w-5xl space-y-3 sm:space-y-4 md:space-y-6')}>
           {/* Video Player or ZMS Playback */}
           {hasVideo ? (
             playThroughZms ? (
@@ -679,16 +702,22 @@ export default function EventDetail() {
                   playbackRate={settings.eventPlaybackRate}
                   onRateChange={handleRateChange}
                   className="space-y-4"
+                  fullscreen={pageFullscreen}
                 />
               )
             ) : (
               // MP4 video playback
               <Card
                 ref={zoomPan.ref}
-                className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black touch-none relative mx-auto landscape:max-w-[calc((100svh-7rem)*16/9)]"
+                className={cn(
+                  'overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black touch-none relative mx-auto',
+                  pageFullscreen
+                    ? 'w-full h-full rounded-none shadow-none ring-0'
+                    : 'landscape:max-w-[calc((100svh-7rem)*16/9)]',
+                )}
               >
-                <div className="aspect-video relative">
-                  <div ref={zoomPan.innerRef}>
+                <div className={cn('relative', pageFullscreen ? 'h-full' : 'aspect-video')}>
+                  <div ref={zoomPan.innerRef} className={cn(pageFullscreen && 'h-full')}>
                     {videoUrl ? (
                       <Mp4EventPlayer
                         src={videoUrl}
@@ -706,7 +735,7 @@ export default function EventDetail() {
                         onRateChange={handleRateChange}
                         muted={settings.eventPlaybackMuted}
                         onMutedChange={handleMutedChange}
-                        fullscreen={isFullscreen}
+                        fill={pageFullscreen}
                         onFullscreenChange={handleFullscreenChange}
                       />
                     ) : (
@@ -740,6 +769,7 @@ export default function EventDetail() {
                 playbackRate={settings.eventPlaybackRate}
                 onRateChange={handleRateChange}
                 className="space-y-4"
+                fullscreen={pageFullscreen}
               />
             )
           ) : (

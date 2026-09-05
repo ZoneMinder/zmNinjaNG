@@ -15,8 +15,10 @@ let landscape: boolean;
 beforeEach(() => {
   listeners = [];
   landscape = false;
-  vi.stubGlobal('matchMedia', vi.fn(() => ({
-    get matches() { return landscape; },
+  // Two queries: the pointer one is a touch screen throughout, the
+  // orientation one follows `landscape`.
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({
+    get matches() { return query.includes('pointer') ? true : landscape; },
     addEventListener: (_: string, fn: Listener) => { listeners.push(fn); },
     removeEventListener: (_: string, fn: Listener) => { listeners = listeners.filter((l) => l !== fn); },
   })));
@@ -71,6 +73,37 @@ describe('useAutoFullscreen', () => {
     rotate(true);
     rotate(false);
     expect(result.current[0]).toBe(true);
+  });
+
+  // iOS re-evaluates the orientation media query against the zoomed viewport
+  // mid-pinch, so it briefly reads portrait and the page fell out of
+  // fullscreen and back. screen.orientation reports the device, not the zoom.
+  it('reads screen.orientation when present and ignores media-query flicker', () => {
+    let orientationType = 'portrait-primary';
+    let orientationListeners: Array<() => void> = [];
+    vi.stubGlobal('screen', {
+      orientation: {
+        get type() { return orientationType; },
+        addEventListener: (_: string, fn: () => void) => { orientationListeners.push(fn); },
+        removeEventListener: (_: string, fn: () => void) => { orientationListeners = orientationListeners.filter((l) => l !== fn); },
+      },
+    });
+    const { result } = renderHook(() => useAutoFullscreen({ startFullscreen: false }));
+    expect(result.current[0]).toBe(false);
+
+    orientationType = 'landscape-primary';
+    act(() => orientationListeners.forEach((l) => l()));
+    expect(result.current[0]).toBe(true);
+
+    // The media query flips to portrait and back during a pinch; nothing changes.
+    rotate(false);
+    expect(result.current[0]).toBe(true);
+    rotate(true);
+    expect(result.current[0]).toBe(true);
+
+    orientationType = 'portrait-primary';
+    act(() => orientationListeners.forEach((l) => l()));
+    expect(result.current[0]).toBe(false);
   });
 
   it('drops the session override when the subject changes', () => {

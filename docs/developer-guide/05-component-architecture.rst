@@ -161,7 +161,13 @@ monitor-id lists (``unmutedMonitorIds``, ``fullscreenMonitorIds``) into a
 with ``updateProfileSettings``, so the state survives remounts and syncs with
 the rest of the profile. The key is the monitor id within one profile, which
 is why the same id on a second server does not collide. Without a profile id
-the value is false and the setter is a no-op. ``MonitorDetail`` uses the same
+the value is false and the setter is a no-op. ``FullscreenExitBar`` (``components/ui/fullscreen-exit-bar.tsx``) is the strip
+along the top of an app-level fullscreen page: subject name and the Exit
+button, shared by ``MonitorDetail`` and ``EventDetail``. The event page goes
+fullscreen the way Monitor Detail does for both players: ``ZmsEventPlayer``
+takes a ``fullscreen`` prop that swaps its 16:9 box for the height the page
+gives it, transport controls kept below, and ``Mp4EventPlayer`` takes
+``fill`` (refs #462). ``MonitorDetail`` uses the same
 mute hook, but its mute control is the browser's own (``showControls``), so
 ``useGo2RTCStream`` listens for ``volumechange`` on the video element and
 reports through ``onMutedChange``. A change that lands on the value the hook
@@ -174,9 +180,13 @@ the two player pages, ``MonitorDetail`` (seeded by the monitor's
 ``MonitorAppPreferences``) and ``EventDetail`` (seeded by
 ``eventPlaybackFullscreen``, "Open events in fullscreen" in
 ``PlaybackSection``). It returns ``[isFullscreen, setFullscreen]`` where
-``isFullscreen`` is the setting OR a temporary landscape term, a
-``(orientation: landscape) and (pointer: coarse)`` media query so a rotated
-phone fills the screen and a desktop window, landscape all day, does not, OR
+``isFullscreen`` is the setting OR a temporary landscape term, so a rotated
+phone fills the screen and a desktop window, landscape all day, does not
+(``(pointer: coarse)`` is the touch test; the orientation comes from
+``screen.orientation`` where it exists, because iOS evaluates the
+``(orientation: landscape)`` media query against the zoomed visual viewport
+and a pinch briefly read as portrait, bouncing the page out of fullscreen
+and back; the media query is only the fallback), OR
 a session override from ``setFullscreen``, the page's own maximize/exit
 button. The hook itself writes no setting; the pages do, and only on enter:
 maximizing writes the monitor into ``fullscreenMonitorIds``, entering
@@ -569,14 +579,16 @@ navigation. ``onMutedChange`` fires on video.js ``volumechange`` with
 ``player.muted()``; the player only ever sets muted from its prop at
 construction, so every such event is the user's, and ``EventDetail`` writes it
 to the ``eventPlaybackMuted`` setting for the next event to read (refs #463).
-``fullscreen`` / ``onFullscreenChange`` follow the ``playbackRate`` shape: a
-``desiredFullscreenRef`` records what the component asked for, and the
-``fullscreenchange`` / ``enterFullWindow`` / ``exitFullWindow`` listeners
-report only a state that differs from it, so a remembered flag or a rotation
-applying itself is not mistaken for a user click. The real Fullscreen API
-refuses a request made without a user gesture, so ``applyFullscreen`` falls
-back to video.js full-window mode when the request rejects; video.js counts
-full-window as ``isFullscreen()``, which keeps the write-back uniform.
+``fill`` switches video.js from ``fluid`` (size by aspect ratio) to ``fill``
+(size by the parent box), which ``EventDetail`` sets for its own page-level
+fullscreen. The page never asks video.js for fullscreen itself: on iPhone
+that is a ``position: fixed`` full-window player, and the pinch-zoom
+container around it, once transformed, becomes that element's containing
+block, so pinch behaved one way or the other depending on the state it
+started from (refs #462). ``onFullscreenChange`` reports the user's own
+fullscreen button from the ``fullscreenchange`` / ``enterFullWindow`` /
+``exitFullWindow`` events, deduplicated; the page follows it in and out and
+records an entry in ``eventPlaybackFullscreen``.
 
 Markers are rendered by ``videojs-markers``: the ``markers`` array maps to the
 alarm and max-score frames on the event timeline, and ``onMarkerClick`` seeks
