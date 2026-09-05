@@ -97,7 +97,7 @@ Gate: review.
 
 ### Localization
 Owns: all user-facing text.
-Path: locale files under `app/src/locales/` (de, en, es, fr, zh); every locale updates together; both pickers list every locale.
+Path: locale files under `app/src/locales/` (de, en, es, fr, it, zh); every locale updates together; both pickers list every locale.
 Never: hardcoded user-facing strings.
 Gate: `app/src/locales/__tests__/translation-keys.test.ts`; review for hardcoded strings.
 

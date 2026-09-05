@@ -1539,7 +1539,7 @@ partial React Query refetch would leave a dead stream dead.
 
 The icon gets ``animate-spin`` while ``isLoading``, and the button is disabled
 while loading or when ``disabled`` is set. ``label`` defaults to the
-``common.refresh`` translation key (present in en, de, es, fr, zh) and doubles
+``common.refresh`` translation key (present in en, de, es, fr, it, zh) and doubles
 as the ``title`` and ``aria-label`` when no explicit ``aria-label`` is passed.
 ``showLabel`` (``'always'``, ``'never'``, ``'sm-and-up'``) defaults to
 ``'never'``, so pages render it icon-only. The default ``data-testid`` is

@@ -122,7 +122,7 @@
     "all_failed_title": "Impossibile caricare i monitor",
     "failed_to_load": "Impossibile caricare i monitor: {{error}}",
     "properties_title": "{{name}}",
-    "properties_description": "Monitor ID: {{id}}",
+    "properties_description": "ID monitor: {{id}}",
     "basic_info": "Informazioni di base",
     "source_config": "Configurazione sorgente",
     "video_settings": "Impostazioni video",
@@ -134,6 +134,8 @@
     "capturing": "Acquisizione",
     "analysing": "Analisi",
     "recording": "Registrazione",
+    "decoding": "Decodifica",
+    "info_button": "Dettagli monitor",
     "controllable": "PTZ",
     "protocol": "Protocollo",
     "method": "Metodo",
@@ -269,7 +271,7 @@
     "event_gone": "Questo evento non esiste più sul server"
   },
   "event_detail": {
-    "event_id": "Event ID",
+    "event_id": "ID evento",
     "date": "Data",
     "time": "Ora",
     "duration": "Durata",
@@ -368,8 +370,9 @@
       "system_model_eval_running": "In esecuzione… {{done}}/{{total}}",
       "system_model_eval_score": "Punteggio {{pass}}/{{total}}",
       "system_model_eval_failed": "Valutazione non riuscita",
-      "native_unsupported_memory": "On-device models are not supported on this device: it does not have enough memory to run them. Use an Ollama server instead, set up below.",
-      "on_device_mobile_disabled": "On-device models are not available on phones and tablets: they need more memory than a mobile app is allowed to use, and answers take minutes. Use an Ollama server instead, set up below.",
+      "native_unsupported_os": "I modelli su dispositivo richiedono iOS {{version}} o successivo. Aggiorna iOS per usarli, oppure usa un server Ollama, configurato qui sotto.",
+      "native_unsupported_memory": "I modelli su dispositivo non sono supportati su questo dispositivo: non ha memoria sufficiente per eseguirli. Usa invece un server Ollama, configurato qui sotto.",
+      "on_device_mobile_disabled": "I modelli su dispositivo non sono disponibili su telefoni e tablet: richiedono più memoria di quanta un'app mobile possa usare e le risposte richiedono minuti. Usa invece un server Ollama, configurato qui sotto.",
       "no_webgpu": "Richiede WebGPU, non disponibile su questo dispositivo.",
       "no_webgpu_hint": "Usa invece il backend Ollama: funziona senza WebGPU.",
       "ollama_url": "URL del server",
@@ -429,7 +432,7 @@
       "timeout_hint": "Quanto attendere una risposta.",
       "history_turns": "Scambi ricordati",
       "history_turns_hint": "Quante domande e risposte precedenti vede il modello.",
-      "advanced_note": "Temperature 0 was measured most accurate for reading your camera data. Higher values make the assistant more likely to state a count, a time, or a camera name that is not in the results. Raise the timeout if your server is slow to answer. Remembering more exchanges helps follow-up questions but makes every answer slower.",
+      "advanced_note": "La temperatura 0 è risultata la più accurata nella lettura dei dati delle telecamere. Valori più alti rendono l'assistente più incline a indicare un conteggio, un orario o un nome di telecamera assente dai risultati. Aumenta il timeout se il server risponde lentamente. Ricordare più scambi aiuta le domande successive ma rallenta ogni risposta.",
       "backend_gemini_nano": "Sul dispositivo (AICore)",
       "gemini_nano_not_ready": "Gemini Nano è disponibile su questo dispositivo, ma non è ancora stato scaricato.",
       "in_toolbar": "Mostra nella barra degli strumenti",
@@ -521,6 +524,8 @@
     "snapshot_warning": "La modalità istantanea potrebbe avere una frequenza fotogrammi inferiore",
     "event_autoplay": "Riproduzione automatica video evento",
     "event_autoplay_desc": "Riproduci automaticamente all'apertura dell'evento",
+    "event_fullscreen": "Apri eventi a schermo intero",
+    "event_fullscreen_desc": "Riproduci il video dell'evento a schermo intero all'apertura",
     "stream_fps": "Stream FPS",
     "stream_fps_desc": "FPS massimi per i flussi live",
     "fps_label": "FPS",
@@ -543,6 +548,8 @@
     "go2rtc_disabled_note": "Tutti i monitor usano MJPEG.",
     "show_protocol_label": "Etichetta protocollo",
     "show_protocol_label_desc": "Mostra il protocollo di streaming sui flussi video",
+    "live_fullscreen": "Apri vista live a schermo intero",
+    "live_fullscreen_desc": "Ogni monitor si apre ingrandito. Per un solo monitor, usa Apri a schermo intero nelle impostazioni di quel monitor",
     "webrtc_use_stun": "Server STUN",
     "webrtc_use_stun_desc": "Abilita solo per go2rtc raggiunto direttamente via Internet. Disattiva su LAN o VPN.",
     "webrtc_protocols": "Protocolli di streaming",
@@ -729,6 +736,7 @@
     "alarm_disarm_action": "Disattiva monitor",
     "alarm_updating": "Aggiornamento stato allarme...",
     "alarm_help": "Attiva per forzare lo stato di allarme su questo monitor.",
+    "open_fullscreen_label": "Apri a schermo intero",
     "force_zms_label": "Usa sempre ZMS per gli eventi",
     "go2rtc_label": "Go2RTC",
     "go2rtc_override_note": "Go2RTC disabilitato per questo monitor",
@@ -761,6 +769,7 @@
     },
     "zones_loading": "Caricamento zone...",
     "no_zones": "Nessuna zona definita",
+    "exit": "Esci",
     "exit_fullscreen": "Esci dalla modalità a schermo intero",
     "reset_zoom": "Reimposta",
     "tab_capture": "Acquisizione e registrazione",
@@ -1126,7 +1135,7 @@
     "profile_name_placeholder": "Il mio ZoneMinder",
     "api_url_hint": "https://server.com/zm/api",
     "cgi_url_hint": "https://server.com/zm/cgi-bin",
-    "protocol_mismatch": "Protocol mismatch! Portal uses {{portalProtocol}}:// but API uses {{apiProtocol}}://. Both must use the same protocol (either both HTTP or both HTTPS)."
+    "protocol_mismatch": "Protocollo non corrispondente! Il portale usa {{portalProtocol}}:// ma l'API usa {{apiProtocol}}://. Entrambi devono usare lo stesso protocollo (entrambi HTTP o entrambi HTTPS)."
   },
   "live_activity": {
     "title": "Attività live",
@@ -1267,15 +1276,15 @@
     "permission_events": "Events",
     "permission_control": "Control",
     "permission_groups": "Groups",
-    "permission_unknown": "Not determined"
+    "permission_unknown": "Non determinato"
   },
   "eventMontage": {
-  "grid_layout_applied": "Layout griglia applicato: {{cols}} colonne",
-  "invalid_columns": "Numero di colonne non valido",
-  "grid_layout": "Layout griglia",
-  "screen_too_small": "La larghezza dello schermo è insufficiente per questo numero di colonne",
-  "columns": "{{count}} col",
-  "custom": "Personalizzato",
+    "grid_layout_applied": "Layout griglia applicato: {{cols}} colonne",
+    "invalid_columns": "Numero di colonne non valido",
+    "grid_layout": "Layout griglia",
+    "screen_too_small": "La larghezza dello schermo è insufficiente per questo numero di colonne",
+    "columns": "{{count}} col",
+    "custom": "Personalizzato",
     "download_video": "Video",
     "custom_grid_title": "Griglia personalizzata",
     "custom_grid_desc": "Inserisci il numero di colonne",
@@ -1536,6 +1545,7 @@
     "gemini_background_blocked": "Gemini Nano funziona solo quando zmNinja è visualizzato. Riapri l'app e riprova.",
     "gemini_quota_exceeded": "Gemini Nano ha raggiunto il limite di utilizzo odierno sul dispositivo. Riprova più tardi o usa un server Ollama.",
     "gemini_rate_limited": "Gemini Nano è occupato. Attendi un momento e riprova.",
-    "ask_ninjii": "Chiedi a Ninjii"
+    "ask_ninjii": "Chiedi a Ninjii",
+    "continued_from_previous": "Continuazione della domanda precedente"
   }
 }

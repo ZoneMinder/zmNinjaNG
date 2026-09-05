@@ -218,7 +218,7 @@ i18next & react-i18next
 
 Translations reach components through ``const { t } = useTranslation()``, and
 the strings live in one JSON file per language under ``src/locales/``. No
-hardcoded user-facing strings, and all five languages (en, de, es, fr, zh) are
+hardcoded user-facing strings, and all six languages (en, de, es, fr, it, zh) are
 updated in the same commit; that is the Localization contract, and
 :doc:`09-contributing` explains why a missing key does not look like a bug.
 
