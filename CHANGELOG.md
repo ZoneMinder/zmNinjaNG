@@ -1,5 +1,38 @@
 # Changelog
 
+## [zmNinjaNg-2.3.0](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.3.0) (2026-09-05)
+
+[Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.2.1...zmNinjaNg-2.3.0)
+
+**Implemented enhancements:**
+
+- Add Italian \(it\) interface language [\#475](https://github.com/ZoneMinder/zmNinjaNg/issues/475)
+- Remember mute and fullscreen for live monitors and event playback; auto-fullscreen on rotation [\#463](https://github.com/ZoneMinder/zmNinjaNg/issues/463)
+- Feature request - go directly to fullscreen from a montage view for a selected camera \(moniotr\) [\#462](https://github.com/ZoneMinder/zmNinjaNg/issues/462)
+
+**Fixed bugs:**
+
+- Montage view is still frozen in 2.2.1 when ZM servers does not use authentication [\#461](https://github.com/ZoneMinder/zmNinjaNg/issues/461)
+- proven-red diffs from the base branch tip, so a branch that lags main fails on tests it never touched [\#455](https://github.com/ZoneMinder/zmNinjaNg/issues/455)
+- Android: app crashes on open in 2.2.1 — R8 optimization deletes Capacitor's PluginHandle.pluginAnnotation [\#452](https://github.com/ZoneMinder/zmNinjaNg/issues/452)
+- Assistant misattributes events to a place the user named but no monitor covers [\#427](https://github.com/ZoneMinder/zmNinjaNg/issues/427)
+- Direct mode badge says "Poller not running" while the poller is running [\#425](https://github.com/ZoneMinder/zmNinjaNg/issues/425)
+
+**Closed issues:**
+
+- Replace the unlabelled capture badges with a monitor info popover; surface Decoding [\#467](https://github.com/ZoneMinder/zmNinjaNg/issues/467)
+- Remove Dependabot: the security channel costs more attention than it returns [\#459](https://github.com/ZoneMinder/zmNinjaNg/issues/459)
+- Time vocabulary: calendar month field - 'this month' ran as a rolling 30 days on Gemini Nano [\#449](https://github.com/ZoneMinder/zmNinjaNg/issues/449)
+- Assistant: explicit continuation judgment with structured context and a UI badge; place-group comparisons [\#446](https://github.com/ZoneMinder/zmNinjaNg/issues/446)
+- Assistant: whole-question time interrogation - express every period as structured windows, delete the copy step [\#444](https://github.com/ZoneMinder/zmNinjaNg/issues/444)
+- parseFields drops the week and weekday-range fields; the time eval bypasses the production parser [\#442](https://github.com/ZoneMinder/zmNinjaNg/issues/442)
+- Assistant: status questions default to the system; follow-ups parse with context; chat lane cannot state or promise system facts [\#440](https://github.com/ZoneMinder/zmNinjaNg/issues/440)
+- Assistant: interrogation redesign - structured self-explanation fields instead of output rules [\#438](https://github.com/ZoneMinder/zmNinjaNg/issues/438)
+- Planned fan-out needs a code coalescer; objects slot creeps to the whole vocabulary; SHOW parser chokes on brackets [\#436](https://github.com/ZoneMinder/zmNinjaNg/issues/436)
+- Assistant time track: month-word scan guard, weekday-range windows, fold phrase extraction into the parse [\#434](https://github.com/ZoneMinder/zmNinjaNg/issues/434)
+- Assistant: parse the question into structured slots first, execute the plan in code, keep the loop as fallback [\#432](https://github.com/ZoneMinder/zmNinjaNg/issues/432)
+- Monitor stage denies an existing camera on paraphrase, and a transient interpreter failure is cached all day [\#430](https://github.com/ZoneMinder/zmNinjaNg/issues/430)
+
 ## [zmNinjaNg-2.2.1](https://github.com/ZoneMinder/zmNinjaNg/tree/zmNinjaNg-2.2.1) (2026-08-31)
 
 [Full Changelog](https://github.com/ZoneMinder/zmNinjaNg/compare/zmNinjaNg-2.2.0...zmNinjaNg-2.2.1)
