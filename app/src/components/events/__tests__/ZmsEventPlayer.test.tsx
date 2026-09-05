@@ -145,12 +145,19 @@ describe('ZmsEventPlayer', () => {
   it('gives the picture the full height in fullscreen instead of a 16:9 box (refs #462)', () => {
     renderPlayer();
     expect(screen.getByTestId('zms-video-area').className).toContain('aspect-video');
+    expect(screen.queryByTestId('zms-fullscreen-controls')).toBeNull();
+    expect(screen.getByTestId('zms-speed-100')).toBeTruthy();
 
     cleanup();
     renderPlayer({ fullscreen: true });
     const area = screen.getByTestId('zms-video-area');
     expect(area.className).not.toContain('aspect-video');
     expect(area.className).toContain('h-full');
+    // Only transport and progress ride on the picture; the full card with
+    // speed presets would leave a landscape phone no room for it.
+    const overlay = screen.getByTestId('zms-fullscreen-controls');
+    expect(overlay.contains(screen.getByTestId('zms-play-pause'))).toBe(true);
+    expect(screen.queryByTestId('zms-speed-100')).toBeNull();
   });
 
   it('shows the ZMS notice only when playback fell back from video', () => {
