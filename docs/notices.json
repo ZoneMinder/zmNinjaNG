@@ -1,5 +1,14 @@
 [
   {
+    "id": "release-2.3.0",
+    "title": "Italian language, fullscreen memory, Android crash fix",
+    "body": "- Added Italian as an interface language.\n- Live monitors and event playback now remember your mute and fullscreen choices, and go fullscreen when you rotate the device.\n- You can now jump straight to fullscreen for a single camera from the montage view.\n- Fixed the montage view freezing on ZoneMinder servers that do not use authentication.\n- Fixed the app crashing on launch on Android.\n- Replaced the unlabelled capture badges with a monitor info popover that also shows the decoding setting.\n- Fixed the direct mode badge showing \"Poller not running\" while the poller was running.\n- The assistant no longer attributes events to a place when no monitor covers it.\n- The assistant handles time questions more accurately, including calendar months, weekday ranges, and follow-up questions that build on the previous answer.\n- The assistant no longer denies a camera exists when you describe it in different words, and a one-off failure is no longer remembered for the rest of the day.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.3.0)",
+    "publishedAt": "2026-09-05T12:51:18.893Z",
+    "severity": "info",
+    "link": "https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.3.0",
+    "minAppVersion": "2.3.0"
+  },
+  {
     "id": "release-2.2.0",
     "title": "New profile groups, activity view, and fixes",
     "body": "- Added profile groups so you can combine several servers and view them together as one.\n- Added an All Profiles mode that shows monitors and events from every server at once.\n- Added a Live Activity view that shows only the monitors with motion right now.\n- Added an option to turn analysis frames on or off while watching a live stream.\n- Added a per monitor option to force ZMS playback for events that do not play natively.\n- Added the ability to disable a profile so it stays in your list but is skipped everywhere.\n- Icon only buttons now show a label or tooltip when tapped on touch devices.\n- The interface now hides features your ZoneMinder account does not have rights to use.\n- The ZMS Playback label no longer covers the picture while an event plays.\n- Monitors that were deleted on the server no longer appear in the dashboard or the Hide Monitors list.\n- Fixed scrolling inside the Edit Server profile screen.\n- Reordering monitors in Montage on a touchscreen no longer fights with scrolling.\n- Watching a monitor no longer floods a reverse proxy with repeated errors.\n- Event frames now appear below the video instead of above it.\n\n[Full changelog](https://github.com/ZoneMinder/zmNinjaNg/releases/tag/zmNinjaNg-2.2.0)",
