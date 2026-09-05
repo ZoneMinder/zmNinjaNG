@@ -7,6 +7,7 @@ import enTranslation from './locales/en/translation.json';
 import deTranslation from './locales/de/translation.json';
 import esTranslation from './locales/es/translation.json';
 import frTranslation from './locales/fr/translation.json';
+import itTranslation from './locales/it/translation.json';
 import zhTranslation from './locales/zh/translation.json';
 
 i18n
@@ -27,6 +28,7 @@ i18n
       de: { translation: deTranslation },
       es: { translation: esTranslation },
       fr: { translation: frTranslation },
+      it: { translation: itTranslation },
       zh: { translation: zhTranslation },
     },
 
