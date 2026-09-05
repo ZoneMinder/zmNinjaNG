@@ -669,10 +669,10 @@ export default function EventDetail() {
         ref={scrollerRef}
         data-testid="event-detail-scroller"
         className={cn(
-          'flex-1 flex flex-col items-center overflow-y-auto',
+          'flex-1 flex flex-col items-center',
           pageFullscreen
             ? 'min-h-0 overflow-hidden pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
-            : 'p-2 sm:p-3 md:p-4 bg-muted/10',
+            : 'overflow-y-auto p-2 sm:p-3 md:p-4 bg-muted/10',
           incomingSlide === 'left' && 'event-slide-left',
           incomingSlide === 'right' && 'event-slide-right',
         )}
@@ -786,6 +786,10 @@ export default function EventDetail() {
             </Card>
           )}
 
+          {/* Fullscreen is the player alone: the frames strip and the
+              metadata cards would put content below the fold behind the
+              overflow-hidden scroller (refs #462). */}
+          {!pageFullscreen && (<>
           {/* Significant frames for this event (#272). Sits between the player
               and the metadata so the frames read as a detail of what is on
               screen above, rather than pushing the player itself below the
@@ -904,6 +908,7 @@ export default function EventDetail() {
               </div>
             </Card>
           )}
+          </>)}
         </div>
       </div>
 

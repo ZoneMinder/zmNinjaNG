@@ -262,7 +262,9 @@ export function Mp4EventPlayer({
       playsinline: true,
       preferFullWindow: isIOS,
       muted,
-      aspectRatio,
+      // video.js's aspectRatio setter forces fluid mode, after fill has been
+      // applied, so a filled player must not carry one (refs #462).
+      aspectRatio: fill ? undefined : aspectRatio,
       poster,
       disablePictureInPicture: isAndroid,
       playbackRates: [...EVENT_PLAYBACK_RATES],
@@ -364,9 +366,11 @@ export function Mp4EventPlayer({
 
     // Fill follows the page's fullscreen: the box is the screen there, and
     // fluid's aspect-ratio padding would size the player off the width alone.
-    if (fill !== player.fill()) {
-      player.fluid(!fill);
-      player.fill(fill);
+    // Compared on fluid(), since fill() can read true while aspectRatio has
+    // already flipped the player back to fluid.
+    if (player.fluid() === fill) {
+      if (fill) player.fill(true);
+      else player.fluid(true);
     }
 
     // Reapply the desired rate when it changes externally (e.g. a rate set on a
@@ -559,7 +563,8 @@ export function Mp4EventPlayer({
 
   return (
     <div data-vjs-player className={cn(className)}>
-      <div ref={videoRef} />
+      {/* h-full: in fill mode the player is 100% of this box. */}
+      <div ref={videoRef} className="h-full" />
     </div>
   );
 }

@@ -603,6 +603,89 @@ export function ZmsEventPlayer({
     value: rate * 100,
   }));
 
+  // Transport and progress live in the controls card normally and as an
+  // overlay on the picture in fullscreen, where the full card would leave a
+  // landscape phone almost no room for the picture (refs #462).
+  const transport = (
+    <>
+      {/* Transport Controls */}
+      <div className="flex items-center justify-center gap-2">
+        {/* Jump to start */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={goToStart}
+          disabled={currentFrame <= 1}
+          title={t('event_detail.go_to_start')}
+          data-testid="zms-go-to-start"
+        >
+          <SkipBack className="h-4 w-4" />
+        </Button>
+        {/* Seek back 5s */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={seekBack}
+          disabled={currentFrame <= 1}
+          title={t('event_detail.rewind')}
+          className="gap-1"
+          data-testid="zms-seek-back"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          <span className="text-xs">{t('event_detail.seek_back')}</span>
+        </Button>
+        {/* Play/Pause */}
+        <Button
+          variant="default"
+          size="icon"
+          onClick={togglePlayPause}
+          title={isPlaying ? t('event_detail.pause') : t('event_detail.play')}
+          data-testid="zms-play-pause"
+        >
+          {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </Button>
+        {/* Seek forward 5s */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={seekForward}
+          disabled={currentFrame >= totalFrames}
+          title={t('event_detail.fast_forward')}
+          className="gap-1"
+          data-testid="zms-seek-forward"
+        >
+          <span className="text-xs">{t('event_detail.seek_forward')}</span>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+        {/* Jump to end */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={goToEnd}
+          disabled={currentFrame >= totalFrames}
+          title={t('event_detail.go_to_end')}
+          data-testid="zms-go-to-end"
+        >
+          <SkipForward className="h-4 w-4" />
+        </Button>
+      </div>
+    </>
+  );
+  const progress = (
+    <>
+      {/* Progress Bar with Alarm Frames */}
+      <EventProgressBar
+        currentFrame={currentFrame}
+        totalFrames={totalFrames}
+        alarmFrames={alarmFramePositions}
+        onSeek={goToFrame}
+        duration={effectiveDuration}
+        onScrubStart={handleScrubStart}
+        onScrubEnd={handleScrubEnd}
+      />
+    </>
+  );
+
   return (
     <div className={cn(className, fullscreen && 'flex flex-col h-full min-h-0 gap-3')}>
       {/* Video Display */}
@@ -663,84 +746,23 @@ export function ZmsEventPlayer({
             </div>
           )}
         </div>
-        <ZoomControls zoomPan={zoomPan} className="bottom-2 left-2" />
+        <ZoomControls zoomPan={zoomPan} className={fullscreen ? 'bottom-28 left-2' : 'bottom-2 left-2'} />
+        {fullscreen && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-20 space-y-2 bg-black/60 p-2 pb-[max(0.5rem,var(--sai-bottom,env(safe-area-inset-bottom)))] backdrop-blur-sm"
+            data-testid="zms-fullscreen-controls"
+          >
+            {transport}
+            {progress}
+          </div>
+        )}
       </Card>
 
       {/* Playback Controls */}
+      {!fullscreen && (
       <Card className="p-4 space-y-4 bg-card/95 backdrop-blur">
-        {/* Transport Controls */}
-        <div className="flex items-center justify-center gap-2">
-          {/* Jump to start */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToStart}
-            disabled={currentFrame <= 1}
-            title={t('event_detail.go_to_start')}
-            data-testid="zms-go-to-start"
-          >
-            <SkipBack className="h-4 w-4" />
-          </Button>
-          {/* Seek back 5s */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={seekBack}
-            disabled={currentFrame <= 1}
-            title={t('event_detail.rewind')}
-            className="gap-1"
-            data-testid="zms-seek-back"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            <span className="text-xs">{t('event_detail.seek_back')}</span>
-          </Button>
-          {/* Play/Pause */}
-          <Button
-            variant="default"
-            size="icon"
-            onClick={togglePlayPause}
-            title={isPlaying ? t('event_detail.pause') : t('event_detail.play')}
-            data-testid="zms-play-pause"
-          >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          </Button>
-          {/* Seek forward 5s */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={seekForward}
-            disabled={currentFrame >= totalFrames}
-            title={t('event_detail.fast_forward')}
-            className="gap-1"
-            data-testid="zms-seek-forward"
-          >
-            <span className="text-xs">{t('event_detail.seek_forward')}</span>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          {/* Jump to end */}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={goToEnd}
-            disabled={currentFrame >= totalFrames}
-            title={t('event_detail.go_to_end')}
-            data-testid="zms-go-to-end"
-          >
-            <SkipForward className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Progress Bar with Alarm Frames */}
-        <EventProgressBar
-          currentFrame={currentFrame}
-          totalFrames={totalFrames}
-          alarmFrames={alarmFramePositions}
-          onSeek={goToFrame}
-          duration={effectiveDuration}
-          onScrubStart={handleScrubStart}
-          onScrubEnd={handleScrubEnd}
-        />
-
+        {transport}
+        {progress}
         {/* Speed Controls */}
         <div className="space-y-2">
           <label className="text-sm text-muted-foreground">
@@ -799,11 +821,12 @@ export function ZmsEventPlayer({
           </div>
         )}
       </Card>
+      )}
 
       {/* Max score frame. The first alarm frame is no longer shown here: the
           event frame carousel above the player already leads with it (refs
           #272), and the quick-jump button above still seeks to it. */}
-      {maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
+      {!fullscreen && maxScoreFrameId && maxScoreFrameId !== alarmFrameId && (
         <Card className="p-4 mt-4">
           <h3 className="text-sm font-semibold mb-3">{t('event_detail.max_score_frame')}</h3>
           <button
