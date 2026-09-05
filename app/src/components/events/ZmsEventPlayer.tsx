@@ -66,6 +66,9 @@ interface ZmsEventPlayerProps {
   /** Pauses the stream while something covers it, such as the full-size frame
    * viewer (#272). Playback resumes on release only if it was running. */
   suspended?: boolean;
+  /** App-level fullscreen (refs #462): the picture takes the height the page
+   * gives it instead of a 16:9 box, with the transport controls kept below. */
+  fullscreen?: boolean;
   /** Shows the "ZMS playback" notice. Only true when the page fell back here
    * after MP4 playback failed: that substitution is a surprise worth naming.
    * ZMS chosen deliberately (a JPEG-only event, TV mode, the per-monitor force
@@ -92,6 +95,7 @@ export function ZmsEventPlayer({
   onRateChange,
   suspended = false,
   showNotice = false,
+  fullscreen = false,
 }: ZmsEventPlayerProps) {
   const { t } = useTranslation();
   const bandwidth = useBandwidthSettings();
@@ -600,18 +604,21 @@ export function ZmsEventPlayer({
   }));
 
   return (
-    <div className={className}>
+    <div className={cn(className, fullscreen && 'flex flex-col h-full min-h-0 gap-3')}>
       {/* Video Display */}
       <Card
         ref={zoomPan.ref}
-        className="overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black touch-none relative"
+        className={cn(
+          'overflow-hidden shadow-2xl border-0 ring-1 ring-border/20 bg-black touch-none relative',
+          fullscreen && 'flex-1 min-h-0 rounded-none shadow-none ring-0',
+        )}
       >
-        <div className="aspect-video relative bg-black">
+        <div className={cn('relative bg-black', fullscreen ? 'h-full' : 'aspect-video')} data-testid="zms-video-area">
           {/* No-video placeholder: behind the stream, only visible when image fails */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-0">
             <VideoOff className="h-10 w-10 text-muted-foreground/30" />
           </div>
-          <div ref={zoomPan.innerRef} className="relative z-10">
+          <div ref={zoomPan.innerRef} className={cn('relative z-10', fullscreen && 'h-full')}>
             {/* Nothing to render until there is a URL: an <img src=""> paints
                 the browser's own broken-image glyph and alt text on top of the
                 no-video placeholder this markup already provides. */}

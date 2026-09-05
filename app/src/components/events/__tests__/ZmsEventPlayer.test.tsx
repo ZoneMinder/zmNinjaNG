@@ -56,7 +56,7 @@ vi.mock('../../../api/events', () => ({
 }));
 
 function renderPlayer(
-  props: { suspended?: boolean; showNotice?: boolean; profileId?: ProfileId } = {}
+  props: { suspended?: boolean; showNotice?: boolean; profileId?: ProfileId; fullscreen?: boolean } = {}
 ) {
   return render(
     <ZmsEventPlayer
@@ -142,6 +142,17 @@ describe('ZmsEventPlayer', () => {
   // The ZMS notice explains an unexpected substitution, so it shows only when
   // MP4 playback failed and the page fell back to ZMS (#340). A JPEG-only
   // event, TV mode, or the per-monitor force setting are not substitutions.
+  it('gives the picture the full height in fullscreen instead of a 16:9 box (refs #462)', () => {
+    renderPlayer();
+    expect(screen.getByTestId('zms-video-area').className).toContain('aspect-video');
+
+    cleanup();
+    renderPlayer({ fullscreen: true });
+    const area = screen.getByTestId('zms-video-area');
+    expect(area.className).not.toContain('aspect-video');
+    expect(area.className).toContain('h-full');
+  });
+
   it('shows the ZMS notice only when playback fell back from video', () => {
     renderPlayer();
     expect(screen.queryByText('event_detail.zms_playback')).toBeNull();

@@ -161,7 +161,13 @@ monitor-id lists (``unmutedMonitorIds``, ``fullscreenMonitorIds``) into a
 with ``updateProfileSettings``, so the state survives remounts and syncs with
 the rest of the profile. The key is the monitor id within one profile, which
 is why the same id on a second server does not collide. Without a profile id
-the value is false and the setter is a no-op. ``MonitorDetail`` uses the same
+the value is false and the setter is a no-op. ``FullscreenExitBar`` (``components/ui/fullscreen-exit-bar.tsx``) is the strip
+along the top of an app-level fullscreen page: subject name and the Exit
+button, shared by ``MonitorDetail`` and by ``EventDetail`` when ZMS plays the
+event. ZMS playback is an ``<img>`` with no player fullscreen of its own, so
+the page goes fullscreen the way Monitor Detail does and ``ZmsEventPlayer``
+takes a ``fullscreen`` prop that swaps its 16:9 box for the height the page
+gives it, transport controls kept below (refs #462). ``MonitorDetail`` uses the same
 mute hook, but its mute control is the browser's own (``showControls``), so
 ``useGo2RTCStream`` listens for ``volumechange`` on the video element and
 reports through ``onMutedChange``. A change that lands on the value the hook
@@ -174,9 +180,13 @@ the two player pages, ``MonitorDetail`` (seeded by the monitor's
 ``MonitorAppPreferences``) and ``EventDetail`` (seeded by
 ``eventPlaybackFullscreen``, "Open events in fullscreen" in
 ``PlaybackSection``). It returns ``[isFullscreen, setFullscreen]`` where
-``isFullscreen`` is the setting OR a temporary landscape term, a
-``(orientation: landscape) and (pointer: coarse)`` media query so a rotated
-phone fills the screen and a desktop window, landscape all day, does not, OR
+``isFullscreen`` is the setting OR a temporary landscape term, so a rotated
+phone fills the screen and a desktop window, landscape all day, does not
+(``(pointer: coarse)`` is the touch test; the orientation comes from
+``screen.orientation`` where it exists, because iOS evaluates the
+``(orientation: landscape)`` media query against the zoomed visual viewport
+and a pinch briefly read as portrait, bouncing the page out of fullscreen
+and back; the media query is only the fallback), OR
 a session override from ``setFullscreen``, the page's own maximize/exit
 button. The hook itself writes no setting; the pages do, and only on enter:
 maximizing writes the monitor into ``fullscreenMonitorIds``, entering

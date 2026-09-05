@@ -24,6 +24,7 @@ import { getMonitor } from '../api/monitors';
 import { resolveMinStreamingPort } from '../lib/monitor/multiport';
 import { useProfileById } from '../hooks/useCurrentProfile';
 import { useAutoFullscreen } from '../hooks/useAutoFullscreen';
+import { FullscreenExitBar } from '../components/ui/fullscreen-exit-bar';
 import { useFreshAccessToken } from '../hooks/useFreshAccessToken';
 import type { ProfileId } from '../api/types';
 import { useEventTagMapping } from '../hooks/useEventTags';
@@ -490,9 +491,23 @@ export default function EventDetail() {
   const startTime = new Date(event.Event.StartDateTime.replace(' ', 'T'));
   const incomingSlide = location.state?.slideDirection as 'left' | 'right' | undefined;
 
+  // ZMS playback has no player-level fullscreen (it is an <img>), so the page
+  // itself goes fullscreen the way Monitor Detail does: header gone, exit bar
+  // on top, picture taking the height (refs #462). The MP4 branch leaves
+  // fullscreen to video.js.
+  const zmsFullscreen = isFullscreen && (hasVideo ? playThroughZms : hasJPEGs);
+
   return (
-    <div className="flex flex-col h-full bg-background">
+    <div className={cn('flex flex-col h-full', zmsFullscreen ? 'fixed inset-0 z-50 bg-black' : 'bg-background')}>
+      {zmsFullscreen && (
+        <FullscreenExitBar
+          title={monitorData?.Monitor.Name ?? event.Event.Name}
+          onExit={() => setFullscreen(false)}
+          testIdPrefix="event-detail"
+        />
+      )}
       {/* Header */}
+      {!zmsFullscreen && (
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 p-2 sm:p-3 border-b bg-card/50 backdrop-blur-sm sticky top-0 md:top-[var(--sai-top,env(safe-area-inset-top))] z-10">
         <div className="flex items-center gap-2 sm:gap-3">
           <Button
@@ -642,6 +657,7 @@ export default function EventDetail() {
           )}
         </div>
       </div>
+      )}
 
       {/* Main Content */}
       <div
@@ -649,12 +665,15 @@ export default function EventDetail() {
         ref={scrollerRef}
         data-testid="event-detail-scroller"
         className={cn(
-          'flex-1 p-2 sm:p-3 md:p-4 flex flex-col items-center bg-muted/10 overflow-y-auto',
+          'flex-1 flex flex-col items-center overflow-y-auto',
+          zmsFullscreen
+            ? 'min-h-0 overflow-hidden pt-[calc(var(--fullscreen-toolbar-h)+var(--sai-top,env(safe-area-inset-top)))] pb-[var(--sai-bottom,env(safe-area-inset-bottom))] pl-[var(--sai-left,env(safe-area-inset-left))] pr-[var(--sai-right,env(safe-area-inset-right))]'
+            : 'p-2 sm:p-3 md:p-4 bg-muted/10',
           incomingSlide === 'left' && 'event-slide-left',
           incomingSlide === 'right' && 'event-slide-right',
         )}
       >
-        <div className="w-full max-w-5xl space-y-3 sm:space-y-4 md:space-y-6">
+        <div className={cn('w-full', zmsFullscreen ? 'h-full min-h-0' : 'max-w-5xl space-y-3 sm:space-y-4 md:space-y-6')}>
           {/* Video Player or ZMS Playback */}
           {hasVideo ? (
             playThroughZms ? (
@@ -679,6 +698,7 @@ export default function EventDetail() {
                   playbackRate={settings.eventPlaybackRate}
                   onRateChange={handleRateChange}
                   className="space-y-4"
+                  fullscreen={zmsFullscreen}
                 />
               )
             ) : (
@@ -740,6 +760,7 @@ export default function EventDetail() {
                 playbackRate={settings.eventPlaybackRate}
                 onRateChange={handleRateChange}
                 className="space-y-4"
+                fullscreen={zmsFullscreen}
               />
             )
           ) : (

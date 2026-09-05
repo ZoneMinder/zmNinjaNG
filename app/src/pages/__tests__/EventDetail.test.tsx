@@ -152,8 +152,8 @@ vi.mock('../../components/events/Mp4EventPlayer', () => ({
 }));
 
 vi.mock('../../components/events/ZmsEventPlayer', () => ({
-  ZmsEventPlayer: ({ onEnded }: { onEnded?: () => void }) => (
-    <div data-testid="zms-player">
+  ZmsEventPlayer: ({ onEnded, fullscreen }: { onEnded?: () => void; fullscreen?: boolean }) => (
+    <div data-testid="zms-player" data-fullscreen={String(fullscreen ?? false)}>
       <button data-testid="zms-fire-ended" onClick={() => onEnded?.()} />
     </div>
   ),
@@ -428,6 +428,20 @@ describe('EventDetail forced ZMS playback (#313)', () => {
 
     expect(screen.getByTestId('mp4-player')).toBeTruthy();
     expect(screen.queryByTestId('zms-player')).toBeNull();
+  });
+
+  it('plays ZMS fullscreen when the setting is on, with an exit bar that changes only the session (refs #462)', () => {
+    setSettings(PROFILE_1, { forceZmsMonitorIds: ['1'], eventPlaybackFullscreen: true });
+    render(<EventDetail />);
+
+    expect(screen.getByTestId('zms-player')).toHaveAttribute('data-fullscreen', 'true');
+    expect(screen.getByTestId('event-detail-exit-fullscreen')).toHaveTextContent('monitor_detail.exit');
+    expect(screen.queryByTestId('event-detail-back')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('event-detail-exit-fullscreen'));
+    expect(screen.getByTestId('zms-player')).toHaveAttribute('data-fullscreen', 'false');
+    expect(screen.getByTestId('event-detail-back')).toBeTruthy();
+    expect(useSettingsStore.getState().getProfileSettings(PROFILE_1).eventPlaybackFullscreen).toBe(true);
   });
 
   it('never mounts the MP4 player for a monitor on the list', () => {
